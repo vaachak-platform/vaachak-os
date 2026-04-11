@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "core",
+    "drivers",
+    "boards/x4",
+    "targets/x4",
+]
+resolver = "2"

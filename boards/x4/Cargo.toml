@@ -1,0 +1,12 @@
+[package]
+name = "vaachak-board-x4"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+embedded-graphics = { version = "0.8.2", default-features = false }
+embedded-hal = "1.0.0"
+esp-hal = { version = "1.0.0", features = ["esp32c3"] }
+esp-println = { version = "0.16.1", features = ["esp32c3"] }
+vaachak-core = { path = "../../core" }
+vaachak-drivers = { path = "../../drivers" }
