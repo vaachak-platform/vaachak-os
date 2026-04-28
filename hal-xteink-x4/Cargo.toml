@@ -1,0 +1,10 @@
+[package]
+name = "hal-xteink-x4"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+vaachak-core = { path = "../core" }
+heapless.workspace = true
