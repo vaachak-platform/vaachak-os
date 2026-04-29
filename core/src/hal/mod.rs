@@ -7,8 +7,10 @@ pub use display::{
     DisplayBusConfig, DisplayDepth, DisplayError, DisplayGeometry, DisplayHal, RefreshMode,
     Rotation,
 };
-pub use input::{ButtonEventKind, ButtonId, ButtonThreshold, InputEvent, InputHal};
-pub use power::{BatteryReading, ChargeState, PowerHal};
+pub use input::{
+    ButtonEventKind, ButtonId, ButtonThreshold, InputEvent, InputHal, InputSample, InputTiming,
+};
+pub use power::{BatteryReading, ChargeState, PowerHal, PowerPolicy, PowerStatus};
 pub use storage::{DirEntry, OpenMode, StorageError, StorageHal, StorageProbe, StorageState};
 
 pub trait Hal: Sized + 'static {

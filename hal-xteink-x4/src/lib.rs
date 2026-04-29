@@ -8,8 +8,11 @@ pub mod power;
 pub mod storage;
 
 pub use display::X4Display;
-pub use input::X4Input;
-pub use power::X4Power;
+pub use input::{ROW1_THRESHOLDS, ROW2_THRESHOLDS, X4_INPUT_TIMING, X4Input};
+pub use power::{
+    DISCHARGE_CURVE, DIVIDER_MULT, X4_CRITICAL_BATTERY_MV, X4_DEFAULT_ADC_MV, X4_IDLE_TIMEOUT_MS,
+    X4_LOW_BATTERY_MV, X4Power, adc_to_battery_mv, battery_percentage,
+};
 pub use storage::{X4Dir, X4File, X4Storage};
 
 pub struct X4Hal {
@@ -27,6 +30,12 @@ impl X4Hal {
             power: X4Power::default(),
             storage: X4Storage::default(),
         }
+    }
+}
+
+impl Default for X4Hal {
+    fn default() -> Self {
+        Self::new_placeholder()
     }
 }
 

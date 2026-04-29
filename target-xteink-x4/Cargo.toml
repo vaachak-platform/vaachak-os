@@ -8,3 +8,11 @@ authors.workspace = true
 [dependencies]
 vaachak-core = { path = "../core" }
 hal-xteink-x4 = { path = "../hal-xteink-x4" }
+log.workspace = true
+
+[target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
+esp-hal.workspace = true
+esp-backtrace.workspace = true
+esp-println.workspace = true
+esp-alloc.workspace = true
+esp-bootloader-esp-idf.workspace = true
