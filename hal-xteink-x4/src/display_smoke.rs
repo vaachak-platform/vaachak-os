@@ -64,6 +64,8 @@ pub struct ReaderPage {
     pub offset: u32,
     pub page_index: u16,
     pub total_pages: u16,
+    pub bookmark_count: u8,
+    pub bookmarked: bool,
     text: [u8; X4_READER_TEXT_BYTES],
     line_starts: [u16; X4_READER_VISIBLE_LINES],
     line_lens: [u8; X4_READER_VISIBLE_LINES],
@@ -79,6 +81,8 @@ impl ReaderPage {
         offset: 0,
         page_index: 1,
         total_pages: 1,
+        bookmark_count: 0,
+        bookmarked: false,
         text: [0; X4_READER_TEXT_BYTES],
         line_starts: [0; X4_READER_VISIBLE_LINES],
         line_lens: [0; X4_READER_VISIBLE_LINES],
@@ -119,6 +123,11 @@ impl ReaderPage {
 
     pub fn name_str(&self) -> &str {
         core::str::from_utf8(self.name_bytes()).unwrap_or("?")
+    }
+
+    pub fn set_bookmark_state(&mut self, bookmark_count: u8, bookmarked: bool) {
+        self.bookmark_count = bookmark_count;
+        self.bookmarked = bookmarked;
     }
 
     pub fn line_count(&self) -> usize {
@@ -308,6 +317,16 @@ where
         self.draw_full_frame(delay, |strip_idx, strip| {
             render_reader_strip(strip_idx, strip, sd_ok, battery_pct, page)
         });
+    }
+
+    pub fn draw_phase12_reader<D: DelayNs>(
+        &mut self,
+        delay: &mut D,
+        sd_ok: bool,
+        battery_pct: u8,
+        page: &ReaderPage,
+    ) {
+        self.draw_phase11_reader(delay, sd_ok, battery_pct, page);
     }
 
     pub fn is_busy(&mut self) -> bool {
@@ -656,7 +675,8 @@ fn reader_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, page: &ReaderPage)
         || text_pixel_limited(page.name_bytes(), x, y, 28, 152, 2, 13)
         || reader_lines_pixel(x, y, page)
         || text_pixel(b"UP PREV  DN NEXT", x, y, 78, 608, 2)
-        || text_pixel(b"BACK LIBRARY", x, y, 96, 636, 2)
+        || text_pixel(b"LONG SEL MARK", x, y, 82, 636, 2)
+        || reader_bookmark_status_pixel(x, y, 286, 636, 2, page)
         || text_pixel(b"PG", x, y, 28, 686, 2)
         || decimal_number_pixel(x, y, 64, 686, 2, page.page_index as u32)
         || char_pixel(b'/', x, y, 100, 686, 2)
@@ -665,6 +685,31 @@ fn reader_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, page: &ReaderPage)
         || decimal_number_pixel(x, y, 244, 686, 2, page.offset)
         || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
         || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
+}
+
+fn reader_bookmark_status_pixel(
+    x: u16,
+    y: u16,
+    x0: u16,
+    y0: u16,
+    scale: u16,
+    page: &ReaderPage,
+) -> bool {
+    text_pixel(
+        if page.bookmarked { b"BM ON" } else { b"BM OFF" },
+        x,
+        y,
+        x0,
+        y0,
+        scale,
+    ) || decimal_number_pixel(
+        x,
+        y,
+        x0 + 7 * 6 * scale,
+        y0,
+        scale,
+        page.bookmark_count as u32,
+    )
 }
 
 fn reader_lines_pixel(x: u16, y: u16, page: &ReaderPage) -> bool {
