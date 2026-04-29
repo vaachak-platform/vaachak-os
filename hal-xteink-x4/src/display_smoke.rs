@@ -1,4 +1,4 @@
-//! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation/library-list driver.
+//! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation/library/TXT-reader driver.
 //!
 //! Phase 7 keeps the proven Phase 5.4 display transport shape:
 //! - DMA-backed `SpiDevice` chip-select ownership.
@@ -19,6 +19,9 @@ pub const X4_EPD_BYTES_PER_ROW: usize = X4_EPD_NATIVE_WIDTH as usize / 8;
 pub const X4_EPD_STRIP_BYTES: usize = X4_EPD_BYTES_PER_ROW * X4_EPD_STRIP_ROWS as usize;
 pub const X4_EPD_STRIP_COUNT: u16 = X4_EPD_NATIVE_HEIGHT / X4_EPD_STRIP_ROWS;
 pub const X4_LIBRARY_MAX_ITEMS: usize = 8;
+pub const X4_READER_TEXT_BYTES: usize = 1024;
+pub const X4_READER_VISIBLE_LINES: usize = 18;
+pub const X4_READER_LINE_CHARS: usize = 34;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LibraryListItem {
@@ -49,6 +52,112 @@ impl LibraryListItem {
 
     pub fn name_str(&self) -> &str {
         core::str::from_utf8(self.name_bytes()).unwrap_or("?")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReaderPage {
+    pub name: [u8; 13],
+    pub name_len: u8,
+    pub file_size: u32,
+    pub read_len: u16,
+    text: [u8; X4_READER_TEXT_BYTES],
+    line_starts: [u16; X4_READER_VISIBLE_LINES],
+    line_lens: [u8; X4_READER_VISIBLE_LINES],
+    line_count: u8,
+}
+
+impl ReaderPage {
+    pub const EMPTY: Self = Self {
+        name: [0; 13],
+        name_len: 0,
+        file_size: 0,
+        read_len: 0,
+        text: [0; X4_READER_TEXT_BYTES],
+        line_starts: [0; X4_READER_VISIBLE_LINES],
+        line_lens: [0; X4_READER_VISIBLE_LINES],
+        line_count: 0,
+    };
+
+    pub fn new(name: &[u8], file_size: u32, bytes: &[u8]) -> Self {
+        let mut out = Self::EMPTY;
+        let name_len = name.len().min(out.name.len());
+        out.name[..name_len].copy_from_slice(&name[..name_len]);
+        out.name_len = name_len as u8;
+        out.file_size = file_size;
+
+        let read_len = bytes.len().min(out.text.len());
+        out.text[..read_len].copy_from_slice(&bytes[..read_len]);
+        out.read_len = read_len as u16;
+        out.index_lines();
+        out
+    }
+
+    pub fn name_bytes(&self) -> &[u8] {
+        &self.name[..self.name_len as usize]
+    }
+
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(self.name_bytes()).unwrap_or("?")
+    }
+
+    pub fn line_count(&self) -> usize {
+        self.line_count as usize
+    }
+
+    fn index_lines(&mut self) {
+        self.line_starts = [0; X4_READER_VISIBLE_LINES];
+        self.line_lens = [0; X4_READER_VISIBLE_LINES];
+        self.line_count = 0;
+
+        let mut i = 0usize;
+        let end = self.read_len as usize;
+        let mut line_start = 0usize;
+        let mut line_len = 0usize;
+
+        while i < end && (self.line_count as usize) < X4_READER_VISIBLE_LINES {
+            let b = self.text[i];
+            if b == b'\r' || b == b'\n' {
+                self.commit_line(line_start, line_len);
+                i += 1;
+                if b == b'\r' && i < end && self.text[i] == b'\n' {
+                    i += 1;
+                }
+                line_start = i;
+                line_len = 0;
+                continue;
+            }
+            if line_len >= X4_READER_LINE_CHARS {
+                self.commit_line(line_start, line_len);
+                line_start = i;
+                line_len = 0;
+                continue;
+            }
+            line_len += 1;
+            i += 1;
+        }
+
+        if (self.line_count as usize) < X4_READER_VISIBLE_LINES && (line_len > 0 || end == 0) {
+            self.commit_line(line_start, line_len);
+        }
+    }
+
+    fn commit_line(&mut self, start: usize, len: usize) {
+        let idx = self.line_count as usize;
+        if idx >= X4_READER_VISIBLE_LINES {
+            return;
+        }
+        self.line_starts[idx] = start.min(u16::MAX as usize) as u16;
+        self.line_lens[idx] = len.min(X4_READER_LINE_CHARS).min(u8::MAX as usize) as u8;
+        self.line_count += 1;
+    }
+
+    fn byte_at_line_col(&self, line: usize, col: usize) -> Option<u8> {
+        if line >= self.line_count as usize || col >= self.line_lens[line] as usize {
+            return None;
+        }
+        let idx = self.line_starts[line] as usize + col;
+        self.text.get(idx).copied()
     }
 }
 
@@ -145,6 +254,18 @@ where
                 total_files,
                 from_books_dir,
             )
+        });
+    }
+
+    pub fn draw_phase10_reader<D: DelayNs>(
+        &mut self,
+        delay: &mut D,
+        sd_ok: bool,
+        battery_pct: u8,
+        page: &ReaderPage,
+    ) {
+        self.draw_full_frame(delay, |strip_idx, strip| {
+            render_reader_strip(strip_idx, strip, sd_ok, battery_pct, page)
         });
     }
 
@@ -325,6 +446,18 @@ fn render_library_strip(
     });
 }
 
+fn render_reader_strip(
+    strip_idx: u16,
+    out: &mut [u8; X4_EPD_STRIP_BYTES],
+    sd_ok: bool,
+    battery_pct: u8,
+    page: &ReaderPage,
+) {
+    render_strip_with(strip_idx, out, |x, y| {
+        reader_pixel(x, y, sd_ok, battery_pct, page)
+    });
+}
+
 fn render_strip_with<F>(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES], mut pixel: F)
 where
     F: FnMut(u16, u16) -> bool,
@@ -469,6 +602,63 @@ fn library_empty_pixel(x: u16, y: u16, items: &[LibraryListItem]) -> bool {
             || text_pixel(b"ADD TXT EPUB EPU", x, y, 94, 336, 2))
 }
 
+fn reader_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, page: &ReaderPage) -> bool {
+    if !(4..X4_EPD_LOGICAL_WIDTH - 4).contains(&x) || !(4..X4_EPD_LOGICAL_HEIGHT - 4).contains(&y) {
+        return true;
+    }
+    if (132..138).contains(&y) || (672..678).contains(&y) {
+        return true;
+    }
+
+    text_pixel(b"VAACHAKOS", x, y, 66, 46, 4)
+        || text_pixel(b"TXT READER", x, y, 116, 100, 2)
+        || text_pixel_limited(page.name_bytes(), x, y, 28, 152, 2, 13)
+        || reader_lines_pixel(x, y, page)
+        || text_pixel(b"BACK LIBRARY", x, y, 96, 608, 2)
+        || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
+        || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
+}
+
+fn reader_lines_pixel(x: u16, y: u16, page: &ReaderPage) -> bool {
+    const X0: u16 = 30;
+    const Y0: u16 = 196;
+    const SCALE: u16 = 2;
+    const ADVANCE: u16 = 6 * SCALE;
+    const GLYPH_W: u16 = 5 * SCALE;
+    const GLYPH_H: u16 = 7 * SCALE;
+    const LINE_STEP: u16 = 24;
+
+    if x < X0 || y < Y0 {
+        return false;
+    }
+    let rel_y = y - Y0;
+    let line = (rel_y / LINE_STEP) as usize;
+    if line >= page.line_count() || rel_y % LINE_STEP >= GLYPH_H {
+        return false;
+    }
+    let rel_x = x - X0;
+    let col_idx = (rel_x / ADVANCE) as usize;
+    if col_idx >= X4_READER_LINE_CHARS || rel_x % ADVANCE >= GLYPH_W {
+        return false;
+    }
+    let ch = match page.byte_at_line_col(line, col_idx) {
+        Some(b) => normalize_text_byte(b),
+        None => return false,
+    };
+    let glyph_col = ((rel_x % ADVANCE) / SCALE) as usize;
+    let glyph_row = ((rel_y % LINE_STEP) / SCALE) as usize;
+    let glyph = glyph_for(ch);
+    (glyph[glyph_row] & (1 << (4 - glyph_col))) != 0
+}
+
+fn normalize_text_byte(b: u8) -> u8 {
+    match b {
+        b'a'..=b'z' => b - 32,
+        b'\t' | b'\r' | b'\n' => b' ',
+        b',' | b';' | b':' | b'!' | b'?' | b'\'' | b'"' | b'(' | b')' => b' ',
+        _ => b,
+    }
+}
 fn small_number_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, value: u8) -> bool {
     let v = value.min(99);
     let tens = v / 10;
@@ -558,6 +748,11 @@ fn char_pixel(ch: u8, x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool {
 }
 
 fn glyph_for(ch: u8) -> [u8; 7] {
+    let ch = if ch.is_ascii_lowercase() {
+        ch.to_ascii_uppercase()
+    } else {
+        ch
+    };
     match ch {
         b'A' => [
             0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
@@ -753,5 +948,22 @@ mod tests {
         assert!(!library_pixel(38, 208, true, 92, 1, &items, 2, true));
         assert!(library_pixel(82, 200, true, 92, 0, &items, 2, true));
         assert!(library_pixel(30, 724, true, 92, 0, &items, 2, true));
+    }
+
+    #[test]
+    fn phase10_reader_page_indexes_lines() {
+        let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
+        assert_eq!(page.line_count(), 2);
+        assert_eq!(page.name_str(), "SHORT.TXT");
+        assert!(reader_pixel(30, 196, true, 92, &page));
+    }
+
+    #[test]
+    fn phase10_reader_strip_has_expected_size() {
+        let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
+        let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
+        render_reader_strip(0, &mut strip, true, 92, &page);
+        assert_eq!(strip.len(), 4_000);
+        assert!(strip.iter().any(|b| *b != 0xFF));
     }
 }
