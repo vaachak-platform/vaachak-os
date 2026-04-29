@@ -10,7 +10,7 @@ use esp_backtrace as _;
 #[cfg(target_arch = "riscv32")]
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const PHASE: &str = "bootstrap-phase6-x4-storage-hal-smoke";
+const PHASE: &str = "bootstrap-phase7-x4-minimal-home-screen";
 
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {
@@ -54,32 +54,36 @@ fn main() {
 #[cfg(target_arch = "riscv32")]
 #[esp_hal::main]
 fn main() -> ! {
-    use embedded_hal_bus::spi::ExclusiveDevice;
+    use core::cell::RefCell;
+    use embedded_hal_bus::spi::RefCellDevice;
     use esp_hal::clock::CpuClock;
     use esp_hal::delay::Delay;
-    use esp_hal::gpio::{Level, Output, OutputConfig};
+    use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig, Pull};
     use esp_hal::spi;
     use esp_hal::time::Rate;
+    use hal_xteink_x4::X4Ssd1677Smoke;
 
     esp_println::println!("");
     esp_println::println!("========================================");
-    esp_println::println!("VaachakOS X4 storage smoke starting");
+    esp_println::println!("VaachakOS X4 minimal home starting");
     esp_println::println!("phase={}", PHASE);
     esp_println::println!("target=esp32c3 riscv32imc-unknown-none-elf");
-    esp_println::println!("phase6=sd-fat-flat-83-smoke");
-    esp_println::println!("note=Phase 6 proves SD init, FAT mount, write, and readback");
+    esp_println::println!("phase7=display-storage-home-parity-smoke");
+    esp_println::println!("note=Phase 7 combines boot + SD smoke + display home rendering");
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(size: 32_768);
-    esp_println::println!("heap=32K storage-smoke only");
+    esp_println::println!("heap=32K minimal-home-smoke only");
 
     let hal = hal_xteink_x4::X4Hal::new_placeholder();
     let mut os = vaachak_core::VaachakOs::new(hal);
+    let mut battery_pct = 0u8;
 
     match os.boot_storage_display_power() {
         Ok(report) => {
+            battery_pct = report.battery_pct;
             esp_println::println!(
                 "model display logical={}x{} native={}x{} rot={:?} strip_rows={}",
                 report.display.logical_width,
@@ -111,16 +115,17 @@ fn main() -> ! {
         }
     }
 
-    // X4 shares SPI2 between SD and EPD. Phase 6 is storage-only, so keep EPD_CS
-    // high with a typed output and use raw GPIO12 as the SD chip-select because
-    // GPIO12 is free only in DIO flash mode and has no esp-hal pin type here.
-    let _epd_cs_guard = Output::new(peripherals.GPIO21, Level::High, OutputConfig::default());
+    // X4 shares SPI2 between SD and EPD. Phase 7 proves both hardware paths in
+    // one firmware using a bus manager so ownership is explicit:
+    // - EPD_CS high while SD owns the bus.
+    // - SD_CS high while the display owns the bus.
+    let epd_cs = Output::new(peripherals.GPIO21, Level::High, OutputConfig::default());
     let sd_cs = unsafe { RawOutputPin::new_output_high(12) };
-    esp_println::println!("phase6: EPD_CS GPIO21 high, SD_CS GPIO12 ready");
+    esp_println::println!("phase7: EPD_CS GPIO21 high, SD_CS GPIO12 high");
 
-    esp_println::println!("phase6: configuring SPI2 for SD init at 400kHz");
+    esp_println::println!("phase7: configuring SPI2 shared bus at 400kHz");
     esp_println::println!(
-        "phase6: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21-high"
+        "phase7: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21 dc=GPIO4 rst=GPIO5 busy=GPIO6"
     );
 
     let slow_cfg = spi::master::Config::default().with_frequency(Rate::from_khz(400));
@@ -131,7 +136,7 @@ fn main() -> ! {
         .with_miso(peripherals.GPIO7);
 
     let _ = spi_raw.write(&[0xFF; 10]);
-    esp_println::println!("phase6: sent 80 idle clocks with both CS lines high");
+    esp_println::println!("phase7: sent 80 idle clocks with both CS lines high");
 
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = esp_hal::dma_buffers!(4096);
     let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
@@ -140,22 +145,59 @@ fn main() -> ! {
     let spi_dma_bus = spi_raw
         .with_dma(peripherals.DMA_CH0)
         .with_buffers(dma_rx_buf, dma_tx_buf);
-    esp_println::println!("phase6: DMA buffers enabled 4096B tx/rx");
+    esp_println::println!("phase7: DMA buffers enabled 4096B tx/rx");
 
-    let sd_spi = ExclusiveDevice::new(spi_dma_bus, sd_cs, Delay::new()).unwrap();
+    let spi_bus = RefCell::new(spi_dma_bus);
 
-    match run_storage_smoke(sd_spi) {
-        Ok(()) => {
-            esp_println::println!("VaachakOS X4 storage smoke complete");
-            esp_println::println!("phase6=x4-storage-hal-smoke-ok");
+    let storage_ok = {
+        let sd_spi = RefCellDevice::new(&spi_bus, sd_cs, Delay::new()).unwrap();
+        match run_storage_smoke(sd_spi) {
+            Ok(()) => {
+                esp_println::println!("phase7: storage smoke ok");
+                true
+            }
+            Err(err) => {
+                esp_println::println!("phase7: storage smoke failed step={}", err.step);
+                esp_println::println!("phase7:storage-error={}", err.detail);
+                false
+            }
         }
-        Err(err) => {
-            esp_println::println!("VaachakOS X4 storage smoke failed");
-            esp_println::println!("phase6=x4-storage-hal-smoke-failed step={}", err.step);
-            esp_println::println!("phase6:error={}", err.detail);
-        }
+    };
+
+    // Keep SD deselected before switching the shared bus to the SSD1677.
+    unsafe {
+        force_gpio_output_high(12);
     }
+    esp_println::println!("phase7: SD_CS GPIO12 forced high before display refresh");
 
+    let dc = Output::new(peripherals.GPIO4, Level::High, OutputConfig::default());
+    let rst = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
+    let busy = Input::new(
+        peripherals.GPIO6,
+        InputConfig::default().with_pull(Pull::None),
+    );
+    let mut delay = Delay::new();
+
+    let epd_spi = RefCellDevice::new(&spi_bus, epd_cs, Delay::new()).unwrap();
+    let mut display = X4Ssd1677Smoke::new(epd_spi, dc, rst, busy);
+
+    esp_println::println!("phase7: display init start dma-spidevice");
+    display.init(&mut delay);
+    esp_println::println!("phase7: display init complete busy={}", display.is_busy());
+
+    esp_println::println!(
+        "phase7: minimal home render start sd_ok={} battery_pct={}",
+        storage_ok,
+        battery_pct
+    );
+    display.draw_phase7_home(&mut delay, storage_ok, battery_pct);
+    esp_println::println!(
+        "phase7: minimal home refresh complete busy={}",
+        display.is_busy()
+    );
+
+    esp_println::println!("VaachakOS X4 minimal home complete");
+    esp_println::println!("phase7=x4-minimal-home-screen-ok");
     esp_println::println!("========================================");
 
     loop {
@@ -168,7 +210,7 @@ const SMOKE_FILE: &str = "VOSMOKE.TXT";
 #[cfg(target_arch = "riscv32")]
 const SMOKE_DIR: &str = "state";
 #[cfg(target_arch = "riscv32")]
-const SMOKE_BYTES: &[u8] = b"VaachakOS Phase 6 X4 storage smoke\r\nstate/VOSMOKE.TXT\r\n";
+const SMOKE_BYTES: &[u8] = b"VaachakOS Phase 7 X4 minimal home smoke\r\nstate/VOSMOKE.TXT\r\n";
 
 #[cfg(target_arch = "riscv32")]
 #[derive(Debug, Clone, Copy)]
@@ -237,14 +279,14 @@ where
 
     let sd = SdCard::new(sd_spi, esp_hal::delay::Delay::new());
 
-    esp_println::println!("phase6: sd init start");
+    esp_println::println!("phase7: sd init start");
     let mut card_bytes = None;
     for attempt in 1..=5 {
         match sd.num_bytes() {
             Ok(size) => {
                 card_bytes = Some(size);
                 esp_println::println!(
-                    "phase6: sd initialised attempt={} bytes={} mb={}",
+                    "phase7: sd initialised attempt={} bytes={} mb={}",
                     attempt,
                     size,
                     size / 1024 / 1024
@@ -252,7 +294,7 @@ where
                 break;
             }
             Err(_) => {
-                esp_println::println!("phase6: sd init attempt={} failed", attempt);
+                esp_println::println!("phase7: sd init attempt={} failed", attempt);
                 sd.mark_card_uninit();
                 embedded_hal::delay::DelayNs::delay_ms(&mut esp_hal::delay::Delay::new(), 50);
             }
@@ -260,7 +302,7 @@ where
     }
 
     let card_bytes = card_bytes.ok_or(SmokeError::new("sd_init", "card did not respond"))?;
-    esp_println::println!("phase6: sd card bytes={}", card_bytes);
+    esp_println::println!("phase7: sd card bytes={}", card_bytes);
 
     let adapter = BlockDeviceAdapter(sd);
     let mut mgr: AsyncVolumeManager<_, NullTimeSource, 4, 4, 1> =
@@ -271,12 +313,12 @@ where
     let root: RawDirectory = mgr
         .open_root_dir(vol)
         .map_err(|_| SmokeError::new("open_root", "root directory open failed"))?;
-    esp_println::println!("phase6: sd mounted volume=0 root=open");
+    esp_println::println!("phase7: sd mounted volume=0 root=open");
 
     let state_dir = match poll_once(mgr.open_dir(root, SMOKE_DIR)) {
         Ok(dir) => dir,
         Err(_) => {
-            esp_println::println!("phase6: creating {} directory", SMOKE_DIR);
+            esp_println::println!("phase7: creating {} directory", SMOKE_DIR);
             match poll_once(mgr.make_dir_in_dir(root, SMOKE_DIR)) {
                 Ok(()) | Err(embedded_sdmmc::Error::DirAlreadyExists) => {}
                 Err(_) => return Err(SmokeError::new("mkdir_state", "failed to create state dir")),
@@ -294,7 +336,7 @@ where
     poll_once(mgr.close_file(file))
         .map_err(|_| SmokeError::new("close_write", "close after write failed"))?;
     esp_println::println!(
-        "phase6: wrote state/{} bytes={}",
+        "phase7: wrote state/{} bytes={}",
         SMOKE_FILE,
         SMOKE_BYTES.len()
     );
@@ -315,7 +357,7 @@ where
         return Err(SmokeError::new("readback_cmp", "readback mismatch"));
     }
     esp_println::println!(
-        "phase6: readback ok state/{} size={} read={}",
+        "phase7: readback ok state/{} size={} read={}",
         SMOKE_FILE,
         size,
         read_len
@@ -324,7 +366,7 @@ where
     let _ = mgr.close_dir(state_dir);
     let _ = mgr.close_dir(root);
     let _ = poll_once(mgr.close_volume(vol));
-    esp_println::println!("phase6: volume closed cleanly");
+    esp_println::println!("phase7: volume closed cleanly");
 
     Ok(())
 }
@@ -401,5 +443,28 @@ impl embedded_hal::digital::OutputPin for RawOutputPin {
             (GPIO_OUT_W1TS as *mut u32).write_volatile(mask);
         }
         Ok(())
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+unsafe fn force_gpio_output_high(pin: u8) {
+    const GPIO_OUT_W1TS: u32 = 0x6000_4008;
+    const GPIO_ENABLE_W1TS: u32 = 0x6000_4024;
+    const IO_MUX_BASE: u32 = 0x6000_9000;
+    const IO_MUX_PIN_STRIDE: u32 = 0x04;
+    const GPIO_FUNC_OUT_SEL_BASE: u32 = 0x6000_4554;
+
+    let mask = 1u32 << pin;
+    let mux_reg = (IO_MUX_BASE + pin as u32 * IO_MUX_PIN_STRIDE) as *mut u32;
+    let out_sel = (GPIO_FUNC_OUT_SEL_BASE + pin as u32 * 4) as *mut u32;
+
+    unsafe {
+        let val = mux_reg.read_volatile();
+        let val = (val & !(0b111 << 12)) | (1 << 12);
+        mux_reg.write_volatile(val);
+
+        out_sel.write_volatile(0x80);
+        (GPIO_ENABLE_W1TS as *mut u32).write_volatile(mask);
+        (GPIO_OUT_W1TS as *mut u32).write_volatile(mask);
     }
 }

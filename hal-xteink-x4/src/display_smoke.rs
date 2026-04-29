@@ -1,12 +1,10 @@
-//! Minimal Xteink X4 SSD1677 display smoke driver.
+//! Minimal Xteink X4 SSD1677 display smoke/home driver.
 //!
-//! Phase 5.4 ports the proven x4-reader-os-rs display write pattern more
-//! closely than the earlier standalone smoke driver:
-//! - SPI is a DMA-backed `SpiDevice`, so chip-select ownership and large writes
-//!   match the working runtime shape.
-//! - The pre-write BUSY gate is removed. The proven runtime does not wait for
-//!   BUSY after init before writing RAM; it only waits after update/power-off.
-//! - Full-frame data is written to RED then BW RAM before a full update.
+//! Phase 7 keeps the proven Phase 5.4 display transport shape:
+//! - DMA-backed `SpiDevice` chip-select ownership.
+//! - SD chip-select kept high when the panel owns the shared SPI bus.
+//! - Full-frame strip rendering, no full framebuffer.
+//! - RED RAM then BW RAM before a full update.
 
 use embedded_hal::delay::DelayNs;
 use embedded_hal::digital::{InputPin, OutputPin};
@@ -71,6 +69,26 @@ where
     }
 
     pub fn draw_phase5_smoke<D: DelayNs>(&mut self, delay: &mut D) {
+        self.draw_full_frame(delay, |strip_idx, strip| {
+            render_smoke_strip(strip_idx, strip)
+        });
+    }
+
+    pub fn draw_phase7_home<D: DelayNs>(&mut self, delay: &mut D, sd_ok: bool, battery_pct: u8) {
+        self.draw_full_frame(delay, |strip_idx, strip| {
+            render_home_strip(strip_idx, strip, sd_ok, battery_pct)
+        });
+    }
+
+    pub fn is_busy(&mut self) -> bool {
+        self.busy.is_high().unwrap_or(false)
+    }
+
+    fn draw_full_frame<D, F>(&mut self, delay: &mut D, mut render: F)
+    where
+        D: DelayNs,
+        F: FnMut(u16, &mut [u8; X4_EPD_STRIP_BYTES]),
+    {
         if !self.initialised {
             self.init_display(delay);
         }
@@ -78,14 +96,13 @@ where
         delay.delay_ms(1);
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
 
-        // Match the proven x4-reader-os-rs full-frame order: RED RAM then BW RAM.
         for ram_cmd in [cmd::WRITE_RAM_RED, cmd::WRITE_RAM_BW] {
             self.set_ram_area(0, 0, X4_EPD_NATIVE_WIDTH, X4_EPD_NATIVE_HEIGHT);
             self.send_command(ram_cmd);
             delay.delay_ms(1);
 
             for strip_idx in 0..X4_EPD_STRIP_COUNT {
-                render_smoke_strip(strip_idx, &mut strip);
+                render(strip_idx, &mut strip);
                 self.send_data(&strip);
             }
         }
@@ -98,10 +115,6 @@ where
 
         self.send_command(cmd::MASTER_ACTIVATION);
         self.wait_busy(delay, 20_000);
-    }
-
-    pub fn is_busy(&mut self) -> bool {
-        self.busy.is_high().unwrap_or(false)
     }
 
     fn reset<D: DelayNs>(&mut self, delay: &mut D) {
@@ -194,6 +207,22 @@ where
 }
 
 fn render_smoke_strip(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES]) {
+    render_strip_with(strip_idx, out, smoke_pixel);
+}
+
+fn render_home_strip(
+    strip_idx: u16,
+    out: &mut [u8; X4_EPD_STRIP_BYTES],
+    sd_ok: bool,
+    battery_pct: u8,
+) {
+    render_strip_with(strip_idx, out, |x, y| home_pixel(x, y, sd_ok, battery_pct));
+}
+
+fn render_strip_with<F>(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES], mut pixel: F)
+where
+    F: FnMut(u16, u16) -> bool,
+{
     out.fill(0xFF);
 
     let native_y0 = strip_idx * X4_EPD_STRIP_ROWS;
@@ -204,7 +233,7 @@ fn render_smoke_strip(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES]) {
             // physical = (logical_y, native_height - 1 - logical_x)
             let lx = X4_EPD_NATIVE_HEIGHT - 1 - py;
             let ly = px;
-            if smoke_pixel(lx, ly) {
+            if pixel(lx, ly) {
                 set_black(out, row, px);
             }
         }
@@ -218,7 +247,6 @@ fn set_black(out: &mut [u8; X4_EPD_STRIP_BYTES], row: u16, x: u16) {
 }
 
 fn smoke_pixel(x: u16, y: u16) -> bool {
-    // Border and separators.
     if !(4..X4_EPD_LOGICAL_WIDTH - 4).contains(&x) || !(4..X4_EPD_LOGICAL_HEIGHT - 4).contains(&y) {
         return true;
     }
@@ -226,7 +254,6 @@ fn smoke_pixel(x: u16, y: u16) -> bool {
         return true;
     }
 
-    // Simple blocks that make orientation obvious.
     if (24..72).contains(&x) && (24..58).contains(&y) {
         return true;
     }
@@ -239,6 +266,50 @@ fn smoke_pixel(x: u16, y: u16) -> bool {
         || text_pixel(b"PHASE 5", x, y, 156, 284, 4)
         || text_pixel(b"480X800 PORTRAIT", x, y, 108, 430, 2)
         || text_pixel(b"BOOT OK", x, y, 168, 640, 3)
+}
+
+fn home_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8) -> bool {
+    if !(4..X4_EPD_LOGICAL_WIDTH - 4).contains(&x) || !(4..X4_EPD_LOGICAL_HEIGHT - 4).contains(&y) {
+        return true;
+    }
+    if (132..138).contains(&y) || (672..678).contains(&y) {
+        return true;
+    }
+
+    if (34..56).contains(&x) && (206..228).contains(&y) {
+        return true;
+    }
+
+    text_pixel(b"VAACHAKOS", x, y, 66, 58, 5)
+        || text_pixel(b"BOOTSTRAP HOME", x, y, 108, 116, 2)
+        || text_pixel(b"CONTINUE", x, y, 82, 196, 3)
+        || text_pixel(b"LIBRARY", x, y, 82, 270, 3)
+        || text_pixel(b"SETTINGS", x, y, 82, 344, 3)
+        || text_pixel(b"SYSTEM", x, y, 82, 418, 3)
+        || text_pixel(b"READER MIGRATION NEXT", x, y, 80, 560, 2)
+        || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
+        || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
+}
+
+fn battery_status_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, battery_pct: u8) -> bool {
+    if text_pixel(b"BAT", x, y, x0, y0, scale) {
+        return true;
+    }
+
+    let pct = battery_pct.min(100);
+    let advance = 6 * scale;
+    let digit_x0 = x0 + 4 * advance;
+
+    if pct >= 100 {
+        return char_pixel(b'1', x, y, digit_x0, y0, scale)
+            || char_pixel(b'0', x, y, digit_x0 + advance, y0, scale)
+            || char_pixel(b'0', x, y, digit_x0 + 2 * advance, y0, scale);
+    }
+
+    let tens = pct / 10;
+    let ones = pct % 10;
+    char_pixel(b'0' + tens, x, y, digit_x0, y0, scale)
+        || char_pixel(b'0' + ones, x, y, digit_x0 + advance, y0, scale)
 }
 
 fn text_pixel(text: &[u8], x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool {
@@ -267,6 +338,20 @@ fn text_pixel(text: &[u8], x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool
     (glyph[row] & (1 << (4 - col))) != 0
 }
 
+fn char_pixel(ch: u8, x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool {
+    let glyph_w = 5 * scale;
+    let glyph_h = 7 * scale;
+
+    if y < y0 || y >= y0 + glyph_h || x < x0 || x >= x0 + glyph_w {
+        return false;
+    }
+
+    let col = ((x - x0) / scale) as usize;
+    let row = ((y - y0) / scale) as usize;
+    let glyph = glyph_for(ch);
+    (glyph[row] & (1 << (4 - col))) != 0
+}
+
 fn glyph_for(ch: u8) -> [u8; 7] {
     match ch {
         b'A' => [
@@ -284,6 +369,12 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'E' => [
             0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
         ],
+        b'F' => [
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000,
+        ],
+        b'G' => [
+            0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110,
+        ],
         b'H' => [
             0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
         ],
@@ -298,6 +389,9 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         ],
         b'M' => [
             0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001,
+        ],
+        b'N' => [
+            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
         ],
         b'O' => [
             0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
@@ -314,14 +408,29 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'T' => [
             0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
         ],
+        b'U' => [
+            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
+        ],
         b'V' => [
             0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
         ],
         b'X' => [
             0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001,
         ],
+        b'Y' => [
+            0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100,
+        ],
         b'0' => [
             0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
+        ],
+        b'1' => [
+            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ],
+        b'2' => [
+            0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111,
+        ],
+        b'3' => [
+            0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110,
         ],
         b'4' => [
             0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010,
@@ -329,8 +438,17 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'5' => [
             0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110,
         ],
+        b'6' => [
+            0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
+        ],
+        b'7' => [
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000,
+        ],
         b'8' => [
             0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110,
+        ],
+        b'9' => [
+            0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b11100,
         ],
         b' ' => [0, 0, 0, 0, 0, 0, 0],
         _ => [0, 0, 0, 0, 0, 0, 0],
@@ -359,5 +477,22 @@ mod tests {
         assert!(smoke_pixel(30, 30));
         assert!(smoke_pixel(430, 760));
         assert!(!smoke_pixel(240, 520));
+    }
+
+    #[test]
+    fn phase7_home_strip_has_expected_size() {
+        let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
+        render_home_strip(0, &mut strip, true, 92);
+        assert_eq!(strip.len(), 4_000);
+        assert!(strip.iter().any(|b| *b != 0xFF));
+    }
+
+    #[test]
+    fn logical_home_marks_title_and_status() {
+        assert!(home_pixel(2, 2, true, 92));
+        assert!(home_pixel(38, 212, true, 92));
+        assert!(home_pixel(66, 58, true, 92));
+        assert!(home_pixel(30, 724, true, 92));
+        assert!(!home_pixel(240, 510, true, 92));
     }
 }
