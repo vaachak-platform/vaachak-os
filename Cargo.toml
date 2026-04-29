@@ -19,6 +19,7 @@ postcard = { version = "1", default-features = false, features = ["alloc"] }
 log = "0.4.27"
 embedded-hal = "1.0.0"
 embedded-hal-bus = "0.3.0"
+embedded-sdmmc = { git = "https://github.com/hansmrtn/embedded-sdmmc-rs", branch = "async", features = ["async"] }
 
 # Embedded/X4 target dependencies. Pinned to the same ESP crate line that
 # worked in the x4-reader-os-rs firmware to avoid silent caret upgrades while
