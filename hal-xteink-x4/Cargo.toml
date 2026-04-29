@@ -8,3 +8,4 @@ authors.workspace = true
 [dependencies]
 vaachak-core = { path = "../core" }
 heapless.workspace = true
+embedded-hal.workspace = true

@@ -287,6 +287,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal-bus"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "513e0b3a8fb7d3013a8ae17a834283f170deaf7d0eeab0a7c1a36ad4dd356d22"
+dependencies = [
+ "critical-section",
+ "embedded-hal 1.0.0",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -700,6 +710,7 @@ dependencies = [
 name = "hal-xteink-x4"
 version = "0.1.0"
 dependencies = [
+ "embedded-hal 1.0.0",
  "heapless 0.8.0",
  "vaachak-core",
 ]
@@ -1160,6 +1171,7 @@ dependencies = [
 name = "target-xteink-x4"
 version = "0.1.0"
 dependencies = [
+ "embedded-hal-bus",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
