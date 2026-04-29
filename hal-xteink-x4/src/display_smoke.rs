@@ -1,4 +1,4 @@
-//! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation driver.
+//! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation/library-list driver.
 //!
 //! Phase 7 keeps the proven Phase 5.4 display transport shape:
 //! - DMA-backed `SpiDevice` chip-select ownership.
@@ -18,6 +18,39 @@ pub const X4_EPD_STRIP_ROWS: u16 = 40;
 pub const X4_EPD_BYTES_PER_ROW: usize = X4_EPD_NATIVE_WIDTH as usize / 8;
 pub const X4_EPD_STRIP_BYTES: usize = X4_EPD_BYTES_PER_ROW * X4_EPD_STRIP_ROWS as usize;
 pub const X4_EPD_STRIP_COUNT: u16 = X4_EPD_NATIVE_HEIGHT / X4_EPD_STRIP_ROWS;
+pub const X4_LIBRARY_MAX_ITEMS: usize = 8;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LibraryListItem {
+    pub name: [u8; 13],
+    pub name_len: u8,
+    pub size: u32,
+}
+
+impl LibraryListItem {
+    pub const EMPTY: Self = Self {
+        name: [0; 13],
+        name_len: 0,
+        size: 0,
+    };
+
+    pub fn new(name: &[u8], size: u32) -> Self {
+        let mut out = Self::EMPTY;
+        let n = name.len().min(out.name.len());
+        out.name[..n].copy_from_slice(&name[..n]);
+        out.name_len = n as u8;
+        out.size = size;
+        out
+    }
+
+    pub fn name_bytes(&self) -> &[u8] {
+        &self.name[..self.name_len as usize]
+    }
+
+    pub fn name_str(&self) -> &str {
+        core::str::from_utf8(self.name_bytes()).unwrap_or("?")
+    }
+}
 
 #[allow(dead_code)]
 mod cmd {
@@ -87,6 +120,31 @@ where
     ) {
         self.draw_full_frame(delay, |strip_idx, strip| {
             render_home_nav_strip(strip_idx, strip, sd_ok, battery_pct, selected)
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_phase9_library<D: DelayNs>(
+        &mut self,
+        delay: &mut D,
+        sd_ok: bool,
+        battery_pct: u8,
+        selected: u8,
+        items: &[LibraryListItem],
+        total_files: usize,
+        from_books_dir: bool,
+    ) {
+        self.draw_full_frame(delay, |strip_idx, strip| {
+            render_library_strip(
+                strip_idx,
+                strip,
+                sd_ok,
+                battery_pct,
+                selected,
+                items,
+                total_files,
+                from_books_dir,
+            )
         });
     }
 
@@ -242,6 +300,31 @@ fn render_home_nav_strip(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
+fn render_library_strip(
+    strip_idx: u16,
+    out: &mut [u8; X4_EPD_STRIP_BYTES],
+    sd_ok: bool,
+    battery_pct: u8,
+    selected: u8,
+    items: &[LibraryListItem],
+    total_files: usize,
+    from_books_dir: bool,
+) {
+    render_strip_with(strip_idx, out, |x, y| {
+        library_pixel(
+            x,
+            y,
+            sd_ok,
+            battery_pct,
+            selected,
+            items,
+            total_files,
+            from_books_dir,
+        )
+    });
+}
+
 fn render_strip_with<F>(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES], mut pixel: F)
 where
     F: FnMut(u16, u16) -> bool,
@@ -326,6 +409,80 @@ fn selected_marker_pixel(x: u16, y: u16, selected: u8) -> bool {
     (34..56).contains(&x) && (y0..y0 + 22).contains(&y)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn library_pixel(
+    x: u16,
+    y: u16,
+    sd_ok: bool,
+    battery_pct: u8,
+    selected: u8,
+    items: &[LibraryListItem],
+    total_files: usize,
+    from_books_dir: bool,
+) -> bool {
+    if !(4..X4_EPD_LOGICAL_WIDTH - 4).contains(&x) || !(4..X4_EPD_LOGICAL_HEIGHT - 4).contains(&y) {
+        return true;
+    }
+    if (132..138).contains(&y) || (672..678).contains(&y) {
+        return true;
+    }
+
+    text_pixel(b"VAACHAKOS", x, y, 66, 58, 5)
+        || text_pixel(b"LIBRARY SMOKE", x, y, 108, 116, 2)
+        || text_pixel(
+            if from_books_dir { b"BOOKS" } else { b"ROOT" },
+            x,
+            y,
+            28,
+            152,
+            2,
+        )
+        || text_pixel(b"FILES", x, y, 268, 152, 2)
+        || small_number_pixel(x, y, 352, 152, 2, total_files.min(99) as u8)
+        || library_rows_pixel(x, y, selected, items)
+        || library_empty_pixel(x, y, items)
+        || text_pixel(b"SELECT LOGS FILE", x, y, 82, 608, 2)
+        || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
+        || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
+}
+
+fn library_rows_pixel(x: u16, y: u16, selected: u8, items: &[LibraryListItem]) -> bool {
+    let visible = items.len().min(5);
+    let selected = selected as usize;
+
+    for (idx, item) in items.iter().take(visible).enumerate() {
+        let y0 = 208 + idx as u16 * 72;
+        if idx == selected && (34..56).contains(&x) && (y0..y0 + 22).contains(&y) {
+            return true;
+        }
+        if text_pixel_limited(item.name_bytes(), x, y, 82, y0 - 8, 2, 13) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn library_empty_pixel(x: u16, y: u16, items: &[LibraryListItem]) -> bool {
+    items.is_empty()
+        && (text_pixel(b"NO BOOKS FOUND", x, y, 78, 252, 3)
+            || text_pixel(b"ADD TXT EPUB EPU", x, y, 94, 336, 2))
+}
+
+fn small_number_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, value: u8) -> bool {
+    let v = value.min(99);
+    let tens = v / 10;
+    let ones = v % 10;
+    let advance = 6 * scale;
+
+    if v >= 10 {
+        char_pixel(b'0' + tens, x, y, x0, y0, scale)
+            || char_pixel(b'0' + ones, x, y, x0 + advance, y0, scale)
+    } else {
+        char_pixel(b'0' + ones, x, y, x0, y0, scale)
+    }
+}
+
 fn battery_status_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, battery_pct: u8) -> bool {
     if text_pixel(b"BAT", x, y, x0, y0, scale) {
         return true;
@@ -373,6 +530,19 @@ fn text_pixel(text: &[u8], x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool
     (glyph[row] & (1 << (4 - col))) != 0
 }
 
+fn text_pixel_limited(
+    text: &[u8],
+    x: u16,
+    y: u16,
+    x0: u16,
+    y0: u16,
+    scale: u16,
+    max_chars: usize,
+) -> bool {
+    let n = text.len().min(max_chars);
+    text_pixel(&text[..n], x, y, x0, y0, scale)
+}
+
 fn char_pixel(ch: u8, x: u16, y: u16, x0: u16, y0: u16, scale: u16) -> bool {
     let glyph_w = 5 * scale;
     let glyph_h = 7 * scale;
@@ -416,6 +586,9 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'I' => [
             0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111,
         ],
+        b'J' => [
+            0b00111, 0b00010, 0b00010, 0b00010, 0b10010, 0b10010, 0b01100,
+        ],
         b'K' => [
             0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001,
         ],
@@ -434,6 +607,9 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'P' => [
             0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000,
         ],
+        b'Q' => [
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
+        ],
         b'R' => [
             0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
         ],
@@ -449,11 +625,17 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'V' => [
             0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
         ],
+        b'W' => [
+            0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010,
+        ],
         b'X' => [
             0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001,
         ],
         b'Y' => [
             0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100,
+        ],
+        b'Z' => [
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111,
         ],
         b'0' => [
             0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
@@ -485,6 +667,10 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'9' => [
             0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b11100,
         ],
+        b'.' => [0, 0, 0, 0, 0, 0b01100, 0b01100],
+        b'-' => [0, 0, 0, 0b11111, 0, 0, 0],
+        b'_' => [0, 0, 0, 0, 0, 0, 0b11111],
+        b'~' => [0, 0, 0b01000, 0b10101, 0b00010, 0, 0],
         b' ' => [0, 0, 0, 0, 0, 0, 0],
         _ => [0, 0, 0, 0, 0, 0, 0],
     }
@@ -545,5 +731,27 @@ mod tests {
         assert!(!home_nav_pixel(38, 212, true, 92, 1));
         assert!(home_nav_pixel(38, 286, true, 92, 1));
         assert!(home_nav_pixel(38, 434, true, 92, 3));
+    }
+
+    #[test]
+    fn phase9_library_strip_has_expected_size() {
+        let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
+        let items = [LibraryListItem::new(b"BOOK1.TXT", 100)];
+        render_library_strip(0, &mut strip, true, 92, 0, &items, 1, true);
+        assert_eq!(strip.len(), 4_000);
+        assert!(strip.iter().any(|b| *b != 0xFF));
+    }
+
+    #[test]
+    fn logical_library_marks_selected_row_and_status() {
+        let items = [
+            LibraryListItem::new(b"BOOK1.TXT", 100),
+            LibraryListItem::new(b"BOOK2.EPU", 200),
+        ];
+        assert!(library_pixel(2, 2, true, 92, 1, &items, 2, true));
+        assert!(library_pixel(38, 280, true, 92, 1, &items, 2, true));
+        assert!(!library_pixel(38, 208, true, 92, 1, &items, 2, true));
+        assert!(library_pixel(82, 200, true, 92, 0, &items, 2, true));
+        assert!(library_pixel(30, 724, true, 92, 0, &items, 2, true));
     }
 }

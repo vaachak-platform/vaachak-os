@@ -33,11 +33,11 @@ use esp_hal::spi;
 #[cfg(target_arch = "riscv32")]
 use esp_hal::time::Rate;
 #[cfg(target_arch = "riscv32")]
-use hal_xteink_x4::{X4Input, X4Ssd1677Smoke};
+use hal_xteink_x4::{LibraryListItem, X4_LIBRARY_MAX_ITEMS, X4Input, X4Ssd1677Smoke};
 #[cfg(target_arch = "riscv32")]
 use vaachak_core::hal::{ButtonEventKind, ButtonId, InputEvent, InputHal, InputSample};
 
-const PHASE: &str = "bootstrap-phase8-x4-input-navigation-smoke";
+const PHASE: &str = "bootstrap-phase9-x4-library-list-smoke";
 
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {
@@ -83,26 +83,24 @@ fn main() {
 fn main() -> ! {
     esp_println::println!("");
     esp_println::println!("========================================");
-    esp_println::println!("VaachakOS X4 input navigation smoke starting");
+    esp_println::println!("VaachakOS X4 library list smoke starting");
     esp_println::println!("phase={}", PHASE);
     esp_println::println!("target=esp32c3 riscv32imc-unknown-none-elf");
-    esp_println::println!("phase8=input-navigation-home-smoke");
-    esp_println::println!("phase8.5=ported-x4-reader-os-rs-poll-shape");
-    esp_println::println!(
-        "note=Phase 8 adds ADC ladder input navigation to the minimal Home screen"
-    );
+    esp_println::println!("phase9=library-list-smoke");
+    esp_println::println!("phase9=sd-library-list-input-smoke");
+    esp_println::println!("note=Phase 9 scans SD for books and renders a navigable Library list");
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
     let mut input_adc = unsafe { X4InputAdc::new(&peripherals) };
-    esp_println::println!("phase8: input ADC ready row1=GPIO1 row2=GPIO2 power=GPIO3");
+    esp_println::println!("phase9: input ADC ready row1=GPIO1 row2=GPIO2 power=GPIO3");
     esp_println::println!(
-        "phase8.5: using proven x4-reader-os-rs calibrated thresholds + 10ms poll shape"
+        "phase9: using proven x4-reader-os-rs calibrated thresholds + 10ms poll shape"
     );
 
     esp_alloc::heap_allocator!(size: 32_768);
-    esp_println::println!("heap=32K input-navigation-smoke only");
+    esp_println::println!("heap=32K library-list-smoke only");
 
     let hal = hal_xteink_x4::X4Hal::new_placeholder();
     let mut os = vaachak_core::VaachakOs::new(hal);
@@ -148,11 +146,11 @@ fn main() -> ! {
     // - SD_CS high while the display owns the bus.
     let epd_cs = Output::new(peripherals.GPIO21, Level::High, OutputConfig::default());
     let sd_cs = unsafe { RawOutputPin::new_output_high(12) };
-    esp_println::println!("phase8: EPD_CS GPIO21 high, SD_CS GPIO12 high");
+    esp_println::println!("phase9: EPD_CS GPIO21 high, SD_CS GPIO12 high");
 
-    esp_println::println!("phase8: configuring SPI2 shared bus at 400kHz");
+    esp_println::println!("phase9: configuring SPI2 shared bus at 400kHz");
     esp_println::println!(
-        "phase8: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21 dc=GPIO4 rst=GPIO5 busy=GPIO6"
+        "phase9: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21 dc=GPIO4 rst=GPIO5 busy=GPIO6"
     );
 
     let slow_cfg = spi::master::Config::default().with_frequency(Rate::from_khz(400));
@@ -163,7 +161,7 @@ fn main() -> ! {
         .with_miso(peripherals.GPIO7);
 
     let _ = spi_raw.write(&[0xFF; 10]);
-    esp_println::println!("phase8: sent 80 idle clocks with both CS lines high");
+    esp_println::println!("phase9: sent 80 idle clocks with both CS lines high");
 
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = esp_hal::dma_buffers!(4096);
     let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
@@ -172,30 +170,45 @@ fn main() -> ! {
     let spi_dma_bus = spi_raw
         .with_dma(peripherals.DMA_CH0)
         .with_buffers(dma_rx_buf, dma_tx_buf);
-    esp_println::println!("phase8: DMA buffers enabled 4096B tx/rx");
+    esp_println::println!("phase9: DMA buffers enabled 4096B tx/rx");
 
     let spi_bus = RefCell::new(spi_dma_bus);
 
-    let storage_ok = {
+    let mut library_entries = [LibraryListItem::EMPTY; X4_LIBRARY_MAX_ITEMS];
+    let library_report = {
         let sd_spi = RefCellDevice::new(&spi_bus, sd_cs, Delay::new()).unwrap();
-        match run_storage_smoke(sd_spi) {
-            Ok(()) => {
-                esp_println::println!("phase8: storage smoke ok");
-                true
+        match run_library_storage_smoke(sd_spi, &mut library_entries) {
+            Ok(report) => {
+                esp_println::println!(
+                    "phase9: library scan ok dir={} count={} total={}",
+                    if report.from_books_dir {
+                        "BOOKS"
+                    } else {
+                        "ROOT"
+                    },
+                    report.count,
+                    report.total
+                );
+                report
             }
             Err(err) => {
-                esp_println::println!("phase8: storage smoke failed step={}", err.step);
-                esp_println::println!("phase8:storage-error={}", err.detail);
-                false
+                esp_println::println!("phase9: library scan failed step={}", err.step);
+                esp_println::println!("phase9:storage-error={}", err.detail);
+                LibraryScanReport::empty(false)
             }
         }
     };
+    let storage_ok = library_report.storage_ok;
+    let library_count = library_report.count;
+    let library_total = library_report.total;
+    let library_from_books = library_report.from_books_dir;
+    let library_items = &library_entries[..library_count];
 
     // Keep SD deselected before switching the shared bus to the SSD1677.
     unsafe {
         force_gpio_output_high(12);
     }
-    esp_println::println!("phase8: SD_CS GPIO12 forced high before display refresh");
+    esp_println::println!("phase9: SD_CS GPIO12 forced high before display refresh");
 
     let dc = Output::new(peripherals.GPIO4, Level::High, OutputConfig::default());
     let rst = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
@@ -208,26 +221,35 @@ fn main() -> ! {
     let epd_spi = RefCellDevice::new(&spi_bus, epd_cs, Delay::new()).unwrap();
     let mut display = X4Ssd1677Smoke::new(epd_spi, dc, rst, busy);
 
-    esp_println::println!("phase8: display init start dma-spidevice");
+    esp_println::println!("phase9: display init start dma-spidevice");
     display.init(&mut delay);
-    esp_println::println!("phase8: display init complete busy={}", display.is_busy());
+    esp_println::println!("phase9: display init complete busy={}", display.is_busy());
 
     let mut selected: u8 = 0;
     esp_println::println!(
-        "phase8: initial home render start sd_ok={} battery_pct={} selected={} item={}",
+        "phase9: initial library render start sd_ok={} battery_pct={} selected={} count={} total={}",
         storage_ok,
         battery_pct,
         selected,
-        menu_item_name(selected),
+        library_count,
+        library_total,
     );
-    display.draw_phase8_home(&mut delay, storage_ok, battery_pct, selected);
+    display.draw_phase9_library(
+        &mut delay,
+        storage_ok,
+        battery_pct,
+        selected,
+        library_items,
+        library_total,
+        library_from_books,
+    );
     esp_println::println!(
-        "phase8: initial home refresh complete busy={}",
+        "phase9: initial library refresh complete busy={}",
         display.is_busy()
     );
 
-    esp_println::println!("VaachakOS X4 input navigation smoke ready");
-    esp_println::println!("phase8=x4-input-navigation-smoke-ready");
+    esp_println::println!("VaachakOS X4 library list smoke ready");
+    esp_println::println!("phase9=x4-library-list-smoke-ready");
     esp_println::println!("========================================");
 
     let mut input_model = X4Input::default();
@@ -248,7 +270,7 @@ fn main() -> ! {
         {
             input_adc.set_last_activity_log_ms(tick_ms);
             esp_println::println!(
-                "phase8.5: adc activity row1={} row2={} power_low={}",
+                "phase9: adc activity row1={} row2={} power_low={}",
                 snapshot.row1_mv,
                 snapshot.row2_mv,
                 snapshot.sample.power_low,
@@ -256,28 +278,56 @@ fn main() -> ! {
         }
 
         if let Some(event) = input_model.ingest_sample(snapshot.sample) {
-            if handle_nav_event(event, &mut selected, &mut input_model, &mut event_count) {
+            if handle_library_event(
+                event,
+                &mut selected,
+                library_items,
+                &mut input_model,
+                &mut event_count,
+            ) {
                 esp_println::println!(
-                    "phase8: redraw selected={} item={}",
+                    "phase9: redraw selected={} file={}",
                     selected,
-                    menu_item_name(selected),
+                    selected_library_name(library_items, selected),
                 );
-                display.draw_phase8_home(&mut delay, storage_ok, battery_pct, selected);
-                esp_println::println!("phase8: redraw complete busy={}", display.is_busy());
-                esp_println::println!("phase8=x4-input-navigation-smoke-ok");
+                display.draw_phase9_library(
+                    &mut delay,
+                    storage_ok,
+                    battery_pct,
+                    selected,
+                    library_items,
+                    library_total,
+                    library_from_books,
+                );
+                esp_println::println!("phase9: redraw complete busy={}", display.is_busy());
+                esp_println::println!("phase9=x4-library-list-smoke-ok");
             }
         }
 
         while let Some(event) = input_model.poll() {
-            if handle_nav_event(event, &mut selected, &mut input_model, &mut event_count) {
+            if handle_library_event(
+                event,
+                &mut selected,
+                library_items,
+                &mut input_model,
+                &mut event_count,
+            ) {
                 esp_println::println!(
-                    "phase8: redraw selected={} item={}",
+                    "phase9: redraw selected={} file={}",
                     selected,
-                    menu_item_name(selected),
+                    selected_library_name(library_items, selected),
                 );
-                display.draw_phase8_home(&mut delay, storage_ok, battery_pct, selected);
-                esp_println::println!("phase8: redraw complete busy={}", display.is_busy());
-                esp_println::println!("phase8=x4-input-navigation-smoke-ok");
+                display.draw_phase9_library(
+                    &mut delay,
+                    storage_ok,
+                    battery_pct,
+                    selected,
+                    library_items,
+                    library_total,
+                    library_from_books,
+                );
+                esp_println::println!("phase9: redraw complete busy={}", display.is_busy());
+                esp_println::println!("phase9=x4-library-list-smoke-ok");
             }
         }
 
@@ -353,7 +403,7 @@ impl X4InputAdc {
         if !self.idle_logged && row1_mv > 2500 && row2_mv > 2500 {
             self.idle_logged = true;
             esp_println::println!(
-                "phase8.5: calibrated ADC idle row1={} row2={} model=direct-x4-reader-os-rs",
+                "phase9: calibrated ADC idle row1={} row2={} model=direct-x4-reader-os-rs",
                 row1_mv,
                 row2_mv,
             );
@@ -392,52 +442,60 @@ impl X4InputAdc {
 }
 
 #[cfg(target_arch = "riscv32")]
-fn handle_nav_event(
+fn handle_library_event(
     event: InputEvent,
     selected: &mut u8,
+    items: &[LibraryListItem],
     input: &mut X4Input,
     event_count: &mut u32,
 ) -> bool {
     *event_count = event_count.wrapping_add(1);
     esp_println::println!(
-        "phase8: input event #{} button={} kind={:?}",
+        "phase9: input event #{} button={} kind={:?}",
         *event_count,
         event.button.name(),
         event.kind,
     );
 
+    let max_selected = items.len().saturating_sub(1).min(4) as u8;
+
     match event.kind {
         ButtonEventKind::Press | ButtonEventKind::Repeat => match event.button {
             ButtonId::Up | ButtonId::Left => {
                 *selected = (*selected).saturating_sub(1);
-                true
+                !items.is_empty()
             }
             ButtonId::Down | ButtonId::Right => {
-                *selected = (*selected + 1).min(3);
-                true
+                *selected = (*selected + 1).min(max_selected);
+                !items.is_empty()
             }
             ButtonId::Select => {
-                esp_println::println!(
-                    "phase8: select item={} idx={}",
-                    menu_item_name(*selected),
-                    *selected,
-                );
+                if let Some(item) = items.get(*selected as usize) {
+                    esp_println::println!(
+                        "phase9: select file={} idx={} size={}",
+                        item.name_str(),
+                        *selected,
+                        item.size,
+                    );
+                } else {
+                    esp_println::println!("phase9: select ignored no library items");
+                }
                 false
             }
             ButtonId::Back => {
-                esp_println::println!("phase8: back pressed on Home smoke");
+                esp_println::println!("phase9: back pressed on Library smoke");
                 false
             }
             ButtonId::Power => {
-                esp_println::println!("phase8: power pressed on Home smoke");
+                esp_println::println!("phase9: power pressed on Library smoke");
                 false
             }
         },
         ButtonEventKind::LongPress => {
             esp_println::println!(
-                "phase8: long press consumed button={} item={}",
+                "phase9: long press consumed button={} file={}",
                 event.button.name(),
-                menu_item_name(*selected),
+                selected_library_name(items, *selected),
             );
             input.reset_hold_state();
             false
@@ -447,13 +505,11 @@ fn handle_nav_event(
 }
 
 #[cfg(target_arch = "riscv32")]
-fn menu_item_name(selected: u8) -> &'static str {
-    match selected.min(3) {
-        0 => "Continue",
-        1 => "Library",
-        2 => "Settings",
-        _ => "System",
-    }
+fn selected_library_name(items: &[LibraryListItem], selected: u8) -> &str {
+    items
+        .get(selected as usize)
+        .map(LibraryListItem::name_str)
+        .unwrap_or("<none>")
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -461,7 +517,28 @@ const SMOKE_FILE: &str = "VOSMOKE.TXT";
 #[cfg(target_arch = "riscv32")]
 const SMOKE_DIR: &str = "state";
 #[cfg(target_arch = "riscv32")]
-const SMOKE_BYTES: &[u8] = b"VaachakOS Phase 8 X4 minimal home smoke\r\nstate/VOSMOKE.TXT\r\n";
+const SMOKE_BYTES: &[u8] = b"VaachakOS Phase 9 X4 library list smoke\r\nstate/VOSMOKE.TXT\r\n";
+
+#[cfg(target_arch = "riscv32")]
+#[derive(Debug, Clone, Copy)]
+struct LibraryScanReport {
+    storage_ok: bool,
+    count: usize,
+    total: usize,
+    from_books_dir: bool,
+}
+
+#[cfg(target_arch = "riscv32")]
+impl LibraryScanReport {
+    const fn empty(storage_ok: bool) -> Self {
+        Self {
+            storage_ok,
+            count: 0,
+            total: 0,
+            from_books_dir: false,
+        }
+    }
+}
 
 #[cfg(target_arch = "riscv32")]
 #[derive(Debug, Clone, Copy)]
@@ -478,7 +555,10 @@ impl SmokeError {
 }
 
 #[cfg(target_arch = "riscv32")]
-fn run_storage_smoke<SPI>(sd_spi: SPI) -> Result<(), SmokeError>
+fn run_library_storage_smoke<SPI>(
+    sd_spi: SPI,
+    entries: &mut [LibraryListItem],
+) -> Result<LibraryScanReport, SmokeError>
 where
     SPI: embedded_hal::spi::SpiDevice,
 {
@@ -530,14 +610,14 @@ where
 
     let sd = SdCard::new(sd_spi, esp_hal::delay::Delay::new());
 
-    esp_println::println!("phase8: sd init start");
+    esp_println::println!("phase9: sd init start");
     let mut card_bytes = None;
     for attempt in 1..=5 {
         match sd.num_bytes() {
             Ok(size) => {
                 card_bytes = Some(size);
                 esp_println::println!(
-                    "phase8: sd initialised attempt={} bytes={} mb={}",
+                    "phase9: sd initialised attempt={} bytes={} mb={}",
                     attempt,
                     size,
                     size / 1024 / 1024
@@ -545,7 +625,7 @@ where
                 break;
             }
             Err(_) => {
-                esp_println::println!("phase8: sd init attempt={} failed", attempt);
+                esp_println::println!("phase9: sd init attempt={} failed", attempt);
                 sd.mark_card_uninit();
                 embedded_hal::delay::DelayNs::delay_ms(&mut esp_hal::delay::Delay::new(), 50);
             }
@@ -553,7 +633,7 @@ where
     }
 
     let card_bytes = card_bytes.ok_or(SmokeError::new("sd_init", "card did not respond"))?;
-    esp_println::println!("phase8: sd card bytes={}", card_bytes);
+    esp_println::println!("phase9: sd card bytes={}", card_bytes);
 
     let adapter = BlockDeviceAdapter(sd);
     let mut mgr: AsyncVolumeManager<_, NullTimeSource, 4, 4, 1> =
@@ -564,12 +644,12 @@ where
     let root: RawDirectory = mgr
         .open_root_dir(vol)
         .map_err(|_| SmokeError::new("open_root", "root directory open failed"))?;
-    esp_println::println!("phase8: sd mounted volume=0 root=open");
+    esp_println::println!("phase9: sd mounted volume=0 root=open");
 
     let state_dir = match poll_once(mgr.open_dir(root, SMOKE_DIR)) {
         Ok(dir) => dir,
         Err(_) => {
-            esp_println::println!("phase8: creating {} directory", SMOKE_DIR);
+            esp_println::println!("phase9: creating {} directory", SMOKE_DIR);
             match poll_once(mgr.make_dir_in_dir(root, SMOKE_DIR)) {
                 Ok(()) | Err(embedded_sdmmc::Error::DirAlreadyExists) => {}
                 Err(_) => return Err(SmokeError::new("mkdir_state", "failed to create state dir")),
@@ -587,7 +667,7 @@ where
     poll_once(mgr.close_file(file))
         .map_err(|_| SmokeError::new("close_write", "close after write failed"))?;
     esp_println::println!(
-        "phase8: wrote state/{} bytes={}",
+        "phase9: wrote state/{} bytes={}",
         SMOKE_FILE,
         SMOKE_BYTES.len()
     );
@@ -608,18 +688,156 @@ where
         return Err(SmokeError::new("readback_cmp", "readback mismatch"));
     }
     esp_println::println!(
-        "phase8: readback ok state/{} size={} read={}",
+        "phase9: readback ok state/{} size={} read={}",
         SMOKE_FILE,
         size,
         read_len
     );
 
+    let (mut count, mut total, mut from_books_dir) = (0usize, 0usize, false);
+
+    if let Ok(books_dir) = poll_once(mgr.open_dir(root, "BOOKS")) {
+        esp_println::println!("phase9: scanning BOOKS directory");
+        let scan = scan_supported_files(&mut mgr, books_dir, entries, "BOOKS")?;
+        let _ = mgr.close_dir(books_dir);
+        if scan.total > 0 {
+            count = scan.count;
+            total = scan.total;
+            from_books_dir = true;
+        } else {
+            esp_println::println!("phase9: BOOKS has no supported files, falling back to root");
+        }
+    } else {
+        esp_println::println!("phase9: BOOKS directory not found, scanning root");
+    }
+
+    if total == 0 {
+        let scan = scan_supported_files(&mut mgr, root, entries, "ROOT")?;
+        count = scan.count;
+        total = scan.total;
+        from_books_dir = false;
+    }
+
+    for (idx, item) in entries.iter().take(count).enumerate() {
+        esp_println::println!(
+            "phase9: file[{}]={} size={}",
+            idx,
+            item.name_str(),
+            item.size,
+        );
+    }
+
     let _ = mgr.close_dir(state_dir);
     let _ = mgr.close_dir(root);
     let _ = poll_once(mgr.close_volume(vol));
-    esp_println::println!("phase8: volume closed cleanly");
+    esp_println::println!("phase9: volume closed cleanly");
 
-    Ok(())
+    Ok(LibraryScanReport {
+        storage_ok: true,
+        count,
+        total,
+        from_books_dir,
+    })
+}
+
+#[cfg(target_arch = "riscv32")]
+#[derive(Debug, Clone, Copy)]
+struct ScanCounts {
+    count: usize,
+    total: usize,
+}
+
+#[cfg(target_arch = "riscv32")]
+fn scan_supported_files<
+    D,
+    T,
+    const MAX_DIRS: usize,
+    const MAX_FILES: usize,
+    const MAX_VOLS: usize,
+>(
+    mgr: &mut embedded_sdmmc::AsyncVolumeManager<D, T, MAX_DIRS, MAX_FILES, MAX_VOLS>,
+    dir: embedded_sdmmc::RawDirectory,
+    entries: &mut [LibraryListItem],
+    label: &'static str,
+) -> Result<ScanCounts, SmokeError>
+where
+    D: embedded_sdmmc::AsyncBlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
+    use core::ops::ControlFlow;
+
+    for slot in entries.iter_mut() {
+        *slot = LibraryListItem::EMPTY;
+    }
+
+    let mut count = 0usize;
+    let mut total = 0usize;
+    let max_visible = entries.len().min(5);
+
+    poll_once(mgr.iterate_dir(dir, |entry| {
+        if entry.attributes.is_volume() || entry.attributes.is_directory() {
+            return ControlFlow::Continue(());
+        }
+
+        let mut name_buf = [0u8; 13];
+        let name_len = sfn_to_bytes(&entry.name, &mut name_buf);
+        let name = &name_buf[..name_len as usize];
+
+        if name.is_empty() || name[0] == b'.' || name[0] == b'_' || !has_supported_ext(name) {
+            return ControlFlow::Continue(());
+        }
+
+        total += 1;
+        if count < max_visible {
+            entries[count] = LibraryListItem::new(name, entry.size);
+            count += 1;
+        }
+
+        ControlFlow::Continue(())
+    }))
+    .map_err(|_| SmokeError::new("scan_dir", label))?;
+
+    esp_println::println!(
+        "phase9: scan dir={} visible={} total={}",
+        label,
+        count,
+        total,
+    );
+
+    Ok(ScanCounts { count, total })
+}
+
+#[cfg(target_arch = "riscv32")]
+fn ext_eq(name: &[u8], target: &[u8]) -> bool {
+    let dot = match name.iter().rposition(|&b| b == b'.') {
+        Some(p) => p,
+        None => return false,
+    };
+    let ext = &name[dot + 1..];
+    ext.len() == target.len() && ext.eq_ignore_ascii_case(target)
+}
+
+#[cfg(target_arch = "riscv32")]
+fn has_supported_ext(name: &[u8]) -> bool {
+    ext_eq(name, b"TXT") || ext_eq(name, b"EPUB") || ext_eq(name, b"EPU") || ext_eq(name, b"MD")
+}
+
+#[cfg(target_arch = "riscv32")]
+fn sfn_to_bytes(name: &embedded_sdmmc::ShortFileName, out: &mut [u8; 13]) -> u8 {
+    let base = name.base_name();
+    let ext = name.extension();
+    let mut pos = 0usize;
+    let blen = base.len().min(8);
+    out[..blen].copy_from_slice(&base[..blen]);
+    pos += blen;
+    if !ext.is_empty() && pos < out.len() {
+        out[pos] = b'.';
+        pos += 1;
+        let elen = ext.len().min(3).min(out.len().saturating_sub(pos));
+        out[pos..pos + elen].copy_from_slice(&ext[..elen]);
+        pos += elen;
+    }
+    pos as u8
 }
 
 #[cfg(target_arch = "riscv32")]
