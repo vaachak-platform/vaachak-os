@@ -61,6 +61,9 @@ pub struct ReaderPage {
     pub name_len: u8,
     pub file_size: u32,
     pub read_len: u16,
+    pub offset: u32,
+    pub page_index: u16,
+    pub total_pages: u16,
     text: [u8; X4_READER_TEXT_BYTES],
     line_starts: [u16; X4_READER_VISIBLE_LINES],
     line_lens: [u8; X4_READER_VISIBLE_LINES],
@@ -73,6 +76,9 @@ impl ReaderPage {
         name_len: 0,
         file_size: 0,
         read_len: 0,
+        offset: 0,
+        page_index: 1,
+        total_pages: 1,
         text: [0; X4_READER_TEXT_BYTES],
         line_starts: [0; X4_READER_VISIBLE_LINES],
         line_lens: [0; X4_READER_VISIBLE_LINES],
@@ -80,11 +86,25 @@ impl ReaderPage {
     };
 
     pub fn new(name: &[u8], file_size: u32, bytes: &[u8]) -> Self {
+        Self::new_paged(name, file_size, 0, 1, page_count_for(file_size), bytes)
+    }
+
+    pub fn new_paged(
+        name: &[u8],
+        file_size: u32,
+        offset: u32,
+        page_index: u16,
+        total_pages: u16,
+        bytes: &[u8],
+    ) -> Self {
         let mut out = Self::EMPTY;
         let name_len = name.len().min(out.name.len());
         out.name[..name_len].copy_from_slice(&name[..name_len]);
         out.name_len = name_len as u8;
         out.file_size = file_size;
+        out.offset = offset;
+        out.page_index = page_index.max(1);
+        out.total_pages = total_pages.max(1);
 
         let read_len = bytes.len().min(out.text.len());
         out.text[..read_len].copy_from_slice(&bytes[..read_len]);
@@ -103,6 +123,18 @@ impl ReaderPage {
 
     pub fn line_count(&self) -> usize {
         self.line_count as usize
+    }
+
+    pub fn next_offset(&self) -> Option<u32> {
+        if self.file_size == 0 {
+            return None;
+        }
+        let next = self.offset.saturating_add(X4_READER_TEXT_BYTES as u32);
+        (next < self.file_size).then_some(next)
+    }
+
+    pub fn prev_offset(&self) -> Option<u32> {
+        (self.offset > 0).then_some(self.offset.saturating_sub(X4_READER_TEXT_BYTES as u32))
     }
 
     fn index_lines(&mut self) {
@@ -159,6 +191,15 @@ impl ReaderPage {
         let idx = self.line_starts[line] as usize + col;
         self.text.get(idx).copied()
     }
+}
+
+const fn page_count_for(file_size: u32) -> u16 {
+    let pages = if file_size == 0 {
+        1
+    } else {
+        file_size.div_ceil(X4_READER_TEXT_BYTES as u32) as u16
+    };
+    if pages == 0 { 1 } else { pages }
 }
 
 #[allow(dead_code)]
@@ -257,7 +298,7 @@ where
         });
     }
 
-    pub fn draw_phase10_reader<D: DelayNs>(
+    pub fn draw_phase11_reader<D: DelayNs>(
         &mut self,
         delay: &mut D,
         sd_ok: bool,
@@ -614,7 +655,14 @@ fn reader_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, page: &ReaderPage)
         || text_pixel(b"TXT READER", x, y, 116, 100, 2)
         || text_pixel_limited(page.name_bytes(), x, y, 28, 152, 2, 13)
         || reader_lines_pixel(x, y, page)
-        || text_pixel(b"BACK LIBRARY", x, y, 96, 608, 2)
+        || text_pixel(b"UP PREV  DN NEXT", x, y, 78, 608, 2)
+        || text_pixel(b"BACK LIBRARY", x, y, 96, 636, 2)
+        || text_pixel(b"PG", x, y, 28, 686, 2)
+        || decimal_number_pixel(x, y, 64, 686, 2, page.page_index as u32)
+        || char_pixel(b'/', x, y, 100, 686, 2)
+        || decimal_number_pixel(x, y, 116, 686, 2, page.total_pages as u32)
+        || text_pixel(b"OFF", x, y, 190, 686, 2)
+        || decimal_number_pixel(x, y, 244, 686, 2, page.offset)
         || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
         || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
 }
@@ -671,6 +719,34 @@ fn small_number_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, value: u8) -
     } else {
         char_pixel(b'0' + ones, x, y, x0, y0, scale)
     }
+}
+
+fn decimal_number_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, value: u32) -> bool {
+    let mut buf = [0u8; 10];
+    let mut n = value;
+    let mut len = 0usize;
+
+    if n == 0 {
+        buf[0] = b'0';
+        len = 1;
+    } else {
+        while n > 0 && len < buf.len() {
+            buf[len] = b'0' + (n % 10) as u8;
+            n /= 10;
+            len += 1;
+        }
+    }
+
+    let advance = 6 * scale;
+    let mut i = 0usize;
+    while i < len {
+        let ch = buf[len - 1 - i];
+        if char_pixel(ch, x, y, x0 + i as u16 * advance, y0, scale) {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }
 
 fn battery_status_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, battery_pct: u8) -> bool {
@@ -832,6 +908,9 @@ fn glyph_for(ch: u8) -> [u8; 7] {
         b'Z' => [
             0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111,
         ],
+        b'/' => [
+            0b00001, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b10000,
+        ],
         b'0' => [
             0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
         ],
@@ -951,7 +1030,7 @@ mod tests {
     }
 
     #[test]
-    fn phase10_reader_page_indexes_lines() {
+    fn phase11_reader_page_indexes_lines() {
         let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
         assert_eq!(page.line_count(), 2);
         assert_eq!(page.name_str(), "SHORT.TXT");
@@ -959,7 +1038,7 @@ mod tests {
     }
 
     #[test]
-    fn phase10_reader_strip_has_expected_size() {
+    fn phase11_reader_strip_has_expected_size() {
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
         let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
         render_reader_strip(0, &mut strip, true, 92, &page);

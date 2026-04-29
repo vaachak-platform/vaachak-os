@@ -40,7 +40,7 @@ use hal_xteink_x4::{
 #[cfg(target_arch = "riscv32")]
 use vaachak_core::hal::{ButtonEventKind, ButtonId, InputEvent, InputHal, InputSample};
 
-const PHASE: &str = "bootstrap-phase10-x4-txt-reader-smoke";
+const PHASE: &str = "bootstrap-phase11-x4-txt-pagination-progress-smoke";
 
 #[cfg(not(target_arch = "riscv32"))]
 fn main() {
@@ -86,24 +86,26 @@ fn main() {
 fn main() -> ! {
     esp_println::println!("");
     esp_println::println!("========================================");
-    esp_println::println!("VaachakOS X4 TXT reader smoke starting");
+    esp_println::println!("VaachakOS X4 TXT reader pagination/progress smoke starting");
     esp_println::println!("phase={}", PHASE);
     esp_println::println!("target=esp32c3 riscv32imc-unknown-none-elf");
-    esp_println::println!("phase10=txt-reader-smoke");
-    esp_println::println!("phase10=sd-library-input-reader-smoke");
-    esp_println::println!("note=Phase 10 opens a selected TXT file and renders the first page");
+    esp_println::println!("phase11=txt-pagination-progress-smoke");
+    esp_println::println!("phase11=sd-library-input-reader-pagination-progress-smoke");
+    esp_println::println!(
+        "note=Phase 11 opens a selected TXT file, paginates, and persists progress"
+    );
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
     let mut input_adc = unsafe { X4InputAdc::new(&peripherals) };
-    esp_println::println!("phase10: input ADC ready row1=GPIO1 row2=GPIO2 power=GPIO3");
+    esp_println::println!("phase11: input ADC ready row1=GPIO1 row2=GPIO2 power=GPIO3");
     esp_println::println!(
-        "phase10: using proven x4-reader-os-rs calibrated thresholds + 10ms poll shape"
+        "phase11: using proven x4-reader-os-rs calibrated thresholds + 10ms poll shape"
     );
 
     esp_alloc::heap_allocator!(size: 32_768);
-    esp_println::println!("heap=32K txt-reader-smoke only");
+    esp_println::println!("heap=32K txt-pagination-progress-smoke only");
 
     let hal = hal_xteink_x4::X4Hal::new_placeholder();
     let mut os = vaachak_core::VaachakOs::new(hal);
@@ -149,11 +151,11 @@ fn main() -> ! {
     // - SD_CS high while the display owns the bus.
     let epd_cs = Output::new(peripherals.GPIO21, Level::High, OutputConfig::default());
     let sd_cs = unsafe { RawOutputPin::new_output_high(12) };
-    esp_println::println!("phase10: EPD_CS GPIO21 high, SD_CS GPIO12 high");
+    esp_println::println!("phase11: EPD_CS GPIO21 high, SD_CS GPIO12 high");
 
-    esp_println::println!("phase10: configuring SPI2 shared bus at 400kHz");
+    esp_println::println!("phase11: configuring SPI2 shared bus at 400kHz");
     esp_println::println!(
-        "phase10: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21 dc=GPIO4 rst=GPIO5 busy=GPIO6"
+        "phase11: pins sclk=GPIO8 mosi=GPIO10 miso=GPIO7 sd_cs=GPIO12 epd_cs=GPIO21 dc=GPIO4 rst=GPIO5 busy=GPIO6"
     );
 
     let slow_cfg = spi::master::Config::default().with_frequency(Rate::from_khz(400));
@@ -164,7 +166,7 @@ fn main() -> ! {
         .with_miso(peripherals.GPIO7);
 
     let _ = spi_raw.write(&[0xFF; 10]);
-    esp_println::println!("phase10: sent 80 idle clocks with both CS lines high");
+    esp_println::println!("phase11: sent 80 idle clocks with both CS lines high");
 
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = esp_hal::dma_buffers!(4096);
     let dma_rx_buf = esp_hal::dma::DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
@@ -173,7 +175,7 @@ fn main() -> ! {
     let spi_dma_bus = spi_raw
         .with_dma(peripherals.DMA_CH0)
         .with_buffers(dma_rx_buf, dma_tx_buf);
-    esp_println::println!("phase10: DMA buffers enabled 4096B tx/rx");
+    esp_println::println!("phase11: DMA buffers enabled 4096B tx/rx");
 
     let spi_bus = RefCell::new(spi_dma_bus);
 
@@ -183,7 +185,7 @@ fn main() -> ! {
         match run_library_storage_smoke(sd_spi, &mut library_entries) {
             Ok(report) => {
                 esp_println::println!(
-                    "phase10: library scan ok dir={} count={} total={}",
+                    "phase11: library scan ok dir={} count={} total={}",
                     if report.from_books_dir {
                         "BOOKS"
                     } else {
@@ -195,8 +197,8 @@ fn main() -> ! {
                 report
             }
             Err(err) => {
-                esp_println::println!("phase10: library scan failed step={}", err.step);
-                esp_println::println!("phase10:storage-error={}", err.detail);
+                esp_println::println!("phase11: library scan failed step={}", err.step);
+                esp_println::println!("phase11:storage-error={}", err.detail);
                 LibraryScanReport::empty(false)
             }
         }
@@ -211,7 +213,7 @@ fn main() -> ! {
     unsafe {
         force_gpio_output_high(12);
     }
-    esp_println::println!("phase10: SD_CS GPIO12 forced high before display refresh");
+    esp_println::println!("phase11: SD_CS GPIO12 forced high before display refresh");
 
     let dc = Output::new(peripherals.GPIO4, Level::High, OutputConfig::default());
     let rst = Output::new(peripherals.GPIO5, Level::High, OutputConfig::default());
@@ -224,16 +226,17 @@ fn main() -> ! {
     let epd_spi = RefCellDevice::new(&spi_bus, epd_cs, Delay::new()).unwrap();
     let mut display = X4Ssd1677Smoke::new(epd_spi, dc, rst, busy);
 
-    esp_println::println!("phase10: display init start dma-spidevice");
+    esp_println::println!("phase11: display init start dma-spidevice");
     display.init(&mut delay);
-    esp_println::println!("phase10: display init complete busy={}", display.is_busy());
+    esp_println::println!("phase11: display init complete busy={}", display.is_busy());
 
     let mut selected: u8 = 0;
     let mut mode = UiMode::Library;
     let mut reader_page = ReaderPage::EMPTY;
+    let mut reader_session: Option<ReaderSession> = None;
 
     esp_println::println!(
-        "phase10: initial library render start sd_ok={} battery_pct={} selected={} count={} total={}",
+        "phase11: initial library render start sd_ok={} battery_pct={} selected={} count={} total={}",
         storage_ok,
         battery_pct,
         selected,
@@ -250,12 +253,12 @@ fn main() -> ! {
         library_from_books,
     );
     esp_println::println!(
-        "phase10: initial library refresh complete busy={}",
+        "phase11: initial library refresh complete busy={}",
         display.is_busy()
     );
 
-    esp_println::println!("VaachakOS X4 TXT reader smoke ready");
-    esp_println::println!("phase10=x4-txt-reader-smoke-ready");
+    esp_println::println!("VaachakOS X4 TXT reader pagination/progress smoke ready");
+    esp_println::println!("phase11=x4-txt-pagination-progress-smoke-ready");
     esp_println::println!("========================================");
 
     let mut input_model = X4Input::default();
@@ -271,7 +274,7 @@ fn main() -> ! {
         {
             input_adc.set_last_activity_log_ms(tick_ms);
             esp_println::println!(
-                "phase10: adc activity row1={} row2={} power_low={}",
+                "phase11: adc activity row1={} row2={} power_low={}",
                 snapshot.row1_mv,
                 snapshot.row2_mv,
                 snapshot.sample.power_low,
@@ -280,7 +283,7 @@ fn main() -> ! {
 
         macro_rules! process_event {
             ($event:expr) => {{
-                match handle_phase10_event(
+                match handle_phase11_event(
                     $event,
                     &mut mode,
                     &mut selected,
@@ -288,10 +291,10 @@ fn main() -> ! {
                     &mut input_model,
                     &mut event_count,
                 ) {
-                    Phase10Action::None => {}
-                    Phase10Action::RedrawLibrary => {
+                    Phase11Action::None => {}
+                    Phase11Action::RedrawLibrary => {
                         esp_println::println!(
-                            "phase10: redraw library selected={} file={}",
+                            "phase11: redraw library selected={} file={}",
                             selected,
                             selected_library_name(library_items, selected),
                         );
@@ -304,18 +307,18 @@ fn main() -> ! {
                             library_total,
                             library_from_books,
                         );
-                        esp_println::println!("phase10: library redraw complete busy={}", display.is_busy());
+                        esp_println::println!("phase11: library redraw complete busy={}", display.is_busy());
                     }
-                    Phase10Action::OpenSelected => {
+                    Phase11Action::OpenSelected => {
                         if let Some(item) = library_items.get(selected as usize).copied() {
                             if !is_txt_reader_supported(item) {
                                 esp_println::println!(
-                                    "phase10: reader unsupported file={} only TXT/MD in smoke",
+                                    "phase11: reader unsupported file={} only TXT/MD in smoke",
                                     item.name_str(),
                                 );
                             } else {
                                 esp_println::println!(
-                                    "phase10: reader open start file={} idx={} size={}",
+                                    "phase11: reader open start file={} idx={} size={}",
                                     item.name_str(),
                                     selected,
                                     item.size,
@@ -330,39 +333,45 @@ fn main() -> ! {
                                     Delay::new(),
                                 )
                                 .unwrap();
-                                match run_txt_reader_storage_smoke(
+                                match run_txt_reader_page_storage_smoke(
                                     sd_spi,
                                     item,
                                     library_from_books,
+                                    None,
                                     &mut reader_page,
                                 ) {
                                     Ok(report) => {
                                         mode = UiMode::Reader;
+                                        reader_session = Some(ReaderSession { item, from_books_dir: library_from_books });
                                         unsafe { force_gpio_output_high(12); }
                                         esp_println::println!(
-                                            "phase10: reader read ok file={} size={} read={} lines={} dir={}",
+                                            "phase11: reader read ok file={} size={} read={} offset={} page={}/{} restored={} progress={} dir={}",
                                             reader_page.name_str(),
                                             report.file_size,
                                             report.read_len,
-                                            reader_page.line_count(),
+                                            report.offset,
+                                            report.page_index,
+                                            report.total_pages,
+                                            report.restored,
+                                            report.progress_name_str(),
                                             if report.from_books_dir { "BOOKS" } else { "ROOT" },
                                         );
-                                        display.draw_phase10_reader(
+                                        display.draw_phase11_reader(
                                             &mut delay,
                                             storage_ok,
                                             battery_pct,
                                             &reader_page,
                                         );
                                         esp_println::println!(
-                                            "phase10: reader refresh complete busy={}",
+                                            "phase11: reader refresh complete busy={}",
                                             display.is_busy(),
                                         );
-                                        esp_println::println!("phase10=x4-txt-reader-smoke-ok");
+                                        esp_println::println!("phase11=x4-txt-pagination-progress-smoke-ok");
                                     }
                                     Err(err) => {
                                         unsafe { force_gpio_output_high(12); }
                                         esp_println::println!(
-                                            "phase10: reader read failed file={} step={} detail={}",
+                                            "phase11: reader read failed file={} step={} detail={}",
                                             item.name_str(),
                                             err.step,
                                             err.detail,
@@ -371,13 +380,135 @@ fn main() -> ! {
                                 }
                             }
                         } else {
-                            esp_println::println!("phase10: reader open ignored no selected file");
+                            esp_println::println!("phase11: reader open ignored no selected file");
                         }
                     }
-                    Phase10Action::ReturnLibrary => {
+                    Phase11Action::ReaderNextPage => {
+                        if let Some(session) = reader_session {
+                            if let Some(next_offset) = reader_page.next_offset() {
+                                esp_println::println!(
+                                    "phase11: reader next page file={} from_off={} to_off={}",
+                                    session.item.name_str(),
+                                    reader_page.offset,
+                                    next_offset,
+                                );
+                                unsafe {
+                                    force_gpio_output_high(21);
+                                    force_gpio_output_high(12);
+                                }
+                                let sd_spi = RefCellDevice::new(
+                                    &spi_bus,
+                                    unsafe { RawOutputPin::new_output_high(12) },
+                                    Delay::new(),
+                                )
+                                .unwrap();
+                                match run_txt_reader_page_storage_smoke(
+                                    sd_spi,
+                                    session.item,
+                                    session.from_books_dir,
+                                    Some(next_offset),
+                                    &mut reader_page,
+                                ) {
+                                    Ok(report) => {
+                                        unsafe { force_gpio_output_high(12); }
+                                        esp_println::println!(
+                                            "phase11: reader page ok file={} read={} offset={} page={}/{} progress={}",
+                                            reader_page.name_str(),
+                                            report.read_len,
+                                            report.offset,
+                                            report.page_index,
+                                            report.total_pages,
+                                            report.progress_name_str(),
+                                        );
+                                        display.draw_phase11_reader(&mut delay, storage_ok, battery_pct, &reader_page);
+                                        esp_println::println!("phase11: reader page refresh complete busy={}", display.is_busy());
+                                        esp_println::println!("phase11=x4-txt-pagination-progress-smoke-ok");
+                                    }
+                                    Err(err) => {
+                                        unsafe { force_gpio_output_high(12); }
+                                        esp_println::println!(
+                                            "phase11: reader next failed file={} step={} detail={}",
+                                            session.item.name_str(),
+                                            err.step,
+                                            err.detail,
+                                        );
+                                    }
+                                }
+                            } else {
+                                esp_println::println!(
+                                    "phase11: reader next ignored at end file={} page={}/{}",
+                                    reader_page.name_str(),
+                                    reader_page.page_index,
+                                    reader_page.total_pages,
+                                );
+                            }
+                        }
+                    }
+                    Phase11Action::ReaderPrevPage => {
+                        if let Some(session) = reader_session {
+                            if let Some(prev_offset) = reader_page.prev_offset() {
+                                esp_println::println!(
+                                    "phase11: reader prev page file={} from_off={} to_off={}",
+                                    session.item.name_str(),
+                                    reader_page.offset,
+                                    prev_offset,
+                                );
+                                unsafe {
+                                    force_gpio_output_high(21);
+                                    force_gpio_output_high(12);
+                                }
+                                let sd_spi = RefCellDevice::new(
+                                    &spi_bus,
+                                    unsafe { RawOutputPin::new_output_high(12) },
+                                    Delay::new(),
+                                )
+                                .unwrap();
+                                match run_txt_reader_page_storage_smoke(
+                                    sd_spi,
+                                    session.item,
+                                    session.from_books_dir,
+                                    Some(prev_offset),
+                                    &mut reader_page,
+                                ) {
+                                    Ok(report) => {
+                                        unsafe { force_gpio_output_high(12); }
+                                        esp_println::println!(
+                                            "phase11: reader page ok file={} read={} offset={} page={}/{} progress={}",
+                                            reader_page.name_str(),
+                                            report.read_len,
+                                            report.offset,
+                                            report.page_index,
+                                            report.total_pages,
+                                            report.progress_name_str(),
+                                        );
+                                        display.draw_phase11_reader(&mut delay, storage_ok, battery_pct, &reader_page);
+                                        esp_println::println!("phase11: reader page refresh complete busy={}", display.is_busy());
+                                        esp_println::println!("phase11=x4-txt-pagination-progress-smoke-ok");
+                                    }
+                                    Err(err) => {
+                                        unsafe { force_gpio_output_high(12); }
+                                        esp_println::println!(
+                                            "phase11: reader prev failed file={} step={} detail={}",
+                                            session.item.name_str(),
+                                            err.step,
+                                            err.detail,
+                                        );
+                                    }
+                                }
+                            } else {
+                                esp_println::println!(
+                                    "phase11: reader prev ignored at start file={} page={}/{}",
+                                    reader_page.name_str(),
+                                    reader_page.page_index,
+                                    reader_page.total_pages,
+                                );
+                            }
+                        }
+                    }
+                    Phase11Action::ReturnLibrary => {
                         mode = UiMode::Library;
                         esp_println::println!(
-                            "phase10: back to library selected={} file={}",
+                            "phase11: back to library selected={} file={}",
                             selected,
                             selected_library_name(library_items, selected),
                         );
@@ -390,7 +521,7 @@ fn main() -> ! {
                             library_total,
                             library_from_books,
                         );
-                        esp_println::println!("phase10: library restore complete busy={}", display.is_busy());
+                        esp_println::println!("phase11: library restore complete busy={}", display.is_busy());
                     }
                 }
             }};
@@ -472,7 +603,7 @@ impl X4InputAdc {
         if !self.idle_logged && row1_mv > 2500 && row2_mv > 2500 {
             self.idle_logged = true;
             esp_println::println!(
-                "phase10: calibrated ADC idle row1={} row2={} model=direct-x4-reader-os-rs",
+                "phase11: calibrated ADC idle row1={} row2={} model=direct-x4-reader-os-rs",
                 row1_mv,
                 row2_mv,
             );
@@ -519,25 +650,34 @@ enum UiMode {
 
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Phase10Action {
+enum Phase11Action {
     None,
     RedrawLibrary,
     OpenSelected,
+    ReaderNextPage,
+    ReaderPrevPage,
     ReturnLibrary,
 }
 
 #[cfg(target_arch = "riscv32")]
-fn handle_phase10_event(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ReaderSession {
+    item: LibraryListItem,
+    from_books_dir: bool,
+}
+
+#[cfg(target_arch = "riscv32")]
+fn handle_phase11_event(
     event: InputEvent,
     mode: &mut UiMode,
     selected: &mut u8,
     items: &[LibraryListItem],
     input: &mut X4Input,
     event_count: &mut u32,
-) -> Phase10Action {
+) -> Phase11Action {
     *event_count = event_count.wrapping_add(1);
     esp_println::println!(
-        "phase10: input event #{} button={} kind={:?} mode={:?}",
+        "phase11: input event #{} button={} kind={:?} mode={:?}",
         *event_count,
         event.button.name(),
         event.kind,
@@ -556,7 +696,7 @@ fn handle_library_mode_event(
     selected: &mut u8,
     items: &[LibraryListItem],
     input: &mut X4Input,
-) -> Phase10Action {
+) -> Phase11Action {
     let max_selected = items.len().saturating_sub(1).min(4) as u8;
 
     match event.kind {
@@ -564,75 +704,72 @@ fn handle_library_mode_event(
             ButtonId::Up | ButtonId::Left => {
                 *selected = (*selected).saturating_sub(1);
                 if items.is_empty() {
-                    Phase10Action::None
+                    Phase11Action::None
                 } else {
-                    Phase10Action::RedrawLibrary
+                    Phase11Action::RedrawLibrary
                 }
             }
             ButtonId::Down | ButtonId::Right => {
                 *selected = (*selected + 1).min(max_selected);
                 if items.is_empty() {
-                    Phase10Action::None
+                    Phase11Action::None
                 } else {
-                    Phase10Action::RedrawLibrary
+                    Phase11Action::RedrawLibrary
                 }
             }
             ButtonId::Select => {
                 esp_println::println!(
-                    "phase10: select file={} idx={}",
+                    "phase11: select file={} idx={}",
                     selected_library_name(items, *selected),
                     *selected,
                 );
-                Phase10Action::OpenSelected
+                Phase11Action::OpenSelected
             }
             ButtonId::Back => {
-                esp_println::println!("phase10: back pressed on Library smoke");
-                Phase10Action::None
+                esp_println::println!("phase11: back pressed on Library smoke");
+                Phase11Action::None
             }
             ButtonId::Power => {
-                esp_println::println!("phase10: power pressed on Library smoke");
-                Phase10Action::None
+                esp_println::println!("phase11: power pressed on Library smoke");
+                Phase11Action::None
             }
         },
         ButtonEventKind::LongPress => {
             esp_println::println!(
-                "phase10: long press consumed button={} file={}",
+                "phase11: long press consumed button={} file={}",
                 event.button.name(),
                 selected_library_name(items, *selected),
             );
             input.reset_hold_state();
-            Phase10Action::None
+            Phase11Action::None
         }
-        ButtonEventKind::Release => Phase10Action::None,
+        ButtonEventKind::Release => Phase11Action::None,
     }
 }
 
 #[cfg(target_arch = "riscv32")]
-fn handle_reader_mode_event(event: InputEvent, input: &mut X4Input) -> Phase10Action {
+fn handle_reader_mode_event(event: InputEvent, input: &mut X4Input) -> Phase11Action {
     match event.kind {
         ButtonEventKind::Press | ButtonEventKind::Repeat => match event.button {
-            ButtonId::Back | ButtonId::Left => Phase10Action::ReturnLibrary,
-            ButtonId::Up | ButtonId::Down | ButtonId::Right | ButtonId::Select => {
-                esp_println::println!(
-                    "phase10: reader smoke ignores button={} for first-page-only reader",
-                    event.button.name(),
-                );
-                Phase10Action::None
-            }
+            ButtonId::Back | ButtonId::Left => Phase11Action::ReturnLibrary,
+            ButtonId::Down | ButtonId::Right | ButtonId::Select => Phase11Action::ReaderNextPage,
+            ButtonId::Up => Phase11Action::ReaderPrevPage,
             ButtonId::Power => {
-                esp_println::println!("phase10: power pressed on TXT reader smoke");
-                Phase10Action::None
+                esp_println::println!(
+                    "phase11: power pressed on TXT reader pagination/progress smoke"
+                );
+                Phase11Action::None
             }
         },
         ButtonEventKind::LongPress => {
             esp_println::println!(
-                "phase10: reader long press consumed button={}",
+                "phase11: reader long press consumed button={}",
                 event.button.name()
             );
             input.reset_hold_state();
-            Phase10Action::None
+            Phase11Action::None
         }
-        ButtonEventKind::Release => Phase10Action::None,
+        ButtonEventKind::Release => Phase11Action::None,
     }
 }
 
@@ -654,7 +791,8 @@ const SMOKE_FILE: &str = "VOSMOKE.TXT";
 #[cfg(target_arch = "riscv32")]
 const SMOKE_DIR: &str = "state";
 #[cfg(target_arch = "riscv32")]
-const SMOKE_BYTES: &[u8] = b"VaachakOS Phase 10 X4 TXT reader smoke\r\nstate/VOSMOKE.TXT\r\n";
+const SMOKE_BYTES: &[u8] =
+    b"VaachakOS Phase 11 X4 TXT reader pagination/progress smoke\r\nstate/VOSMOKE.TXT\r\n";
 
 #[cfg(target_arch = "riscv32")]
 #[derive(Debug, Clone, Copy)]
@@ -747,14 +885,14 @@ where
 
     let sd = SdCard::new(sd_spi, esp_hal::delay::Delay::new());
 
-    esp_println::println!("phase10: sd init start");
+    esp_println::println!("phase11: sd init start");
     let mut card_bytes = None;
     for attempt in 1..=5 {
         match sd.num_bytes() {
             Ok(size) => {
                 card_bytes = Some(size);
                 esp_println::println!(
-                    "phase10: sd initialised attempt={} bytes={} mb={}",
+                    "phase11: sd initialised attempt={} bytes={} mb={}",
                     attempt,
                     size,
                     size / 1024 / 1024
@@ -762,7 +900,7 @@ where
                 break;
             }
             Err(_) => {
-                esp_println::println!("phase10: sd init attempt={} failed", attempt);
+                esp_println::println!("phase11: sd init attempt={} failed", attempt);
                 sd.mark_card_uninit();
                 embedded_hal::delay::DelayNs::delay_ms(&mut esp_hal::delay::Delay::new(), 50);
             }
@@ -770,7 +908,7 @@ where
     }
 
     let card_bytes = card_bytes.ok_or(SmokeError::new("sd_init", "card did not respond"))?;
-    esp_println::println!("phase10: sd card bytes={}", card_bytes);
+    esp_println::println!("phase11: sd card bytes={}", card_bytes);
 
     let adapter = BlockDeviceAdapter(sd);
     let mut mgr: AsyncVolumeManager<_, NullTimeSource, 4, 4, 1> =
@@ -781,12 +919,12 @@ where
     let root: RawDirectory = mgr
         .open_root_dir(vol)
         .map_err(|_| SmokeError::new("open_root", "root directory open failed"))?;
-    esp_println::println!("phase10: sd mounted volume=0 root=open");
+    esp_println::println!("phase11: sd mounted volume=0 root=open");
 
     let state_dir = match poll_once(mgr.open_dir(root, SMOKE_DIR)) {
         Ok(dir) => dir,
         Err(_) => {
-            esp_println::println!("phase10: creating {} directory", SMOKE_DIR);
+            esp_println::println!("phase11: creating {} directory", SMOKE_DIR);
             match poll_once(mgr.make_dir_in_dir(root, SMOKE_DIR)) {
                 Ok(()) | Err(embedded_sdmmc::Error::DirAlreadyExists) => {}
                 Err(_) => return Err(SmokeError::new("mkdir_state", "failed to create state dir")),
@@ -804,7 +942,7 @@ where
     poll_once(mgr.close_file(file))
         .map_err(|_| SmokeError::new("close_write", "close after write failed"))?;
     esp_println::println!(
-        "phase10: wrote state/{} bytes={}",
+        "phase11: wrote state/{} bytes={}",
         SMOKE_FILE,
         SMOKE_BYTES.len()
     );
@@ -825,7 +963,7 @@ where
         return Err(SmokeError::new("readback_cmp", "readback mismatch"));
     }
     esp_println::println!(
-        "phase10: readback ok state/{} size={} read={}",
+        "phase11: readback ok state/{} size={} read={}",
         SMOKE_FILE,
         size,
         read_len
@@ -834,7 +972,7 @@ where
     let (mut count, mut total, mut from_books_dir) = (0usize, 0usize, false);
 
     if let Ok(books_dir) = poll_once(mgr.open_dir(root, "BOOKS")) {
-        esp_println::println!("phase10: scanning BOOKS directory");
+        esp_println::println!("phase11: scanning BOOKS directory");
         let scan = scan_supported_files(&mut mgr, books_dir, entries, "BOOKS")?;
         let _ = mgr.close_dir(books_dir);
         if scan.total > 0 {
@@ -842,10 +980,10 @@ where
             total = scan.total;
             from_books_dir = true;
         } else {
-            esp_println::println!("phase10: BOOKS has no supported files, falling back to root");
+            esp_println::println!("phase11: BOOKS has no supported files, falling back to root");
         }
     } else {
-        esp_println::println!("phase10: BOOKS directory not found, scanning root");
+        esp_println::println!("phase11: BOOKS directory not found, scanning root");
     }
 
     if total == 0 {
@@ -857,7 +995,7 @@ where
 
     for (idx, item) in entries.iter().take(count).enumerate() {
         esp_println::println!(
-            "phase10: file[{}]={} size={}",
+            "phase11: file[{}]={} size={}",
             idx,
             item.name_str(),
             item.size,
@@ -867,7 +1005,7 @@ where
     let _ = mgr.close_dir(state_dir);
     let _ = mgr.close_dir(root);
     let _ = poll_once(mgr.close_volume(vol));
-    esp_println::println!("phase10: volume closed cleanly");
+    esp_println::println!("phase11: volume closed cleanly");
 
     Ok(LibraryScanReport {
         storage_ok: true,
@@ -882,14 +1020,27 @@ where
 struct ReaderReadReport {
     file_size: u32,
     read_len: usize,
+    offset: u32,
+    page_index: u16,
+    total_pages: u16,
+    restored: bool,
     from_books_dir: bool,
+    progress_name: [u8; 12],
 }
 
 #[cfg(target_arch = "riscv32")]
-fn run_txt_reader_storage_smoke<SPI>(
+impl ReaderReadReport {
+    fn progress_name_str(&self) -> &str {
+        core::str::from_utf8(&self.progress_name).unwrap_or("????????.PRG")
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn run_txt_reader_page_storage_smoke<SPI>(
     sd_spi: SPI,
     item: LibraryListItem,
     from_books_dir: bool,
+    requested_offset: Option<u32>,
     page: &mut ReaderPage,
 ) -> Result<ReaderReadReport, SmokeError>
 where
@@ -941,6 +1092,9 @@ where
         }
     }
 
+    let progress_name = progress_file_name_for(item);
+    let progress_name_str = core::str::from_utf8(&progress_name).unwrap_or("????????.PRG");
+
     let sd = SdCard::new(sd_spi, esp_hal::delay::Delay::new());
     let adapter = BlockDeviceAdapter(sd);
     let mut mgr: AsyncVolumeManager<_, NullTimeSource, 4, 4, 1> =
@@ -952,6 +1106,29 @@ where
         .open_root_dir(vol)
         .map_err(|_| SmokeError::new("reader_open_root", "root directory open failed"))?;
 
+    let state_dir = ensure_state_dir(&mut mgr, root)?;
+
+    let restored_offset = if let Some(offset) = requested_offset {
+        offset
+    } else {
+        read_progress_offset(&mut mgr, state_dir, progress_name_str).unwrap_or(0)
+    };
+    let restored = requested_offset.is_none() && restored_offset > 0;
+    if restored {
+        esp_println::println!(
+            "phase11: progress loaded state/{} offset={} file={}",
+            progress_name_str,
+            restored_offset,
+            item.name_str(),
+        );
+    } else if requested_offset.is_none() {
+        esp_println::println!(
+            "phase11: progress default state/{} offset=0 file={}",
+            progress_name_str,
+            item.name_str(),
+        );
+    }
+
     let read_dir = if from_books_dir {
         poll_once(mgr.open_dir(root, "BOOKS"))
             .map_err(|_| SmokeError::new("reader_open_books", "BOOKS directory open failed"))?
@@ -962,25 +1139,276 @@ where
     let file = poll_once(mgr.open_file_in_dir(read_dir, item.name_str(), Mode::ReadOnly))
         .map_err(|_| SmokeError::new("reader_open_file", "selected file open failed"))?;
     let file_size = mgr.file_length(file).unwrap_or(item.size);
+    let total_pages = txt_total_pages(file_size);
+    let max_offset = if file_size == 0 {
+        0
+    } else {
+        ((file_size - 1) / X4_READER_TEXT_BYTES as u32) * X4_READER_TEXT_BYTES as u32
+    };
+    let offset = restored_offset.min(max_offset);
+
+    let mut skip = offset;
+    let mut skip_buf = [0u8; 128];
+    while skip > 0 {
+        let want = skip.min(skip_buf.len() as u32) as usize;
+        let got = poll_once(mgr.read(file, &mut skip_buf[..want]))
+            .map_err(|_| SmokeError::new("reader_skip", "skip read failed"))?;
+        if got == 0 {
+            break;
+        }
+        skip = skip.saturating_sub(got as u32);
+    }
+
     let mut read_buf = [0u8; X4_READER_TEXT_BYTES];
     let read_len = poll_once(mgr.read(file, &mut read_buf))
         .map_err(|_| SmokeError::new("reader_read_file", "selected file read failed"))?;
     poll_once(mgr.close_file(file))
         .map_err(|_| SmokeError::new("reader_close_file", "reader close file failed"))?;
 
-    *page = ReaderPage::new(item.name_bytes(), file_size, &read_buf[..read_len]);
+    let page_index = ((offset / X4_READER_TEXT_BYTES as u32) + 1).min(u16::MAX as u32) as u16;
+    *page = ReaderPage::new_paged(
+        item.name_bytes(),
+        file_size,
+        offset,
+        page_index,
+        total_pages,
+        &read_buf[..read_len],
+    );
+
+    write_progress_record(
+        &mut mgr,
+        state_dir,
+        progress_name_str,
+        item,
+        offset,
+        page_index,
+        total_pages,
+        file_size,
+    )?;
 
     if from_books_dir {
         let _ = mgr.close_dir(read_dir);
     }
+    let _ = mgr.close_dir(state_dir);
     let _ = mgr.close_dir(root);
     let _ = poll_once(mgr.close_volume(vol));
 
     Ok(ReaderReadReport {
         file_size,
         read_len,
+        offset,
+        page_index,
+        total_pages,
+        restored,
         from_books_dir,
+        progress_name,
     })
+}
+
+#[cfg(target_arch = "riscv32")]
+fn txt_total_pages(file_size: u32) -> u16 {
+    let pages = if file_size == 0 {
+        1
+    } else {
+        (file_size + X4_READER_TEXT_BYTES as u32 - 1) / X4_READER_TEXT_BYTES as u32
+    };
+    pages.min(u16::MAX as u32).max(1) as u16
+}
+
+#[cfg(target_arch = "riscv32")]
+fn progress_file_name_for(item: LibraryListItem) -> [u8; 12] {
+    let mut hash = 0x811c9dc5u32;
+    for &b in item.name_bytes() {
+        hash ^= b.to_ascii_uppercase() as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+    for b in item.size.to_le_bytes() {
+        hash ^= b as u32;
+        hash = hash.wrapping_mul(0x01000193);
+    }
+
+    let mut out = [0u8; 12];
+    write_hex8_upper(hash, &mut out[..8]);
+    out[8] = b'.';
+    out[9] = b'P';
+    out[10] = b'R';
+    out[11] = b'G';
+    out
+}
+
+#[cfg(target_arch = "riscv32")]
+fn write_hex8_upper(mut value: u32, out: &mut [u8]) {
+    let mut i = 8usize;
+    while i > 0 {
+        i -= 1;
+        let nibble = (value & 0x0f) as u8;
+        out[i] = if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'A' + (nibble - 10)
+        };
+        value >>= 4;
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn ensure_state_dir<D, T, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_VOLS: usize>(
+    mgr: &mut embedded_sdmmc::AsyncVolumeManager<D, T, MAX_DIRS, MAX_FILES, MAX_VOLS>,
+    root: embedded_sdmmc::RawDirectory,
+) -> Result<embedded_sdmmc::RawDirectory, SmokeError>
+where
+    D: embedded_sdmmc::AsyncBlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
+    match poll_once(mgr.open_dir(root, SMOKE_DIR)) {
+        Ok(dir) => Ok(dir),
+        Err(_) => {
+            match poll_once(mgr.make_dir_in_dir(root, SMOKE_DIR)) {
+                Ok(()) | Err(embedded_sdmmc::Error::DirAlreadyExists) => {}
+                Err(_) => {
+                    return Err(SmokeError::new(
+                        "reader_mkdir_state",
+                        "failed to create state dir",
+                    ));
+                }
+            }
+            poll_once(mgr.open_dir(root, SMOKE_DIR))
+                .map_err(|_| SmokeError::new("reader_open_state", "state dir open failed"))
+        }
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+fn read_progress_offset<
+    D,
+    T,
+    const MAX_DIRS: usize,
+    const MAX_FILES: usize,
+    const MAX_VOLS: usize,
+>(
+    mgr: &mut embedded_sdmmc::AsyncVolumeManager<D, T, MAX_DIRS, MAX_FILES, MAX_VOLS>,
+    state_dir: embedded_sdmmc::RawDirectory,
+    progress_name: &str,
+) -> Option<u32>
+where
+    D: embedded_sdmmc::AsyncBlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
+    let file =
+        poll_once(mgr.open_file_in_dir(state_dir, progress_name, embedded_sdmmc::Mode::ReadOnly))
+            .ok()?;
+    let mut buf = [0u8; 96];
+    let len = poll_once(mgr.read(file, &mut buf)).ok()?;
+    let _ = poll_once(mgr.close_file(file));
+    parse_offset_record(&buf[..len])
+}
+
+#[cfg(target_arch = "riscv32")]
+fn parse_offset_record(bytes: &[u8]) -> Option<u32> {
+    let key = b"offset=";
+    let pos = bytes.windows(key.len()).position(|w| w == key)? + key.len();
+    let mut value = 0u32;
+    let mut saw_digit = false;
+    for &b in &bytes[pos..] {
+        if !b.is_ascii_digit() {
+            break;
+        }
+        saw_digit = true;
+        value = value.saturating_mul(10).saturating_add((b - b'0') as u32);
+    }
+    saw_digit.then_some(value)
+}
+
+#[cfg(target_arch = "riscv32")]
+#[allow(clippy::too_many_arguments)]
+fn write_progress_record<
+    D,
+    T,
+    const MAX_DIRS: usize,
+    const MAX_FILES: usize,
+    const MAX_VOLS: usize,
+>(
+    mgr: &mut embedded_sdmmc::AsyncVolumeManager<D, T, MAX_DIRS, MAX_FILES, MAX_VOLS>,
+    state_dir: embedded_sdmmc::RawDirectory,
+    progress_name: &str,
+    item: LibraryListItem,
+    offset: u32,
+    page_index: u16,
+    total_pages: u16,
+    file_size: u32,
+) -> Result<(), SmokeError>
+where
+    D: embedded_sdmmc::AsyncBlockDevice,
+    T: embedded_sdmmc::TimeSource,
+{
+    let mut buf = [0u8; 128];
+    let mut pos = 0usize;
+    append_lit(&mut buf, &mut pos, b"version=phase11\n");
+    append_lit(&mut buf, &mut pos, b"file=");
+    append_bytes(&mut buf, &mut pos, item.name_bytes());
+    append_lit(&mut buf, &mut pos, b"\nsize=");
+    append_u32(&mut buf, &mut pos, file_size);
+    append_lit(&mut buf, &mut pos, b"\noffset=");
+    append_u32(&mut buf, &mut pos, offset);
+    append_lit(&mut buf, &mut pos, b"\npage=");
+    append_u32(&mut buf, &mut pos, page_index as u32);
+    append_lit(&mut buf, &mut pos, b"\ntotal=");
+    append_u32(&mut buf, &mut pos, total_pages as u32);
+    append_lit(&mut buf, &mut pos, b"\n");
+
+    let file = poll_once(mgr.open_file_in_dir(
+        state_dir,
+        progress_name,
+        embedded_sdmmc::Mode::ReadWriteCreateOrTruncate,
+    ))
+    .map_err(|_| SmokeError::new("progress_open", "open progress file failed"))?;
+    poll_once(mgr.write(file, &buf[..pos]))
+        .map_err(|_| SmokeError::new("progress_write", "write progress file failed"))?;
+    poll_once(mgr.close_file(file))
+        .map_err(|_| SmokeError::new("progress_close", "close progress file failed"))?;
+    esp_println::println!(
+        "phase11: progress wrote state/{} offset={} page={}/{} file={}",
+        progress_name,
+        offset,
+        page_index,
+        total_pages,
+        item.name_str(),
+    );
+    Ok(())
+}
+
+#[cfg(target_arch = "riscv32")]
+fn append_lit(out: &mut [u8], pos: &mut usize, bytes: &[u8]) {
+    append_bytes(out, pos, bytes);
+}
+
+#[cfg(target_arch = "riscv32")]
+fn append_bytes(out: &mut [u8], pos: &mut usize, bytes: &[u8]) {
+    let space = out.len().saturating_sub(*pos);
+    let n = bytes.len().min(space);
+    out[*pos..*pos + n].copy_from_slice(&bytes[..n]);
+    *pos += n;
+}
+
+#[cfg(target_arch = "riscv32")]
+fn append_u32(out: &mut [u8], pos: &mut usize, value: u32) {
+    let mut tmp = [0u8; 10];
+    let mut n = value;
+    let mut len = 0usize;
+    if n == 0 {
+        tmp[0] = b'0';
+        len = 1;
+    } else {
+        while n > 0 && len < tmp.len() {
+            tmp[len] = b'0' + (n % 10) as u8;
+            n /= 10;
+            len += 1;
+        }
+    }
+    while len > 0 {
+        len -= 1;
+        append_bytes(out, pos, &tmp[len..len + 1]);
+    }
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -1041,7 +1469,7 @@ where
     .map_err(|_| SmokeError::new("scan_dir", label))?;
 
     esp_println::println!(
-        "phase10: scan dir={} visible={} total={}",
+        "phase11: scan dir={} visible={} total={}",
         label,
         count,
         total,
