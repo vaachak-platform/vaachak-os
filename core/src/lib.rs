@@ -2,11 +2,12 @@
 
 extern crate alloc;
 
-pub mod hal;
-pub mod ui;
 pub mod apps;
-pub mod services;
+pub mod hal;
+pub mod models;
 pub mod os;
+pub mod services;
+pub mod ui;
 
 pub use hal::Hal;
 pub use os::VaachakOs;

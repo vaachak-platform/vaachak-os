@@ -25,6 +25,12 @@ pub struct ActivityManager {
     stack: Vec<Box<dyn Activity>>,
 }
 
+impl Default for ActivityManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ActivityManager {
     pub fn new() -> Self {
         Self { stack: Vec::new() }

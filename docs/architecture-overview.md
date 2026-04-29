@@ -1,11 +1,17 @@
 # VaachakOS Bootstrap Architecture Overview
 
-This skeleton reflects the agreed direction:
+This skeleton now reflects the first HAL refinement pass against the real X4 code:
 
 - `x4-reader-os-rs` remains the X4 proving-ground
 - `vaachak-os` becomes the clean architecture repo
 - structure follows `core + hal + target`
 - product scope remains reading-first
+- HAL traits now mirror the current X4 realities more closely:
+  - logical portrait display over a rotated native panel
+  - strip rendering with a concrete strip height seam
+  - input hold/reset behavior
+  - battery under the power boundary even though X4 currently samples via the same ADC block as buttons
+  - two-stage SD lifecycle: probe -> mount -> flush/close
 
 ## Crate intent
 

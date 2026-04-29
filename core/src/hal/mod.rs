@@ -3,10 +3,13 @@ pub mod input;
 pub mod power;
 pub mod storage;
 
-pub use display::{DisplayDepth, DisplayHal, RefreshMode};
-pub use input::{ButtonEventType, ButtonId, InputEvent, InputHal};
-pub use power::PowerHal;
-pub use storage::{DirEntry, OpenMode, StorageError, StorageHal};
+pub use display::{
+    DisplayBusConfig, DisplayDepth, DisplayError, DisplayGeometry, DisplayHal, RefreshMode,
+    Rotation,
+};
+pub use input::{ButtonEventKind, ButtonId, ButtonThreshold, InputEvent, InputHal};
+pub use power::{BatteryReading, ChargeState, PowerHal};
+pub use storage::{DirEntry, OpenMode, StorageError, StorageHal, StorageProbe, StorageState};
 
 pub trait Hal: Sized + 'static {
     type Display: DisplayHal;
@@ -27,4 +30,8 @@ pub trait Hal: Sized + 'static {
     const CAP_TOUCH: bool = false;
     const CAP_XTC_FORMAT: bool = false;
     const CAP_SUNLIGHT_FIX: bool = false;
+
+    /// Shared-SPI topology matters on the X4 because SD probing happens before
+    /// the display switches to runtime bus speed.
+    const CAP_SHARED_SPI_SD_EPD: bool = false;
 }

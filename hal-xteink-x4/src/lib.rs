@@ -1,7 +1,6 @@
-use vaachak_core::hal::{
-    DirEntry, DisplayDepth, DisplayHal, Hal, InputEvent, InputHal, OpenMode, PowerHal,
-    RefreshMode, StorageError, StorageHal,
-};
+#![no_std]
+
+use vaachak_core::hal::Hal;
 
 pub mod display;
 pub mod input;
@@ -37,10 +36,21 @@ impl Hal for X4Hal {
     type Power = X4Power;
     type Storage = X4Storage;
 
-    fn display(&mut self) -> &mut Self::Display { &mut self.display }
-    fn input(&mut self) -> &mut Self::Input { &mut self.input }
-    fn power(&mut self) -> &mut Self::Power { &mut self.power }
-    fn storage(&mut self) -> &mut Self::Storage { &mut self.storage }
+    fn display(&mut self) -> &mut Self::Display {
+        &mut self.display
+    }
+
+    fn input(&mut self) -> &mut Self::Input {
+        &mut self.input
+    }
+
+    fn power(&mut self) -> &mut Self::Power {
+        &mut self.power
+    }
+
+    fn storage(&mut self) -> &mut Self::Storage {
+        &mut self.storage
+    }
 
     const CAP_PSRAM: bool = false;
     const CAP_4GRAY: bool = false;
@@ -50,4 +60,5 @@ impl Hal for X4Hal {
     const CAP_TOUCH: bool = false;
     const CAP_XTC_FORMAT: bool = true;
     const CAP_SUNLIGHT_FIX: bool = true;
+    const CAP_SHARED_SPI_SD_EPD: bool = true;
 }
