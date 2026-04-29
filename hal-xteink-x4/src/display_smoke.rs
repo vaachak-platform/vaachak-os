@@ -1,4 +1,4 @@
-//! Minimal Xteink X4 SSD1677 display smoke/home driver.
+//! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation driver.
 //!
 //! Phase 7 keeps the proven Phase 5.4 display transport shape:
 //! - DMA-backed `SpiDevice` chip-select ownership.
@@ -75,8 +75,18 @@ where
     }
 
     pub fn draw_phase7_home<D: DelayNs>(&mut self, delay: &mut D, sd_ok: bool, battery_pct: u8) {
+        self.draw_phase8_home(delay, sd_ok, battery_pct, 0);
+    }
+
+    pub fn draw_phase8_home<D: DelayNs>(
+        &mut self,
+        delay: &mut D,
+        sd_ok: bool,
+        battery_pct: u8,
+        selected: u8,
+    ) {
         self.draw_full_frame(delay, |strip_idx, strip| {
-            render_home_strip(strip_idx, strip, sd_ok, battery_pct)
+            render_home_nav_strip(strip_idx, strip, sd_ok, battery_pct, selected)
         });
     }
 
@@ -210,13 +220,26 @@ fn render_smoke_strip(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES]) {
     render_strip_with(strip_idx, out, smoke_pixel);
 }
 
+#[cfg(test)]
 fn render_home_strip(
     strip_idx: u16,
     out: &mut [u8; X4_EPD_STRIP_BYTES],
     sd_ok: bool,
     battery_pct: u8,
 ) {
-    render_strip_with(strip_idx, out, |x, y| home_pixel(x, y, sd_ok, battery_pct));
+    render_home_nav_strip(strip_idx, out, sd_ok, battery_pct, 0);
+}
+
+fn render_home_nav_strip(
+    strip_idx: u16,
+    out: &mut [u8; X4_EPD_STRIP_BYTES],
+    sd_ok: bool,
+    battery_pct: u8,
+    selected: u8,
+) {
+    render_strip_with(strip_idx, out, |x, y| {
+        home_nav_pixel(x, y, sd_ok, battery_pct, selected)
+    });
 }
 
 fn render_strip_with<F>(strip_idx: u16, out: &mut [u8; X4_EPD_STRIP_BYTES], mut pixel: F)
@@ -268,7 +291,12 @@ fn smoke_pixel(x: u16, y: u16) -> bool {
         || text_pixel(b"BOOT OK", x, y, 168, 640, 3)
 }
 
+#[cfg(test)]
 fn home_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8) -> bool {
+    home_nav_pixel(x, y, sd_ok, battery_pct, 0)
+}
+
+fn home_nav_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, selected: u8) -> bool {
     if !(4..X4_EPD_LOGICAL_WIDTH - 4).contains(&x) || !(4..X4_EPD_LOGICAL_HEIGHT - 4).contains(&y) {
         return true;
     }
@@ -276,19 +304,26 @@ fn home_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8) -> bool {
         return true;
     }
 
-    if (34..56).contains(&x) && (206..228).contains(&y) {
+    if selected_marker_pixel(x, y, selected) {
         return true;
     }
 
     text_pixel(b"VAACHAKOS", x, y, 66, 58, 5)
-        || text_pixel(b"BOOTSTRAP HOME", x, y, 108, 116, 2)
+        || text_pixel(b"INPUT NAV SMOKE", x, y, 92, 116, 2)
         || text_pixel(b"CONTINUE", x, y, 82, 196, 3)
         || text_pixel(b"LIBRARY", x, y, 82, 270, 3)
         || text_pixel(b"SETTINGS", x, y, 82, 344, 3)
         || text_pixel(b"SYSTEM", x, y, 82, 418, 3)
-        || text_pixel(b"READER MIGRATION NEXT", x, y, 80, 560, 2)
+        || text_pixel(b"UP DOWN MOVE", x, y, 110, 540, 2)
+        || text_pixel(b"SELECT LOGS ITEM", x, y, 88, 584, 2)
         || text_pixel(if sd_ok { b"SD OK" } else { b"SD NO" }, x, y, 28, 724, 2)
         || battery_status_pixel(x, y, 328, 724, 2, battery_pct)
+}
+
+fn selected_marker_pixel(x: u16, y: u16, selected: u8) -> bool {
+    let selected = selected.min(3) as u16;
+    let y0 = 206 + selected * 74;
+    (34..56).contains(&x) && (y0..y0 + 22).contains(&y)
 }
 
 fn battery_status_pixel(x: u16, y: u16, x0: u16, y0: u16, scale: u16, battery_pct: u8) -> bool {
@@ -488,11 +523,27 @@ mod tests {
     }
 
     #[test]
+    fn phase8_home_nav_strip_has_expected_size() {
+        let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
+        render_home_nav_strip(0, &mut strip, true, 92, 2);
+        assert_eq!(strip.len(), 4_000);
+        assert!(strip.iter().any(|b| *b != 0xFF));
+    }
+
+    #[test]
     fn logical_home_marks_title_and_status() {
         assert!(home_pixel(2, 2, true, 92));
         assert!(home_pixel(38, 212, true, 92));
         assert!(home_pixel(66, 58, true, 92));
         assert!(home_pixel(30, 724, true, 92));
         assert!(!home_pixel(240, 510, true, 92));
+    }
+
+    #[test]
+    fn logical_home_moves_selection_marker() {
+        assert!(home_nav_pixel(38, 212, true, 92, 0));
+        assert!(!home_nav_pixel(38, 212, true, 92, 1));
+        assert!(home_nav_pixel(38, 286, true, 92, 1));
+        assert!(home_nav_pixel(38, 434, true, 92, 3));
     }
 }

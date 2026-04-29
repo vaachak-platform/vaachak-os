@@ -1216,6 +1216,7 @@ dependencies = [
  "esp-println",
  "hal-xteink-x4",
  "log",
+ "nb 1.1.0",
  "vaachak-core",
 ]
 
