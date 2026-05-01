@@ -10,7 +10,8 @@ pub mod storage;
 
 pub use display::X4Display;
 pub use display_smoke::{
-    LibraryListItem, ReaderPage, X4_LIBRARY_MAX_ITEMS, X4_READER_TEXT_BYTES, X4Ssd1677Smoke,
+    LibraryFileKind, LibraryListItem, ReaderPage, X4_LIBRARY_MAX_ITEMS, X4_READER_TEXT_BYTES,
+    X4Ssd1677Smoke,
 };
 pub use input::{ROW1_THRESHOLDS, ROW2_THRESHOLDS, X4_INPUT_TIMING, X4Input};
 pub use power::{

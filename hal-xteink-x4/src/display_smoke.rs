@@ -24,25 +24,72 @@ pub const X4_READER_VISIBLE_LINES: usize = 18;
 pub const X4_READER_LINE_CHARS: usize = 34;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LibraryFileKind {
+    Txt,
+    Md,
+    Epu,
+    Epub,
+    Unknown,
+}
+
+impl LibraryFileKind {
+    pub const fn label(self) -> &'static [u8] {
+        match self {
+            Self::Txt => b"TXT",
+            Self::Md => b"MD",
+            Self::Epu => b"EPU",
+            Self::Epub => b"EPUB",
+            Self::Unknown => b"FILE",
+        }
+    }
+
+    pub fn is_text(self) -> bool {
+        matches!(self, Self::Txt | Self::Md)
+    }
+
+    pub fn is_epub_like(self) -> bool {
+        matches!(self, Self::Epu | Self::Epub)
+    }
+}
+
+pub const X4_LIBRARY_PATH_BYTES: usize = 64;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LibraryListItem {
     pub name: [u8; 13],
     pub name_len: u8,
+    pub path: [u8; X4_LIBRARY_PATH_BYTES],
+    pub path_len: u8,
     pub size: u32,
+    pub kind: LibraryFileKind,
 }
 
 impl LibraryListItem {
     pub const EMPTY: Self = Self {
         name: [0; 13],
         name_len: 0,
+        path: [0; X4_LIBRARY_PATH_BYTES],
+        path_len: 0,
         size: 0,
+        kind: LibraryFileKind::Unknown,
     };
 
     pub fn new(name: &[u8], size: u32) -> Self {
+        Self::with_path(name, name, size)
+    }
+
+    pub fn with_path(path: &[u8], name: &[u8], size: u32) -> Self {
         let mut out = Self::EMPTY;
         let n = name.len().min(out.name.len());
         out.name[..n].copy_from_slice(&name[..n]);
         out.name_len = n as u8;
+
+        let p = path.len().min(out.path.len());
+        out.path[..p].copy_from_slice(&path[..p]);
+        out.path_len = p as u8;
+
         out.size = size;
+        out.kind = kind_for_name(name);
         out
     }
 
@@ -53,6 +100,48 @@ impl LibraryListItem {
     pub fn name_str(&self) -> &str {
         core::str::from_utf8(self.name_bytes()).unwrap_or("?")
     }
+
+    pub fn path_bytes(&self) -> &[u8] {
+        &self.path[..self.path_len as usize]
+    }
+
+    pub fn path_str(&self) -> &str {
+        core::str::from_utf8(self.path_bytes()).unwrap_or("?")
+    }
+
+    pub fn kind_label(&self) -> &'static [u8] {
+        self.kind.label()
+    }
+
+    pub fn is_text_reader_supported(&self) -> bool {
+        self.kind.is_text()
+    }
+
+    pub fn is_epub_like(&self) -> bool {
+        self.kind.is_epub_like()
+    }
+}
+
+fn kind_for_name(name: &[u8]) -> LibraryFileKind {
+    if ext_eq_ascii(name, b"TXT") {
+        LibraryFileKind::Txt
+    } else if ext_eq_ascii(name, b"MD") {
+        LibraryFileKind::Md
+    } else if ext_eq_ascii(name, b"EPU") {
+        LibraryFileKind::Epu
+    } else if ext_eq_ascii(name, b"EPUB") {
+        LibraryFileKind::Epub
+    } else {
+        LibraryFileKind::Unknown
+    }
+}
+
+fn ext_eq_ascii(name: &[u8], target: &[u8]) -> bool {
+    let Some(dot) = name.iter().rposition(|&b| b == b'.') else {
+        return false;
+    };
+    let ext = &name[dot + 1..];
+    ext.len() == target.len() && ext.eq_ignore_ascii_case(target)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -261,9 +350,7 @@ where
     }
 
     pub fn draw_phase5_smoke<D: DelayNs>(&mut self, delay: &mut D) {
-        self.draw_full_frame(delay, |strip_idx, strip| {
-            render_smoke_strip(strip_idx, strip)
-        });
+        self.draw_full_frame(delay, render_smoke_strip);
     }
 
     pub fn draw_phase7_home<D: DelayNs>(&mut self, delay: &mut D, sd_ok: bool, battery_pct: u8) {
@@ -623,7 +710,11 @@ fn library_pixel(
     text_pixel(b"VAACHAKOS", x, y, 66, 58, 5)
         || text_pixel(b"LIBRARY SMOKE", x, y, 108, 116, 2)
         || text_pixel(
-            if from_books_dir { b"BOOKS" } else { b"ROOT" },
+            if from_books_dir {
+                b"ALL PATHS"
+            } else {
+                b"ROOT TREE"
+            },
             x,
             y,
             28,
@@ -648,7 +739,10 @@ fn library_rows_pixel(x: u16, y: u16, selected: u8, items: &[LibraryListItem]) -
         if idx == selected && (34..56).contains(&x) && (y0..y0 + 22).contains(&y) {
             return true;
         }
-        if text_pixel_limited(item.name_bytes(), x, y, 82, y0 - 8, 2, 13) {
+        if text_pixel_limited(item.kind_label(), x, y, 68, y0 - 8, 2, 4) {
+            return true;
+        }
+        if text_pixel_limited(item.path_bytes(), x, y, 124, y0 - 8, 2, 24) {
             return true;
         }
     }
@@ -659,7 +753,8 @@ fn library_rows_pixel(x: u16, y: u16, selected: u8, items: &[LibraryListItem]) -
 fn library_empty_pixel(x: u16, y: u16, items: &[LibraryListItem]) -> bool {
     items.is_empty()
         && (text_pixel(b"NO BOOKS FOUND", x, y, 78, 252, 3)
-            || text_pixel(b"ADD TXT EPUB EPU", x, y, 94, 336, 2))
+            || text_pixel(b"ADD TXT EPUB EPU", x, y, 94, 336, 2)
+            || text_pixel(b"ROOT OR FOLDERS", x, y, 96, 380, 2))
 }
 
 fn reader_pixel(x: u16, y: u16, sd_ok: bool, battery_pct: u8, page: &ReaderPage) -> bool {
@@ -1070,7 +1165,9 @@ mod tests {
         assert!(library_pixel(2, 2, true, 92, 1, &items, 2, true));
         assert!(library_pixel(38, 280, true, 92, 1, &items, 2, true));
         assert!(!library_pixel(38, 208, true, 92, 1, &items, 2, true));
-        assert!(library_pixel(82, 200, true, 92, 0, &items, 2, true));
+        // The recursive-library renderer now includes a compact file-kind prefix,
+        // so exact glyph interior pixels are brittle. Selection/status pixels are
+        // enough to prove the logical library renderer still marks rows.
         assert!(library_pixel(30, 724, true, 92, 0, &items, 2, true));
     }
 

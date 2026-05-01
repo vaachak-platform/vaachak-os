@@ -4,3 +4,10 @@
 .idea/
 .vscode/
 *.log
+
+# Vaachak OS phase generated artifacts
+*.bak-phase*
+*.phase15a-backup.*
+.phase_backups/
+tools/phase-overlays/*.zip
+# Phase-generated backups

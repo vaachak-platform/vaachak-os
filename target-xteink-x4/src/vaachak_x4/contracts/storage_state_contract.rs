@@ -1,0 +1,178 @@
+#![allow(dead_code)]
+
+use crate::vaachak_x4::contracts::storage_path_helpers::{
+    VaachakStateFileKind as HelperStateFileKind, VaachakStoragePathHelpers,
+};
+
+/// Vaachak-owned storage state contract smoke.
+///
+/// Phase 25 makes state-file naming and reserved-file expectations explicit
+/// without moving SD/SPI/FAT/EPUB-cache behavior out of the imported Pulp
+/// runtime yet.
+pub struct VaachakStorageStateContract;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VaachakStateRecordKind {
+    Progress,
+    Bookmark,
+    Theme,
+    Metadata,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VaachakStateContractError {
+    InvalidBookId,
+    InvalidExtension,
+}
+
+impl VaachakStorageStateContract {
+    pub const PHASE25_MARKER: &'static str = "phase25=x4-storage-contract-smoke-ok";
+
+    pub const STATE_DIR: &'static str = VaachakStoragePathHelpers::STATE_DIR_STR;
+    pub const BOOK_ID_LEN: usize = VaachakStoragePathHelpers::BOOK_ID_LEN;
+    pub const STATE_FILE_NAME_LEN: usize = VaachakStoragePathHelpers::STATE_FILE_NAME_LEN;
+
+    pub const PROGRESS_EXT: &'static str = VaachakStoragePathHelpers::PROGRESS_EXTENSION;
+    pub const BOOKMARK_EXT: &'static str = VaachakStoragePathHelpers::BOOKMARK_EXTENSION;
+    pub const THEME_EXT: &'static str = VaachakStoragePathHelpers::THEME_EXTENSION;
+    pub const METADATA_EXT: &'static str = VaachakStoragePathHelpers::METADATA_EXTENSION;
+
+    pub const BOOKMARK_INDEX_FILE: &'static str = VaachakStoragePathHelpers::BOOKMARK_INDEX_FILE;
+    pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_SD_IO_MOVED_IN_PHASE25: bool = false;
+    pub const EPUB_CACHE_IO_MOVED_IN_PHASE25: bool = false;
+
+    pub const fn extension_for(kind: VaachakStateRecordKind) -> &'static str {
+        match kind {
+            VaachakStateRecordKind::Progress => Self::PROGRESS_EXT,
+            VaachakStateRecordKind::Bookmark => Self::BOOKMARK_EXT,
+            VaachakStateRecordKind::Theme => Self::THEME_EXT,
+            VaachakStateRecordKind::Metadata => Self::METADATA_EXT,
+        }
+    }
+
+    pub fn is_known_state_extension(ext: &str) -> bool {
+        VaachakStoragePathHelpers::is_supported_state_extension(ext.as_bytes())
+    }
+
+    pub fn is_reserved_state_file(name: &str) -> bool {
+        VaachakStoragePathHelpers::is_reserved_state_file(name.as_bytes())
+    }
+
+    pub fn is_valid_book_id(book_id: &str) -> bool {
+        VaachakStoragePathHelpers::is_valid_upper_book_id(book_id.as_bytes())
+    }
+
+    pub fn is_valid_state_file_name(name: &str) -> bool {
+        if Self::is_reserved_state_file(name) {
+            return true;
+        }
+
+        let bytes = name.as_bytes();
+        if bytes.len() != Self::STATE_FILE_NAME_LEN || bytes[Self::BOOK_ID_LEN] != b'.' {
+            return false;
+        }
+
+        let Some(book_id) = core::str::from_utf8(&bytes[..Self::BOOK_ID_LEN]).ok() else {
+            return false;
+        };
+        let Some(ext) = core::str::from_utf8(&bytes[Self::BOOK_ID_LEN + 1..]).ok() else {
+            return false;
+        };
+
+        Self::is_valid_book_id(book_id) && Self::is_known_state_extension(ext)
+    }
+
+    pub fn state_file_name(
+        book_id: &str,
+        kind: VaachakStateRecordKind,
+    ) -> Result<[u8; Self::STATE_FILE_NAME_LEN], VaachakStateContractError> {
+        if !Self::is_valid_book_id(book_id) {
+            return Err(VaachakStateContractError::InvalidBookId);
+        }
+
+        let ext = Self::extension_for(kind);
+        if !Self::is_known_state_extension(ext) {
+            return Err(VaachakStateContractError::InvalidExtension);
+        }
+
+        let helper_kind = match kind {
+            VaachakStateRecordKind::Progress => HelperStateFileKind::Progress,
+            VaachakStateRecordKind::Bookmark => HelperStateFileKind::Bookmark,
+            VaachakStateRecordKind::Theme => HelperStateFileKind::Theme,
+            VaachakStateRecordKind::Metadata => HelperStateFileKind::Metadata,
+        };
+        let Some(path) = VaachakStoragePathHelpers::state_file_name_from_str(book_id, helper_kind)
+        else {
+            return Err(VaachakStateContractError::InvalidBookId);
+        };
+
+        let mut out = [0u8; Self::STATE_FILE_NAME_LEN];
+        out.copy_from_slice(path.as_bytes());
+        Ok(out)
+    }
+
+    pub fn smoke_validate_contract() -> bool {
+        Self::is_valid_book_id("8A79A61F")
+            && !Self::is_valid_book_id("8a79a61f")
+            && Self::is_known_state_extension(Self::PROGRESS_EXT)
+            && Self::is_known_state_extension(Self::BOOKMARK_EXT)
+            && Self::is_known_state_extension(Self::THEME_EXT)
+            && Self::is_known_state_extension(Self::METADATA_EXT)
+            && Self::is_reserved_state_file(Self::BOOKMARK_INDEX_FILE)
+            && Self::is_valid_state_file_name("8A79A61F.PRG")
+            && Self::is_valid_state_file_name("8A79A61F.BKM")
+            && Self::is_valid_state_file_name("8A79A61F.THM")
+            && Self::is_valid_state_file_name("8A79A61F.MTA")
+            && Self::is_valid_state_file_name(Self::BOOKMARK_INDEX_FILE)
+            && !Self::PHYSICAL_SD_IO_MOVED_IN_PHASE25
+            && !Self::EPUB_CACHE_IO_MOVED_IN_PHASE25
+    }
+
+    pub fn emit_contract_marker() {
+        if Self::smoke_validate_contract() {
+            esp_println::println!("{}", Self::PHASE25_MARKER);
+        } else {
+            esp_println::println!("storage-contract-smoke-failed");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{VaachakStateRecordKind, VaachakStorageStateContract};
+
+    #[test]
+    fn validates_book_ids_and_state_names() {
+        assert!(VaachakStorageStateContract::is_valid_book_id("8A79A61F"));
+        assert!(!VaachakStorageStateContract::is_valid_book_id("8a79a61f"));
+        assert!(VaachakStorageStateContract::is_valid_state_file_name(
+            "8A79A61F.PRG"
+        ));
+        assert!(VaachakStorageStateContract::is_valid_state_file_name(
+            "8A79A61F.BKM"
+        ));
+        assert!(VaachakStorageStateContract::is_valid_state_file_name(
+            "8A79A61F.THM"
+        ));
+        assert!(VaachakStorageStateContract::is_valid_state_file_name(
+            "8A79A61F.MTA"
+        ));
+        assert!(VaachakStorageStateContract::is_valid_state_file_name(
+            "BMIDX.TXT"
+        ));
+        assert!(!VaachakStorageStateContract::is_valid_state_file_name(
+            "8A79A61F.EPC"
+        ));
+    }
+
+    #[test]
+    fn builds_8_3_state_names() {
+        let name = VaachakStorageStateContract::state_file_name(
+            "8A79A61F",
+            VaachakStateRecordKind::Progress,
+        )
+        .unwrap();
+        assert_eq!(&name, b"8A79A61F.PRG");
+    }
+}
