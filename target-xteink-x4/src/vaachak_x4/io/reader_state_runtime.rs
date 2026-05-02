@@ -1,0 +1,131 @@
+#![allow(dead_code)]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+
+use crate::vaachak_x4::apps::reader_state::{
+    VaachakBookId, VaachakBookIdentity, VaachakBookMetaRecord, VaachakBookmarkIndexRecord,
+    VaachakBookmarkRecord, VaachakReaderStateLayout, VaachakReaderThemePreset,
+    VaachakReaderThemeRecord, VaachakReadingProgressRecord, decode_bookmark_jump, decode_bookmarks,
+    decode_bookmarks_index, encode_bookmarks, encode_bookmarks_index,
+};
+
+pub struct VaachakReaderStateRuntimeBridge;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VaachakReaderStateRuntimePreflightReport {
+    pub progress_record_ok: bool,
+    pub bookmark_record_ok: bool,
+    pub bookmark_index_ok: bool,
+    pub theme_record_ok: bool,
+    pub metadata_record_ok: bool,
+    pub layout_paths_ok: bool,
+    pub physical_storage_io_owned: bool,
+    pub active_persistence_owned: bool,
+}
+
+impl VaachakReaderStateRuntimePreflightReport {
+    pub const fn preflight_ok(self) -> bool {
+        self.progress_record_ok
+            && self.bookmark_record_ok
+            && self.bookmark_index_ok
+            && self.theme_record_ok
+            && self.metadata_record_ok
+            && self.layout_paths_ok
+            && !self.physical_storage_io_owned
+            && !self.active_persistence_owned
+    }
+}
+
+impl VaachakReaderStateRuntimeBridge {
+    pub const PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35D1: bool = false;
+    pub const ACTIVE_PERSISTENCE_OWNED_IN_PHASE35D1: bool = false;
+    pub const REQUIRES_HEAP_ALLOCATOR_IN_PHASE35D2: bool = true;
+
+    pub fn active_runtime_preflight() -> bool {
+        Self::preflight_report().preflight_ok()
+    }
+
+    pub fn preflight_report() -> VaachakReaderStateRuntimePreflightReport {
+        let identity = VaachakBookIdentity::from_path("/books/Phase35D1 Reader State Bridge.epub")
+            .with_display_title("Phase 35D1");
+
+        VaachakReaderStateRuntimePreflightReport {
+            progress_record_ok: Self::progress_record_round_trips(&identity),
+            bookmark_record_ok: Self::bookmark_record_round_trips(&identity),
+            bookmark_index_ok: Self::bookmark_index_round_trips(&identity),
+            theme_record_ok: Self::theme_record_round_trips(&identity),
+            metadata_record_ok: Self::metadata_record_round_trips(&identity),
+            layout_paths_ok: Self::layout_paths_match(&identity.book_id),
+            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35D1,
+            active_persistence_owned: Self::ACTIVE_PERSISTENCE_OWNED_IN_PHASE35D1,
+        }
+    }
+
+    fn progress_record_round_trips(identity: &VaachakBookIdentity) -> bool {
+        let record = VaachakReadingProgressRecord::from_identity(identity, 2, 13, 4096, 5);
+        VaachakReadingProgressRecord::decode_line(&record.encode_line())
+            .is_some_and(|decoded| decoded == record)
+    }
+
+    fn bookmark_record_round_trips(identity: &VaachakBookIdentity) -> bool {
+        let first = VaachakBookmarkRecord::new(identity, 1, 128, "first|mark".to_string());
+        let second = VaachakBookmarkRecord::new(identity, 2, 256, String::new());
+        let encoded = encode_bookmarks(&[first.clone(), second.clone()]);
+        let decoded = decode_bookmarks(&encoded);
+        decoded.len() == 2 && decoded[0] == first && decoded[1] == second
+    }
+
+    fn bookmark_index_round_trips(identity: &VaachakBookIdentity) -> bool {
+        let bookmark = VaachakBookmarkRecord::new(identity, 3, 2048, "chapter start".to_string());
+        let entry = VaachakBookmarkIndexRecord::from_bookmark(&bookmark, &identity.display_title);
+        let encoded = encode_bookmarks_index(core::slice::from_ref(&entry));
+        let decoded = decode_bookmarks_index(&encoded);
+        decoded.len() == 1
+            && decoded[0] == entry
+            && decode_bookmark_jump(&entry.jump_message()).is_some_and(|(path, chapter, offset)| {
+                path == identity.source_path && chapter == 3 && offset == 2048
+            })
+    }
+
+    fn theme_record_round_trips(identity: &VaachakBookIdentity) -> bool {
+        let preset = VaachakReaderThemePreset {
+            font_size_idx: 5,
+            margin_px: 8,
+            line_spacing_pct: 100,
+            alignment: "justify".to_string(),
+            theme_name: "classic".to_string(),
+        };
+        let record = VaachakReaderThemeRecord::from_identity(identity, preset);
+        VaachakReaderThemeRecord::decode_line(&record.encode_line())
+            .is_some_and(|decoded| decoded == record)
+    }
+
+    fn metadata_record_round_trips(identity: &VaachakBookIdentity) -> bool {
+        let record = VaachakBookMetaRecord::from_identity(identity);
+        VaachakBookMetaRecord::decode_line(&record.encode_line())
+            .is_some_and(|decoded| decoded == record && decoded.display_title == "Phase 35D1")
+    }
+
+    fn layout_paths_match(book_id: &VaachakBookId) -> bool {
+        VaachakReaderStateLayout::for_book_id(book_id).is_some_and(|layout| {
+            layout.state_dir == "state"
+                && layout.progress_file.ends_with(".PRG")
+                && layout.bookmark_file.ends_with(".BKM")
+                && layout.theme_file.ends_with(".THM")
+                && layout.meta_file.ends_with(".MTA")
+                && layout.bookmarks_index_file == "BMIDX.TXT"
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VaachakReaderStateRuntimeBridge;
+
+    #[test]
+    fn active_runtime_preflight_is_format_only_and_valid() {
+        assert!(VaachakReaderStateRuntimeBridge::active_runtime_preflight());
+    }
+}

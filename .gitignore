@@ -11,3 +11,5 @@
 .phase_backups/
 tools/phase-overlays/*.zip
 # Phase-generated backups
+/.odylith/
+/odylith/compass/runtime/refresh-state.v1.json

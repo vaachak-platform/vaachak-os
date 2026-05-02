@@ -1,0 +1,18 @@
+Phase 36A — Active Input Semantic Mapping Takeover
+
+Replaceable overlay files:
+- target-xteink-x4/src/vaachak_x4/input/active_semantic_mapper.rs
+- target-xteink-x4/src/vaachak_x4/input/mod.rs
+- target-xteink-x4/src/vaachak_x4/imported/pulp_reader_runtime.rs
+
+Docs:
+- docs/phase36a/PHASE36A_ACTIVE_INPUT_SEMANTIC_MAPPING.md
+- docs/phase36a/PHASE36A_ACCEPTANCE.md
+- docs/phase36a/PHASE36A_NOTES.md
+
+Scripts:
+- scripts/apply_phase36a_active_input_semantic_mapping.sh
+- scripts/check_imported_reader_runtime_sync_phase36a.sh
+- scripts/check_phase36a_active_input_semantic_mapping.sh
+- scripts/check_phase36a_no_input_hardware_regression.sh
+- scripts/revert_phase36a_active_input_semantic_mapping.sh
