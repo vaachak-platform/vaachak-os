@@ -119,3 +119,7 @@ pub mod state_io_reader_ux_regression_baseline_acceptance;
 pub mod state_io_footer_button_label_baseline_fix_plan;
 
 pub mod state_io_footer_button_label_baseline_fix_plan_acceptance;
+
+pub mod state_io_footer_button_label_rendering_patch;
+
+pub mod state_io_footer_button_label_rendering_patch_acceptance;
