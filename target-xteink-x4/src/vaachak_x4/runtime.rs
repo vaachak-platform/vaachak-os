@@ -103,3 +103,7 @@ pub mod state_io_review_delete_later_removal_dry_run_acceptance;
 pub mod state_io_guarded_review_delete_later_removal_patch;
 
 pub mod state_io_guarded_review_delete_later_removal_patch_acceptance;
+
+pub mod state_io_post_cleanup_runtime_surface_acceptance;
+
+pub mod state_io_post_cleanup_runtime_surface_acceptance_report;
