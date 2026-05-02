@@ -9,11 +9,51 @@
 
 #![allow(dead_code)]
 
-use super::state_io_shadow_write_acceptance::{
-    ShadowWriteAcceptanceReport, phase36o_acceptance_report, phase36o_marker,
-};
-
 /// Phase 36P boot/build marker.
+/// Phase 39M full compatibility shim.
+///
+/// The earlier shadow-write acceptance module was archived by Phase 39M. This
+/// historical backend checklist still records that older acceptance shape, so it
+/// now carries a local side-effect-free compatibility report instead of importing
+/// the archived module.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Phase39mArchivedShadowWriteAcceptanceReport {
+    pub marker: &'static str,
+    pub backend_bound: bool,
+    pub storage_behavior_moved: bool,
+    pub display_behavior_moved: bool,
+    pub input_behavior_moved: bool,
+    pub power_behavior_moved: bool,
+    pub accepted: bool,
+}
+
+impl Phase39mArchivedShadowWriteAcceptanceReport {
+    pub const fn is_accepted(self) -> bool {
+        self.accepted
+    }
+}
+
+pub type ShadowWriteAcceptanceReport = Phase39mArchivedShadowWriteAcceptanceReport;
+
+pub const STATE_IO_SHADOW_WRITE_ACCEPTANCE_REPORT: ShadowWriteAcceptanceReport =
+    ShadowWriteAcceptanceReport {
+        marker: "phase36o=x4-state-io-shadow-write-acceptance-ok",
+        backend_bound: true,
+        storage_behavior_moved: false,
+        display_behavior_moved: false,
+        input_behavior_moved: false,
+        power_behavior_moved: false,
+        accepted: true,
+    };
+
+pub const fn phase36o_marker() -> &'static str {
+    "phase36o=x4-state-io-shadow-write-acceptance-ok"
+}
+
+pub const fn phase36o_acceptance_report() -> ShadowWriteAcceptanceReport {
+    STATE_IO_SHADOW_WRITE_ACCEPTANCE_REPORT
+}
+
 pub const PHASE_36P_STATE_IO_BACKEND_HANDOFF_CHECKLIST_MARKER: &str =
     "phase36p=x4-state-io-backend-handoff-checklist-ok";
 
