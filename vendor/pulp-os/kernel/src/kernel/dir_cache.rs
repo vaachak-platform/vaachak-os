@@ -21,19 +21,18 @@ impl Default for DirCache {
     }
 }
 
+#[allow(dead_code)]
 fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
-    if phase38i_is_epub_or_epu_name(name) {
-        return true;
-    }
-
-    if name.len() >= 4
-        && name[name.len() - 4] == b'.'
-        && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
+    if name.len() >= 5
+        && name[name.len() - 5] == b'.'
+        && name[name.len() - 4..].eq_ignore_ascii_case(b"EPUB")
     {
         return true;
     }
 
-    false
+    name.len() >= 4
+        && name[name.len() - 4] == b'.'
+        && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
 }
 
 impl DirCache {
