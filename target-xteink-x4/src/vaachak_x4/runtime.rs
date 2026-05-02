@@ -111,3 +111,7 @@ pub mod state_io_post_cleanup_runtime_surface_acceptance_report;
 pub mod state_io_device_regression_write_lane_closeout;
 
 pub mod state_io_device_regression_write_lane_closeout_acceptance;
+
+pub mod state_io_reader_ux_regression_baseline;
+
+pub mod state_io_reader_ux_regression_baseline_acceptance;
