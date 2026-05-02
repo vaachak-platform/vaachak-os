@@ -31,6 +31,8 @@ use crate::drivers::strip::StripBuffer;
 use crate::error::{Error, ErrorKind};
 use crate::fonts;
 use crate::kernel::KernelHandle;
+
+mod typed_state_wiring;
 use crate::kernel::QuickAction;
 use crate::kernel::bookmarks;
 use crate::kernel::work_queue;
@@ -767,16 +769,16 @@ impl ReaderApp {
         // Phase 6.1: typed reader state is flat and 8.3-safe under state/.
         // Do not write meta/progress/theme into cache/<bookid>/; EPUB text/image
         // cache behavior remains owned by the existing EPUB cache path.
-        let ensured_state = k.ensure_app_subdir(reader_state::STATE_DIR).is_ok();
+        let ensured_state = typed_state_wiring::ensure_state_dir(k).is_ok();
         let meta_file = reader_state::meta_record_file_for(&meta.book_id);
         let encoded = meta.encode_line();
-        let wrote_meta = k
-            .write_app_subdir(
-                reader_state::STATE_DIR,
-                meta_file.as_str(),
-                encoded.as_bytes(),
-            )
-            .is_ok();
+        let wrote_meta = typed_state_wiring::write_app_subdir(
+            k,
+            reader_state::STATE_DIR,
+            meta_file.as_str(),
+            encoded.as_bytes(),
+        )
+        .is_ok();
 
         if let Some(slice) = self.current_reader_slice_descriptor() {
             log::info!(
@@ -906,9 +908,10 @@ impl ReaderApp {
             return;
         };
 
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let encoded = rec.encode_line();
-        let _ = k.write_app_subdir(
+        let _ = typed_state_wiring::write_app_subdir(
+            k,
             reader_state::STATE_DIR,
             reader_state::RECENT_RECORD_FILE,
             encoded.as_bytes(),
@@ -920,16 +923,16 @@ impl ReaderApp {
             return;
         };
 
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let meta_file = reader_state::meta_record_file_for(&meta.book_id);
         let encoded = meta.encode_line();
-        let wrote = k
-            .write_app_subdir(
-                reader_state::STATE_DIR,
-                meta_file.as_str(),
-                encoded.as_bytes(),
-            )
-            .is_ok();
+        let wrote = typed_state_wiring::write_app_subdir(
+            k,
+            reader_state::STATE_DIR,
+            meta_file.as_str(),
+            encoded.as_bytes(),
+        )
+        .is_ok();
 
         log::info!(
             "phase6.1: wrote meta book_id={} file=state/{} ok={}",
@@ -946,16 +949,16 @@ impl ReaderApp {
 
         let _ = self.ensure_current_book_state_foundation(k);
 
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let progress_file = reader_state::progress_record_file_for(&progress.book_id);
         let encoded = progress.encode_line();
-        let wrote_progress = k
-            .write_app_subdir(
-                reader_state::STATE_DIR,
-                progress_file.as_str(),
-                encoded.as_bytes(),
-            )
-            .is_ok();
+        let wrote_progress = typed_state_wiring::write_app_subdir(
+            k,
+            reader_state::STATE_DIR,
+            progress_file.as_str(),
+            encoded.as_bytes(),
+        )
+        .is_ok();
 
         self.persist_recent_record(k);
 
@@ -1006,15 +1009,15 @@ impl ReaderApp {
         }
 
         let encoded = theme.encode_line();
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let theme_file = reader_state::theme_record_file_for(&book_id);
-        let wrote_theme = k
-            .write_app_subdir(
-                reader_state::STATE_DIR,
-                theme_file.as_str(),
-                encoded.as_bytes(),
-            )
-            .is_ok();
+        let wrote_theme = typed_state_wiring::write_app_subdir(
+            k,
+            reader_state::STATE_DIR,
+            theme_file.as_str(),
+            encoded.as_bytes(),
+        )
+        .is_ok();
 
         log::info!(
             "phase6.1: persisted theme book_id={} file=state/{} ok={}",
@@ -1275,10 +1278,11 @@ impl ReaderApp {
         self.normalize_bookmarks();
         self.bookmarks_loaded = true;
 
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let flat_file = reader_state::bookmark_record_file_for(&book_id);
         let encoded = reader_state::encode_bookmarks(&self.bookmarks);
-        match k.write_app_subdir(
+        match typed_state_wiring::write_app_subdir(
+            k,
             reader_state::STATE_DIR,
             flat_file.as_str(),
             encoded.as_bytes(),
@@ -1304,7 +1308,7 @@ impl ReaderApp {
         };
         let display_title = self.display_name().to_string();
         let mut merged: Vec<reader_state::BookmarkIndexRecord> = Vec::new();
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let mut buf = [0u8; 4096];
         match k.read_app_subdir_chunk(
             reader_state::STATE_DIR,
@@ -1334,7 +1338,8 @@ impl ReaderApp {
             ));
         }
         let encoded = reader_state::encode_bookmarks_index(&merged);
-        match k.write_app_subdir(
+        match typed_state_wiring::write_app_subdir(
+            k,
             reader_state::STATE_DIR,
             reader_state::BOOKMARKS_INDEX_FILE,
             encoded.as_bytes(),
@@ -1524,7 +1529,7 @@ impl ReaderApp {
             return;
         };
 
-        let _ = k.ensure_app_subdir(reader_state::STATE_DIR);
+        let _ = typed_state_wiring::ensure_state_dir(k);
         let flat_file = reader_state::bookmark_record_file_for(&book_id);
         let mut probe = [0u8; 1];
         let exists = matches!(
@@ -1532,7 +1537,8 @@ impl ReaderApp {
             Ok(_)
         );
         if !exists {
-            match k.write_app_subdir(
+            match typed_state_wiring::write_app_subdir(
+                k,
                 reader_state::STATE_DIR,
                 flat_file.as_str(),
                 reader_state::empty_bookmarks_payload(),

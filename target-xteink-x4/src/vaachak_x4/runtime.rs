@@ -89,3 +89,51 @@ pub mod file_explorer_display_name_binding;
 pub mod file_explorer_epub_display_name_active_wiring;
 
 pub mod file_explorer_row_label_callsite_wiring;
+
+pub mod state_io_guarded_write_backend_binding;
+
+pub mod state_io_guarded_write_backend_implementation_seam;
+
+pub mod state_io_guarded_write_backend_dry_run_executor;
+
+pub mod state_io_guarded_write_dry_run_acceptance;
+
+pub mod state_io_guarded_write_backend_adapter_shape;
+
+pub mod state_io_guarded_write_backend_adapter_acceptance;
+
+pub mod state_io_guarded_persistent_backend_stub;
+
+pub mod state_io_guarded_read_before_write_stub;
+
+pub mod state_io_write_lane_handoff_consolidation;
+
+pub mod state_io_progress_write_backend_binding;
+
+pub mod state_io_progress_write_callback_backend;
+
+pub mod state_io_progress_write_lane;
+
+pub mod state_io_progress_write_lane_acceptance;
+
+pub mod state_io_typed_record_write_lane;
+
+pub mod state_io_typed_record_write_lane_acceptance;
+
+pub mod state_io_typed_record_sdfat_adapter;
+
+pub mod state_io_typed_record_sdfat_adapter_acceptance;
+
+pub mod state_io_runtime_owned_sdfat_writer;
+
+pub mod state_io_runtime_owned_sdfat_writer_acceptance;
+
+pub mod state_io_runtime_file_api_integration_gate;
+
+pub mod state_io_runtime_file_api_integration_gate_acceptance;
+
+pub mod state_io_typed_state_runtime_callsite_wiring;
+
+pub mod state_io_typed_state_runtime_callsite_wiring_acceptance;
+
+pub mod state_io_active_reader_save_callsite_wiring;
