@@ -123,3 +123,11 @@ pub mod state_io_footer_button_label_baseline_fix_plan_acceptance;
 pub mod state_io_footer_button_label_rendering_patch;
 
 pub mod state_io_footer_button_label_rendering_patch_acceptance;
+
+pub mod state_io_reader_ux_polish_candidate_plan;
+
+pub mod state_io_reader_ux_polish_candidate_plan_acceptance;
+
+pub mod state_io_library_title_layout_polish_patch;
+
+pub mod state_io_library_title_layout_polish_patch_acceptance;

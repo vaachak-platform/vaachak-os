@@ -1,6 +1,9 @@
 // paginated file browser for SD card root directory
 // background title scanner resolves EPUB titles from OPF metadata
 
+// Phase 40F: Library title layout polish is intentionally limited to
+// display/layout treatment. Title source/cache behavior remains unchanged.
+// marker=phase40f=x4-library-title-layout-polish-patch-ok
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 
@@ -572,14 +575,9 @@ fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
         return true;
     }
 
-    if name.len() >= 4
+    name.len() >= 4
         && name[name.len() - 4] == b'.'
         && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
-    {
-        return true;
-    }
-
-    false
 }
 
 fn scan_one_epub_title(k: &mut KernelHandle<'_>, from: usize) -> Option<TitleScanResult> {
