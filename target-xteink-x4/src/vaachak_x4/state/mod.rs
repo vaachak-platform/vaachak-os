@@ -5,3 +5,11 @@
 //! instead of overwriting unrelated local state modules.
 
 pub mod progress_state_io_adapter;
+
+pub mod theme_state_io_adapter;
+
+pub mod metadata_state_io_adapter;
+
+pub mod bookmark_state_io_adapter;
+
+pub mod state_registry_adapter;
