@@ -261,7 +261,10 @@ impl FilesApp {
         let (is_file, is_epub) = if self.selected < self.count {
             let e = &self.entries[self.selected];
             let nm = &e.name[..e.name_len as usize];
-            let epub = !e.is_dir && phase38i_is_epub_or_epu_name(nm);
+            let epub = !e.is_dir
+                && nm.len() >= 5
+                && nm[nm.len() - 5] == b'.'
+                && nm[nm.len() - 4..].eq_ignore_ascii_case(b"EPUB");
             (!e.is_dir, epub)
         } else {
             (false, false)
@@ -562,24 +565,6 @@ impl App<AppId> for FilesApp {
 struct TitleScanResult {
     next_idx: usize,
     resolved: bool,
-}
-
-fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
-    if name.len() >= 5
-        && name[name.len() - 5] == b'.'
-        && name[name.len() - 4..].eq_ignore_ascii_case(b"EPUB")
-    {
-        return true;
-    }
-
-    if name.len() >= 4
-        && name[name.len() - 4] == b'.'
-        && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
-    {
-        return true;
-    }
-
-    false
 }
 
 fn scan_one_epub_title(k: &mut KernelHandle<'_>, from: usize) -> Option<TitleScanResult> {

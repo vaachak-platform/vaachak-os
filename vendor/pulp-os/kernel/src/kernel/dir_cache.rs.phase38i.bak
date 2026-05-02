@@ -21,21 +21,6 @@ impl Default for DirCache {
     }
 }
 
-fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
-    if phase38i_is_epub_or_epu_name(name) {
-        return true;
-    }
-
-    if name.len() >= 4
-        && name[name.len() - 4] == b'.'
-        && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
-    {
-        return true;
-    }
-
-    false
-}
-
 impl DirCache {
     pub const fn new() -> Self {
         Self {

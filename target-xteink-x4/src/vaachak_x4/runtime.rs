@@ -69,3 +69,23 @@ pub mod state_io_read_only_backend_binding_acceptance;
 pub mod state_io_typed_read_only_backend_adapter_acceptance;
 
 pub mod state_io_pre_behavior_write_enablement_consolidation;
+
+pub mod state_io_first_real_read_only_typed_backend_binding;
+
+pub mod state_io_first_real_read_only_typed_backend_binding_acceptance;
+
+pub mod state_io_typed_read_only_result_normalizer;
+
+pub mod state_io_read_only_outcomes_consolidation;
+
+pub mod state_io_write_lane_entry_contract;
+
+pub mod state_io_write_plan_design;
+
+pub mod state_io_write_design_consolidation;
+
+pub mod file_explorer_display_name_binding;
+
+pub mod file_explorer_epub_display_name_active_wiring;
+
+pub mod file_explorer_row_label_callsite_wiring;
