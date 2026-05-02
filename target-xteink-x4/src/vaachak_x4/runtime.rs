@@ -107,3 +107,7 @@ pub mod state_io_guarded_review_delete_later_removal_patch_acceptance;
 pub mod state_io_post_cleanup_runtime_surface_acceptance;
 
 pub mod state_io_post_cleanup_runtime_surface_acceptance_report;
+
+pub mod state_io_device_regression_write_lane_closeout;
+
+pub mod state_io_device_regression_write_lane_closeout_acceptance;
