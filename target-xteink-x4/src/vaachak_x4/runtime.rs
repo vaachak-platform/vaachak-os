@@ -137,3 +137,7 @@ pub mod state_io_typed_state_runtime_callsite_wiring;
 pub mod state_io_typed_state_runtime_callsite_wiring_acceptance;
 
 pub mod state_io_active_reader_save_callsite_wiring;
+
+pub mod state_io_runtime_state_write_verification;
+
+pub mod state_io_runtime_state_write_verification_acceptance;
