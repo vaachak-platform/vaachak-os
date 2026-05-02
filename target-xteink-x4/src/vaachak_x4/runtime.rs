@@ -141,3 +141,7 @@ pub mod state_io_active_reader_save_callsite_wiring;
 pub mod state_io_runtime_state_write_verification;
 
 pub mod state_io_runtime_state_write_verification_acceptance;
+
+pub mod state_io_write_lane_cleanup_acceptance_freeze;
+
+pub mod state_io_write_lane_cleanup_acceptance_freeze_report;
