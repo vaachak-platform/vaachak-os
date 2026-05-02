@@ -78,34 +78,6 @@ pub mod file_explorer_epub_display_name_active_wiring;
 
 pub mod file_explorer_row_label_callsite_wiring;
 
-pub mod state_io_progress_write_backend_binding;
-
-pub mod state_io_progress_write_callback_backend;
-
-pub mod state_io_progress_write_lane;
-
-pub mod state_io_progress_write_lane_acceptance;
-
-pub mod state_io_typed_record_write_lane;
-
-pub mod state_io_typed_record_write_lane_acceptance;
-
-pub mod state_io_typed_record_sdfat_adapter;
-
-pub mod state_io_typed_record_sdfat_adapter_acceptance;
-
-pub mod state_io_runtime_owned_sdfat_writer;
-
-pub mod state_io_runtime_owned_sdfat_writer_acceptance;
-
-pub mod state_io_runtime_file_api_integration_gate;
-
-pub mod state_io_runtime_file_api_integration_gate_acceptance;
-
-pub mod state_io_typed_state_runtime_callsite_wiring;
-
-pub mod state_io_typed_state_runtime_callsite_wiring_acceptance;
-
 pub mod state_io_active_reader_save_callsite_wiring;
 
 pub mod state_io_runtime_state_write_verification;
@@ -123,3 +95,11 @@ pub mod state_io_post_freeze_scaffolding_cleanup_plan_acceptance;
 pub mod state_io_safe_scaffolding_archive_patch;
 
 pub mod state_io_safe_scaffolding_archive_patch_acceptance;
+
+pub mod state_io_review_delete_later_removal_dry_run;
+
+pub mod state_io_review_delete_later_removal_dry_run_acceptance;
+
+pub mod state_io_guarded_review_delete_later_removal_patch;
+
+pub mod state_io_guarded_review_delete_later_removal_patch_acceptance;
