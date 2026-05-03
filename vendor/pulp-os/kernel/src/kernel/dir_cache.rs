@@ -1,4 +1,5 @@
 // directory listing cache: sorted entries with title resolution
+// phase40h=x4-host-title-map-txt-display-names-ok
 // phase40g-repair=x4-home-full-width-reader-titles-ok
 // phase40g-repair3=x4-disable-txt-body-title-scanning-ok
 // loaded lazily from SD, held in RAM, invalidated on demand
@@ -10,6 +11,7 @@ use crate::drivers::storage::{
 use crate::error::Result;
 
 const MAX_DIR_ENTRIES: usize = 128;
+const PHASE40H_TITLE_MAP_FILE: &str = "TITLEMAP.TSV";
 pub const PHASE40G_REPAIR_TITLE_KIND_EPUB: u8 = 1;
 pub const PHASE40G_REPAIR_TITLE_KIND_TEXT: u8 = 2;
 
@@ -69,12 +71,39 @@ impl DirCache {
         let count = list_root_files(sd, &mut self.entries)?;
         self.count = count;
         sort_entries(&mut self.entries, self.count);
+        self.phase40h_load_host_title_map(sd);
         self.load_titles(sd);
         for i in 0..self.count {
             self.entries[i].humanize_sfn();
         }
         self.valid = true;
         Ok(())
+    }
+
+    fn phase40h_load_host_title_map(&mut self, sd: &SdStorage) {
+        let mut buf = [0u8; 4096];
+        let n = match read_file_start_in_dir(sd, X4_DIR, PHASE40H_TITLE_MAP_FILE, &mut buf) {
+            Ok((_, n)) => n,
+            Err(_) => return,
+        };
+
+        let data = &buf[..n];
+        let mut start = 0usize;
+        while start < data.len() {
+            let end = data[start..]
+                .iter()
+                .position(|&b| b == b'\n')
+                .map(|p| start + p)
+                .unwrap_or(data.len());
+            let mut line = &data[start..end];
+            if line.ends_with(b"\r") {
+                line = &line[..line.len() - 1];
+            }
+            if !line.is_empty() {
+                self.apply_title_line(line);
+            }
+            start = end.saturating_add(1);
+        }
     }
 
     fn load_titles(&mut self, sd: &SdStorage) {

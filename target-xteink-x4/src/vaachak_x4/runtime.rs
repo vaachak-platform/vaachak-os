@@ -147,3 +147,11 @@ pub mod state_io_text_title_cache_safety_repair_acceptance;
 pub mod state_io_disable_txt_body_title_scanning_repair;
 
 pub mod state_io_disable_txt_body_title_scanning_repair_acceptance;
+
+pub mod state_io_host_title_map_txt_display_names;
+
+pub mod state_io_host_title_map_txt_display_names_acceptance;
+
+pub mod state_io_seed_txt_titlemap_into_titles_bin_repair;
+
+pub mod state_io_seed_txt_titlemap_into_titles_bin_repair_acceptance;
