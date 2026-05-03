@@ -155,3 +155,7 @@ pub mod state_io_host_title_map_txt_display_names_acceptance;
 pub mod state_io_seed_txt_titlemap_into_titles_bin_repair;
 
 pub mod state_io_seed_txt_titlemap_into_titles_bin_repair_acceptance;
+
+pub mod state_io_title_cache_workflow_freeze;
+
+pub mod state_io_title_cache_workflow_freeze_acceptance;
