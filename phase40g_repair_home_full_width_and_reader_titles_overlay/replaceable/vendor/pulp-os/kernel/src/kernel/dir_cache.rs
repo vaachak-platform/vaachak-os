@@ -1,6 +1,5 @@
 // directory listing cache: sorted entries with title resolution
 // phase40g-repair=x4-home-full-width-reader-titles-ok
-// phase40g-repair3=x4-disable-txt-body-title-scanning-ok
 // loaded lazily from SD, held in RAM, invalidated on demand
 
 use crate::drivers::sdcard::SdStorage;
@@ -163,12 +162,8 @@ impl DirCache {
                 return Some((i, e.name, e.name_len, PHASE40G_REPAIR_TITLE_KIND_EPUB));
             }
 
-            // Phase 40G Repair 3:
-            // TXT/MD body-title scanning is disabled. It was unsafe because
-            // license/body lines can be cached as display titles. A future
-            // FAT LFN/title-map lane should provide proper TXT display names.
             if phase40g_repair_is_text_title_name(name) {
-                continue;
+                return Some((i, e.name, e.name_len, PHASE40G_REPAIR_TITLE_KIND_TEXT));
             }
         }
 

@@ -1,6 +1,5 @@
 // paginated file browser for SD card root directory
 // phase40g-repair=x4-home-full-width-reader-titles-ok
-// phase40g-repair2=x4-text-title-cache-safety-ok
 // background title scanner resolves EPUB titles from OPF metadata
 
 // Phase 40F: Library title layout polish is intentionally limited to
@@ -642,11 +641,7 @@ fn phase40g_repair_copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
     let mut index = start;
     while index < end && written < max {
         let byte = line[index];
-        let normalized = if matches!(byte, b'_' | b'-') {
-            b' '
-        } else {
-            byte
-        };
+        let normalized = if matches!(byte, b'_' | b'-') { b' ' } else { byte };
 
         if phase40g_repair_is_ascii_space(normalized) {
             if written > 0 && !prev_space {
@@ -674,7 +669,7 @@ fn phase40g_repair_extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
     let mut start = 0usize;
     let mut lines_seen = 0usize;
 
-    while start < data.len() && lines_seen < 80 {
+    while start < data.len() && lines_seen < 48 {
         let end = data[start..]
             .iter()
             .position(|&b| b == b'\n')
@@ -696,10 +691,7 @@ fn phase40g_repair_extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
         }
 
         let trimmed = &line[trimmed_start..trimmed_end];
-        let title_prefix = b"Title:";
-        if trimmed.len() > title_prefix.len()
-            && trimmed[..title_prefix.len()].eq_ignore_ascii_case(title_prefix)
-        {
+        if !phase40g_repair_skip_text_title_line(trimmed) {
             let title_len = phase40g_repair_copy_text_title(trimmed, out);
             if title_len >= 3 {
                 return title_len;
@@ -726,10 +718,7 @@ fn scan_one_text_title(
         let n = k.read_chunk(name, 0, &mut buf)?;
         let title_len = phase40g_repair_extract_text_title(&buf[..n], &mut title);
         if title_len == 0 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "text_title_scan: no title",
-            ));
+            return Err(Error::new(ErrorKind::InvalidData, "text_title_scan: no title"));
         }
 
         let title_str = core::str::from_utf8(&title[..title_len])
@@ -751,6 +740,7 @@ fn scan_one_text_title(
     })
 }
 
+
 fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
     if name.len() >= 5
         && name[name.len() - 5] == b'.'
@@ -765,8 +755,7 @@ fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
 }
 
 fn scan_one_reader_title(k: &mut KernelHandle<'_>, from: usize) -> Option<TitleScanResult> {
-    let (idx, name_buf, name_len, title_kind) =
-        k.dir_cache_mut().next_untitled_reader_title(from)?;
+    let (idx, name_buf, name_len, title_kind) = k.dir_cache_mut().next_untitled_reader_title(from)?;
     let name = core::str::from_utf8(&name_buf[..name_len as usize]).unwrap_or("");
     let next_idx = idx + 1;
 

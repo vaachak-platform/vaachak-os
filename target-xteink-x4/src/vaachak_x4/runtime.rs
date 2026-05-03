@@ -131,3 +131,19 @@ pub mod state_io_reader_ux_polish_candidate_plan_acceptance;
 pub mod state_io_library_title_layout_polish_patch;
 
 pub mod state_io_library_title_layout_polish_patch_acceptance;
+
+pub mod state_io_home_library_title_patch;
+
+pub mod state_io_home_library_title_patch_acceptance;
+
+pub mod state_io_home_library_title_repair;
+
+pub mod state_io_home_library_title_repair_acceptance;
+
+pub mod state_io_text_title_cache_safety_repair;
+
+pub mod state_io_text_title_cache_safety_repair_acceptance;
+
+pub mod state_io_disable_txt_body_title_scanning_repair;
+
+pub mod state_io_disable_txt_body_title_scanning_repair_acceptance;
