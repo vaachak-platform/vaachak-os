@@ -3,6 +3,7 @@
 // phase41c=x4-home-biscuit-layout-patch-ok
 // phase41c-repair1=x4-visible-home-biscuit-shell-ok
 // phase41f=x4-home-app-placeholders-ok
+// phase41g=x4-biscuit-home-nav-polish-placeholder-routing-ok
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -19,25 +20,30 @@ use crate::board::action::{Action, ActionEvent};
 use crate::board::{SCREEN_H, SCREEN_W};
 use crate::drivers::strip::StripBuffer;
 use crate::fonts;
+use crate::fonts::bitmap::BitmapFont;
 use crate::kernel::KernelHandle;
 use crate::ui::{
-    Alignment, BitmapDynLabel, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W, LARGE_MARGIN,
-    Region, SECTION_GAP, TITLE_Y_OFFSET,
+    Alignment, BUTTON_BAR_H, BitmapDynLabel, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W,
+    LARGE_MARGIN, Region, SECTION_GAP, TITLE_Y_OFFSET,
 };
 
 pub const PHASE41G_HOME_DASHBOARD_MARKER: &str = "phase41g=x4-biscuit-home-dashboard-active-ok";
+pub const PHASE41G_HOME_NAV_POLISH_MARKER: &str =
+    "phase41g=x4-biscuit-home-nav-polish-placeholder-routing-ok";
 
 const HOME_CARD_COUNT: usize = 6;
 const HOME_GRID_COLS: usize = 2;
 const HOME_GRID_ROWS: usize = 3;
-const HOME_GRID_GAP: u16 = 10;
-const HOME_CARD_PAD: u16 = 10;
+const HOME_GRID_GAP: u16 = 12;
+const HOME_CARD_PAD_X: u16 = 10;
+const HOME_CARD_PAD_Y: u16 = 8;
 const HOME_HEADER_Y: u16 = CONTENT_TOP + 8;
 const HOME_HEADER_RULE_GAP: u16 = 6;
-const HOME_GRID_TOP_GAP: u16 = 12;
-const HOME_FOOTER_RESERVED_H: u16 = 48;
-const HOME_FOOTER_GAP: u16 = 8;
-const HOME_DETAIL_MAX_CHARS: usize = 22;
+const HOME_GRID_TOP_GAP: u16 = 10;
+const HOME_FOOTER_RESERVED_H: u16 = BUTTON_BAR_H + 8;
+const HOME_FOOTER_GAP: u16 = 10;
+const HOME_DETAIL_MAX_CHARS: usize = 19;
+const HOME_CARD_TEXT_GAP: u16 = 5;
 
 const MAX_ITEMS: usize = HOME_CARD_COUNT;
 const RECENT_BUF_LEN: usize = 160;
@@ -112,7 +118,7 @@ enum MenuAction {
     Reader,
     Push(AppId),
     OpenBookmarks,
-    Placeholder,
+    Placeholder(&'static str),
 }
 
 pub struct HomeApp {
@@ -147,7 +153,7 @@ impl HomeApp {
             state: HomeState::Menu,
             selected: 0,
             ui_fonts: uf,
-            item_regions: compute_item_regions(uf.heading.line_height),
+            item_regions: compute_item_regions(fonts::heading_font(0).line_height),
             item_count: HOME_CARD_COUNT,
             recent_book: [0u8; RECENT_BUF_LEN],
             recent_book_len: 0,
@@ -167,7 +173,7 @@ impl HomeApp {
     }
 
     fn refresh_menu_layout(&mut self) {
-        self.item_regions = compute_item_regions(self.ui_fonts.heading.line_height);
+        self.item_regions = compute_item_regions(self.header_font().line_height);
     }
 
     // Session state accessors for RTC persistence
@@ -386,8 +392,8 @@ impl HomeApp {
             1 => MenuAction::Push(AppId::Files),
             2 => MenuAction::OpenBookmarks,
             3 => MenuAction::Push(AppId::Settings),
-            4 => MenuAction::Placeholder,
-            _ => MenuAction::Placeholder,
+            4 => MenuAction::Placeholder("Sync"),
+            _ => MenuAction::Push(AppId::Upload),
         }
     }
 
@@ -407,17 +413,38 @@ impl HomeApp {
     fn move_selection_row(&mut self, delta: isize, ctx: &mut AppContext) {
         let col = self.selected % HOME_GRID_COLS;
         let row = self.selected / HOME_GRID_COLS;
-        let rows = HOME_GRID_ROWS as isize;
-        let next_row = (row as isize + delta).rem_euclid(rows) as usize;
+        let next_row = if delta > 0 {
+            (row + 1).min(HOME_GRID_ROWS - 1)
+        } else {
+            row.saturating_sub(1)
+        };
         self.set_selection(next_row * HOME_GRID_COLS + col, ctx);
     }
 
     fn move_selection_col(&mut self, delta: isize, ctx: &mut AppContext) {
         let col = self.selected % HOME_GRID_COLS;
         let row = self.selected / HOME_GRID_COLS;
-        let cols = HOME_GRID_COLS as isize;
-        let next_col = (col as isize + delta).rem_euclid(cols) as usize;
+        let next_col = if delta > 0 {
+            (col + 1).min(HOME_GRID_COLS - 1)
+        } else {
+            col.saturating_sub(1)
+        };
         self.set_selection(row * HOME_GRID_COLS + next_col, ctx);
+    }
+
+    #[inline]
+    fn header_font(&self) -> &'static BitmapFont {
+        fonts::heading_font(0)
+    }
+
+    #[inline]
+    fn card_title_font(&self) -> &'static BitmapFont {
+        fonts::body_font(1)
+    }
+
+    #[inline]
+    fn card_meta_font(&self) -> &'static BitmapFont {
+        fonts::chrome_font()
     }
 
     fn bm_group_title(&self) -> Option<&str> {
@@ -687,8 +714,8 @@ impl HomeApp {
                     ctx.request_full_redraw();
                     Transition::None
                 }
-                MenuAction::Placeholder => {
-                    log::info!("phase41g: placeholder home card selected");
+                MenuAction::Placeholder(name) => {
+                    log::info!("phase41g: placeholder home card selected app={}", name);
                     Transition::None
                 }
             },
@@ -802,13 +829,14 @@ impl HomeApp {
 
 impl HomeApp {
     fn draw_menu(&self, strip: &mut StripBuffer) {
+        let header_font = self.header_font();
         let title_region = Region::new(
             LARGE_MARGIN,
             HOME_HEADER_Y,
             FULL_CONTENT_W.saturating_sub(104),
-            self.ui_fonts.heading.line_height,
+            header_font.line_height,
         );
-        BitmapLabel::new(title_region, "Vaachak", self.ui_fonts.heading)
+        BitmapLabel::new(title_region, "Vaachak", header_font)
             .alignment(Alignment::CenterLeft)
             .draw(strip)
             .unwrap();
@@ -817,16 +845,16 @@ impl HomeApp {
             SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(96),
             HOME_HEADER_Y,
             96,
-            self.ui_fonts.heading.line_height,
+            header_font.line_height,
         );
-        BitmapLabel::new(status_region, "x4", self.ui_fonts.body)
+        BitmapLabel::new(status_region, "x4", self.card_meta_font())
             .alignment(Alignment::CenterRight)
             .draw(strip)
             .unwrap();
 
         let rule = Region::new(
             LARGE_MARGIN,
-            HOME_HEADER_Y + self.ui_fonts.heading.line_height + HOME_HEADER_RULE_GAP,
+            HOME_HEADER_Y + header_font.line_height + HOME_HEADER_RULE_GAP,
             FULL_CONTENT_W,
             2,
         );
@@ -838,21 +866,6 @@ impl HomeApp {
         for i in 0..HOME_CARD_COUNT {
             self.draw_home_card(strip, i);
         }
-
-        let footer_region = Region::new(
-            LARGE_MARGIN,
-            SCREEN_H.saturating_sub(HOME_FOOTER_RESERVED_H),
-            FULL_CONTENT_W,
-            self.ui_fonts.body.line_height,
-        );
-        BitmapLabel::new(
-            footer_region,
-            "Back   Select   Left   Right",
-            self.ui_fonts.body,
-        )
-        .alignment(Alignment::Center)
-        .draw(strip)
-        .unwrap();
     }
 
     fn draw_home_card(&self, strip: &mut StripBuffer, idx: usize) {
@@ -881,16 +894,18 @@ impl HomeApp {
             .draw(strip)
             .unwrap();
 
-        let text_x = region.x + HOME_CARD_PAD;
-        let text_w = region.w.saturating_sub(HOME_CARD_PAD * 2);
-        let title_y = region.y + HOME_CARD_PAD;
-        let subtitle_y = title_y + self.ui_fonts.heading.line_height + 8;
-        let detail_y = subtitle_y + self.ui_fonts.body.line_height + 6;
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let text_x = region.x + HOME_CARD_PAD_X;
+        let text_w = region.w.saturating_sub(HOME_CARD_PAD_X * 2);
+        let title_y = region.y + HOME_CARD_PAD_Y;
+        let subtitle_y = title_y + title_font.line_height + HOME_CARD_TEXT_GAP;
+        let detail_y = subtitle_y + meta_font.line_height + HOME_CARD_TEXT_GAP;
 
         BitmapLabel::new(
-            Region::new(text_x, title_y, text_w, self.ui_fonts.heading.line_height),
+            Region::new(text_x, title_y, text_w, title_font.line_height),
             self.card_title(idx),
-            self.ui_fonts.heading,
+            title_font,
         )
         .alignment(Alignment::CenterLeft)
         .inverted(selected)
@@ -898,9 +913,9 @@ impl HomeApp {
         .unwrap();
 
         BitmapLabel::new(
-            Region::new(text_x, subtitle_y, text_w, self.ui_fonts.body.line_height),
+            Region::new(text_x, subtitle_y, text_w, meta_font.line_height),
             self.card_subtitle(idx),
-            self.ui_fonts.body,
+            meta_font,
         )
         .alignment(Alignment::CenterLeft)
         .inverted(selected)
@@ -909,9 +924,8 @@ impl HomeApp {
 
         let detail = self.card_detail(idx);
         if !detail.is_empty() {
-            let detail_region =
-                Region::new(text_x, detail_y, text_w, self.ui_fonts.body.line_height);
-            BitmapLabel::new(detail_region, detail.as_str(), self.ui_fonts.body)
+            let detail_region = Region::new(text_x, detail_y, text_w, meta_font.line_height);
+            BitmapLabel::new(detail_region, detail.as_str(), meta_font)
                 .alignment(Alignment::CenterLeft)
                 .inverted(selected)
                 .draw(strip)
