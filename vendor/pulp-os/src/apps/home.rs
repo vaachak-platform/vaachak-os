@@ -1,9 +1,16 @@
 // launcher screen: menu, bookmarks browser
 // phase40g-repair=x4-home-full-width-reader-titles-ok
+// phase41c=x4-home-biscuit-layout-patch-ok
+// phase41c-repair1=x4-visible-home-biscuit-shell-ok
+// phase41f=x4-home-app-placeholders-ok
 
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
+
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::PrimitiveStyle;
 
 use crate::app::HomeMenuItem;
 use crate::apps::reader_state;
@@ -18,19 +25,21 @@ use crate::ui::{
     Region, SECTION_GAP, TITLE_Y_OFFSET,
 };
 
-const ITEM_W: u16 = 280;
-const ITEM_H: u16 = 52;
-const ITEM_GAP: u16 = 14;
-const ITEM_STRIDE: u16 = ITEM_H + ITEM_GAP;
-const ITEM_X: u16 = (SCREEN_W - ITEM_W) / 2;
+pub const PHASE41G_HOME_DASHBOARD_MARKER: &str = "phase41g=x4-biscuit-home-dashboard-active-ok";
 
-const TITLE_ITEM_GAP: u16 = 20;
-const RECENT_PREVIEW_GAP: u16 = 10;
-const PHASE40G_REPAIR_HOME_RECENT_X: u16 = LARGE_MARGIN;
-const PHASE40G_REPAIR_HOME_RECENT_W: u16 = FULL_CONTENT_W;
-const PHASE40G_REPAIR_HOME_RECENT_LINES: u16 = 1;
+const HOME_CARD_COUNT: usize = 6;
+const HOME_GRID_COLS: usize = 2;
+const HOME_GRID_ROWS: usize = 3;
+const HOME_GRID_GAP: u16 = 10;
+const HOME_CARD_PAD: u16 = 10;
+const HOME_HEADER_Y: u16 = CONTENT_TOP + 8;
+const HOME_HEADER_RULE_GAP: u16 = 6;
+const HOME_GRID_TOP_GAP: u16 = 12;
+const HOME_FOOTER_RESERVED_H: u16 = 48;
+const HOME_FOOTER_GAP: u16 = 8;
+const HOME_DETAIL_MAX_CHARS: usize = 22;
 
-const MAX_ITEMS: usize = 5;
+const MAX_ITEMS: usize = HOME_CARD_COUNT;
 const RECENT_BUF_LEN: usize = 160;
 
 // bookmark list layout (matches Files app)
@@ -49,25 +58,47 @@ const BM_STATUS_X: u16 = SCREEN_W - LARGE_MARGIN - BM_STATUS_W;
 
 const CONTENT_REGION: Region = Region::new(0, CONTENT_TOP, SCREEN_W, SCREEN_H - CONTENT_TOP);
 
-fn compute_item_regions(
-    heading_line_h: u16,
-    body_line_h: u16,
-    has_recent: bool,
-) -> [Region; MAX_ITEMS] {
-    let recent_block_h = if has_recent {
-        body_line_h * PHASE40G_REPAIR_HOME_RECENT_LINES + RECENT_PREVIEW_GAP
-    } else {
-        0
-    };
-
-    let item_y = CONTENT_TOP + 8 + heading_line_h + TITLE_ITEM_GAP + recent_block_h;
+fn compute_item_regions(heading_line_h: u16) -> [Region; MAX_ITEMS] {
+    let rule_y = HOME_HEADER_Y + heading_line_h + HOME_HEADER_RULE_GAP;
+    let grid_y = rule_y + 2 + HOME_GRID_TOP_GAP;
+    let footer_y = SCREEN_H.saturating_sub(HOME_FOOTER_RESERVED_H);
+    let grid_h = footer_y.saturating_sub(grid_y + HOME_FOOTER_GAP);
+    let card_w = (FULL_CONTENT_W.saturating_sub(HOME_GRID_GAP)) / HOME_GRID_COLS as u16;
+    let card_h = (grid_h.saturating_sub(HOME_GRID_GAP * (HOME_GRID_ROWS as u16 - 1)))
+        / HOME_GRID_ROWS as u16;
 
     [
-        Region::new(ITEM_X, item_y, ITEM_W, ITEM_H),
-        Region::new(ITEM_X, item_y + ITEM_STRIDE, ITEM_W, ITEM_H),
-        Region::new(ITEM_X, item_y + ITEM_STRIDE * 2, ITEM_W, ITEM_H),
-        Region::new(ITEM_X, item_y + ITEM_STRIDE * 3, ITEM_W, ITEM_H),
-        Region::new(ITEM_X, item_y + ITEM_STRIDE * 4, ITEM_W, ITEM_H),
+        Region::new(LARGE_MARGIN, grid_y, card_w, card_h),
+        Region::new(
+            LARGE_MARGIN + card_w + HOME_GRID_GAP,
+            grid_y,
+            card_w,
+            card_h,
+        ),
+        Region::new(
+            LARGE_MARGIN,
+            grid_y + card_h + HOME_GRID_GAP,
+            card_w,
+            card_h,
+        ),
+        Region::new(
+            LARGE_MARGIN + card_w + HOME_GRID_GAP,
+            grid_y + card_h + HOME_GRID_GAP,
+            card_w,
+            card_h,
+        ),
+        Region::new(
+            LARGE_MARGIN,
+            grid_y + (card_h + HOME_GRID_GAP) * 2,
+            card_w,
+            card_h,
+        ),
+        Region::new(
+            LARGE_MARGIN + card_w + HOME_GRID_GAP,
+            grid_y + (card_h + HOME_GRID_GAP) * 2,
+            card_w,
+            card_h,
+        ),
     ]
 }
 
@@ -78,9 +109,10 @@ enum HomeState {
 }
 
 enum MenuAction {
-    Continue,
+    Reader,
     Push(AppId),
     OpenBookmarks,
+    Placeholder,
 }
 
 pub struct HomeApp {
@@ -115,8 +147,8 @@ impl HomeApp {
             state: HomeState::Menu,
             selected: 0,
             ui_fonts: uf,
-            item_regions: compute_item_regions(uf.heading.line_height, uf.body.line_height, false),
-            item_count: 4, // updated after load; may include Continue
+            item_regions: compute_item_regions(uf.heading.line_height),
+            item_count: HOME_CARD_COUNT,
             recent_book: [0u8; RECENT_BUF_LEN],
             recent_book_len: 0,
             recent_record: None,
@@ -135,11 +167,7 @@ impl HomeApp {
     }
 
     fn refresh_menu_layout(&mut self) {
-        self.item_regions = compute_item_regions(
-            self.ui_fonts.heading.line_height,
-            self.ui_fonts.body.line_height,
-            self.has_recent(),
-        );
+        self.item_regions = compute_item_regions(self.ui_fonts.heading.line_height);
     }
 
     // Session state accessors for RTC persistence
@@ -178,7 +206,7 @@ impl HomeApp {
             1 => HomeState::ShowBookmarks,
             _ => HomeState::Menu,
         };
-        self.selected = selected;
+        self.selected = selected.min(HOME_CARD_COUNT - 1);
         self.bm_selected = bm_selected;
         self.bm_scroll = bm_scroll;
         if self.state == HomeState::ShowBookmarks {
@@ -291,7 +319,7 @@ impl HomeApp {
     }
 
     fn rebuild_item_count(&mut self) {
-        self.item_count = if self.recent_record.is_some() { 5 } else { 4 };
+        self.item_count = HOME_CARD_COUNT;
         if self.selected >= self.item_count {
             self.selected = 0;
         }
@@ -343,65 +371,53 @@ impl HomeApp {
 
     pub fn shell_menu_items(&self) -> Vec<HomeMenuItem> {
         let mut items = Vec::with_capacity(self.item_count);
-        if self.has_recent() {
-            items.push(HomeMenuItem::ContinueReading);
-        }
+        items.push(HomeMenuItem::ContinueReading);
         items.push(HomeMenuItem::FileBrowser);
         items.push(HomeMenuItem::Bookmarks);
         items.push(HomeMenuItem::Settings);
+        items.push(HomeMenuItem::Sync);
         items.push(HomeMenuItem::Upload);
         items
     }
 
-    fn item_label(&self, idx: usize) -> &str {
-        if self.has_recent() {
-            match idx {
-                0 => "Continue",
-                1 => "Files",
-                2 => "Bookmarks",
-                3 => "Settings",
-                _ => "Upload",
-            }
-        } else {
-            match idx {
-                0 => "Files",
-                1 => "Bookmarks",
-                2 => "Settings",
-                _ => "Upload",
-            }
-        }
-    }
-
     fn item_action(&self, idx: usize) -> MenuAction {
-        if self.has_recent() {
-            match idx {
-                0 => MenuAction::Continue,
-                1 => MenuAction::Push(AppId::Files),
-                2 => MenuAction::OpenBookmarks,
-                3 => MenuAction::Push(AppId::Settings),
-                _ => MenuAction::Push(AppId::Upload),
-            }
-        } else {
-            match idx {
-                0 => MenuAction::Push(AppId::Files),
-                1 => MenuAction::OpenBookmarks,
-                2 => MenuAction::Push(AppId::Settings),
-                _ => MenuAction::Push(AppId::Upload),
-            }
+        match idx {
+            0 => MenuAction::Reader,
+            1 => MenuAction::Push(AppId::Files),
+            2 => MenuAction::OpenBookmarks,
+            3 => MenuAction::Push(AppId::Settings),
+            4 => MenuAction::Placeholder,
+            _ => MenuAction::Placeholder,
         }
     }
 
-    fn move_selection(&mut self, delta: isize, ctx: &mut AppContext) {
+    fn set_selection(&mut self, selected: usize, ctx: &mut AppContext) {
         let count = self.item_count;
         if count == 0 {
             return;
         }
-        let new = (self.selected as isize + delta).rem_euclid(count as isize) as usize;
+        let new = selected.min(count - 1);
         if new != self.selected {
             ctx.mark_dirty(self.item_regions[self.selected]);
             self.selected = new;
             ctx.mark_dirty(self.item_regions[self.selected]);
         }
+    }
+
+    fn move_selection_row(&mut self, delta: isize, ctx: &mut AppContext) {
+        let col = self.selected % HOME_GRID_COLS;
+        let row = self.selected / HOME_GRID_COLS;
+        let rows = HOME_GRID_ROWS as isize;
+        let next_row = (row as isize + delta).rem_euclid(rows) as usize;
+        self.set_selection(next_row * HOME_GRID_COLS + col, ctx);
+    }
+
+    fn move_selection_col(&mut self, delta: isize, ctx: &mut AppContext) {
+        let col = self.selected % HOME_GRID_COLS;
+        let row = self.selected / HOME_GRID_COLS;
+        let cols = HOME_GRID_COLS as isize;
+        let next_col = (col as isize + delta).rem_euclid(cols) as usize;
+        self.set_selection(row * HOME_GRID_COLS + next_col, ctx);
     }
 
     fn bm_group_title(&self) -> Option<&str> {
@@ -529,15 +545,6 @@ impl HomeApp {
             self.ui_fonts.heading.line_height,
         )
     }
-
-    fn recent_preview_region(&self) -> Region {
-        Region::new(
-            PHASE40G_REPAIR_HOME_RECENT_X,
-            CONTENT_TOP + 8 + self.ui_fonts.heading.line_height + 6,
-            PHASE40G_REPAIR_HOME_RECENT_W,
-            self.ui_fonts.body.line_height * PHASE40G_REPAIR_HOME_RECENT_LINES,
-        )
-    }
 }
 
 impl App<AppId> for HomeApp {
@@ -569,6 +576,8 @@ impl App<AppId> for HomeApp {
             self.refresh_menu_layout();
             if self.item_count != old_count {
                 ctx.request_full_redraw();
+            } else if self.state == HomeState::Menu {
+                ctx.mark_dirty(self.item_regions[0]);
             }
         }
 
@@ -611,6 +620,8 @@ impl App<AppId> for HomeApp {
             if self.state == HomeState::ShowBookmarks {
                 ctx.mark_dirty(self.bm_list_region());
                 ctx.mark_dirty(self.bm_status_region());
+            } else if self.state == HomeState::Menu {
+                ctx.mark_dirty(self.item_regions[2]);
             }
         }
     }
@@ -633,16 +644,24 @@ impl App<AppId> for HomeApp {
 impl HomeApp {
     fn on_event_menu(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
-            ActionEvent::Press(Action::Next) => {
-                self.move_selection(1, ctx);
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
+                self.move_selection_row(1, ctx);
                 Transition::None
             }
-            ActionEvent::Press(Action::Prev) => {
-                self.move_selection(-1, ctx);
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
+                self.move_selection_row(-1, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump) => {
+                self.move_selection_col(1, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump) => {
+                self.move_selection_col(-1, ctx);
                 Transition::None
             }
             ActionEvent::Press(Action::Select) => match self.item_action(self.selected) {
-                MenuAction::Continue => {
+                MenuAction::Reader => {
                     if let Some(rec) = self.recent_record() {
                         log::info!(
                             "phase8: continue from typed recent book_id={} path={}",
@@ -652,8 +671,11 @@ impl HomeApp {
                         ctx.set_message(rec.open_path().as_bytes());
                         Transition::Push(AppId::Reader)
                     } else {
-                        log::warn!("phase6: Continue selected without typed recent record");
-                        Transition::None
+                        log::info!(
+                            "phase41g: reader card selected without recent; opening library"
+                        );
+                        ctx.clear_message();
+                        Transition::Push(AppId::Files)
                     }
                 }
                 MenuAction::Push(app) => Transition::Push(app),
@@ -663,6 +685,10 @@ impl HomeApp {
                     self.needs_load_bookmarks = true;
                     self.state = HomeState::ShowBookmarks;
                     ctx.request_full_redraw();
+                    Transition::None
+                }
+                MenuAction::Placeholder => {
+                    log::info!("phase41g: placeholder home card selected");
                     Transition::None
                 }
             },
@@ -778,30 +804,157 @@ impl HomeApp {
     fn draw_menu(&self, strip: &mut StripBuffer) {
         let title_region = Region::new(
             LARGE_MARGIN,
-            CONTENT_TOP + 8,
-            FULL_CONTENT_W,
+            HOME_HEADER_Y,
+            FULL_CONTENT_W.saturating_sub(104),
             self.ui_fonts.heading.line_height,
         );
-        BitmapLabel::new(title_region, "Home", self.ui_fonts.heading)
-            .alignment(Alignment::Center)
+        BitmapLabel::new(title_region, "Vaachak", self.ui_fonts.heading)
+            .alignment(Alignment::CenterLeft)
             .draw(strip)
             .unwrap();
 
-        if let Some(recent) = self.recent_preview_text() {
-            let mut preview =
-                BitmapDynLabel::<96>::new(self.recent_preview_region(), self.ui_fonts.body)
-                    .alignment(Alignment::Center);
-            let _ = write!(preview, "{}", recent);
-            preview.draw(strip).unwrap();
+        let status_region = Region::new(
+            SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(96),
+            HOME_HEADER_Y,
+            96,
+            self.ui_fonts.heading.line_height,
+        );
+        BitmapLabel::new(status_region, "x4", self.ui_fonts.body)
+            .alignment(Alignment::CenterRight)
+            .draw(strip)
+            .unwrap();
+
+        let rule = Region::new(
+            LARGE_MARGIN,
+            HOME_HEADER_Y + self.ui_fonts.heading.line_height + HOME_HEADER_RULE_GAP,
+            FULL_CONTENT_W,
+            2,
+        );
+        rule.to_rect()
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(strip)
+            .unwrap();
+
+        for i in 0..HOME_CARD_COUNT {
+            self.draw_home_card(strip, i);
         }
 
-        for i in 0..self.item_count {
-            let label = self.item_label(i);
-            BitmapLabel::new(self.item_regions[i], label, self.ui_fonts.body)
-                .alignment(Alignment::Center)
-                .inverted(i == self.selected)
+        let footer_region = Region::new(
+            LARGE_MARGIN,
+            SCREEN_H.saturating_sub(HOME_FOOTER_RESERVED_H),
+            FULL_CONTENT_W,
+            self.ui_fonts.body.line_height,
+        );
+        BitmapLabel::new(
+            footer_region,
+            "Back   Select   Left   Right",
+            self.ui_fonts.body,
+        )
+        .alignment(Alignment::Center)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_home_card(&self, strip: &mut StripBuffer, idx: usize) {
+        let region = self.item_regions[idx];
+        let selected = idx == self.selected;
+
+        let fill = if selected {
+            BinaryColor::On
+        } else {
+            BinaryColor::Off
+        };
+        region
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_fill(fill))
+            .draw(strip)
+            .unwrap();
+
+        let stroke = if selected {
+            BinaryColor::Off
+        } else {
+            BinaryColor::On
+        };
+        region
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(stroke, 2))
+            .draw(strip)
+            .unwrap();
+
+        let text_x = region.x + HOME_CARD_PAD;
+        let text_w = region.w.saturating_sub(HOME_CARD_PAD * 2);
+        let title_y = region.y + HOME_CARD_PAD;
+        let subtitle_y = title_y + self.ui_fonts.heading.line_height + 8;
+        let detail_y = subtitle_y + self.ui_fonts.body.line_height + 6;
+
+        BitmapLabel::new(
+            Region::new(text_x, title_y, text_w, self.ui_fonts.heading.line_height),
+            self.card_title(idx),
+            self.ui_fonts.heading,
+        )
+        .alignment(Alignment::CenterLeft)
+        .inverted(selected)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(text_x, subtitle_y, text_w, self.ui_fonts.body.line_height),
+            self.card_subtitle(idx),
+            self.ui_fonts.body,
+        )
+        .alignment(Alignment::CenterLeft)
+        .inverted(selected)
+        .draw(strip)
+        .unwrap();
+
+        let detail = self.card_detail(idx);
+        if !detail.is_empty() {
+            let detail_region =
+                Region::new(text_x, detail_y, text_w, self.ui_fonts.body.line_height);
+            BitmapLabel::new(detail_region, detail.as_str(), self.ui_fonts.body)
+                .alignment(Alignment::CenterLeft)
+                .inverted(selected)
                 .draw(strip)
                 .unwrap();
+        }
+    }
+
+    fn card_title(&self, idx: usize) -> &'static str {
+        match idx {
+            0 => "Reader",
+            1 => "Library",
+            2 => "Bookmarks",
+            3 => "Settings",
+            4 => "Sync",
+            _ => "Upload",
+        }
+    }
+
+    fn card_subtitle(&self, idx: usize) -> &'static str {
+        match idx {
+            0 => "Continue reading",
+            1 => "Browse books",
+            2 => "Saved places",
+            3 => "Device & reader",
+            4 => "Coming soon",
+            _ => "Coming soon",
+        }
+    }
+
+    fn card_detail(&self, idx: usize) -> String {
+        match idx {
+            0 => self
+                .recent_preview_text()
+                .map(|title| Self::ellipsize_ascii(&title, HOME_DETAIL_MAX_CHARS))
+                .unwrap_or_else(|| String::from("Choose from Library")),
+            2 if self.bm_count > 0 => {
+                let mut out = String::new();
+                let _ = write!(out, "{} saved", self.bm_count);
+                out
+            }
+            4 => String::from("Placeholder"),
+            5 => String::from("Placeholder"),
+            _ => String::new(),
         }
     }
 

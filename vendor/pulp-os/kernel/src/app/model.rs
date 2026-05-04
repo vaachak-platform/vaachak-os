@@ -29,6 +29,7 @@ pub enum HomeMenuItem {
     FileBrowser,
     Bookmarks,
     Settings,
+    Sync,
     Upload,
 }
 
@@ -39,6 +40,7 @@ impl HomeMenuItem {
             HomeMenuItem::FileBrowser => "Files",
             HomeMenuItem::Bookmarks => "Bookmarks",
             HomeMenuItem::Settings => "Settings",
+            HomeMenuItem::Sync => "Sync",
             HomeMenuItem::Upload => "Upload",
         }
     }

@@ -1,4 +1,5 @@
 // paginated file browser for SD card root directory
+// phase41d=x4-files-biscuit-list-patch-ok
 // phase40g-repair=x4-home-full-width-reader-titles-ok
 // phase40g-repair2=x4-text-title-cache-safety-ok
 // background title scanner resolves EPUB titles from OPF metadata
@@ -481,7 +482,7 @@ impl App<AppId> for FilesApp {
     fn draw(&self, strip: &mut StripBuffer) {
         let header_region =
             Region::new(LIST_X, TITLE_Y, HEADER_W, self.ui_fonts.heading.line_height);
-        BitmapLabel::new(header_region, "Library", self.ui_fonts.heading)
+        BitmapLabel::new(header_region, "Books", self.ui_fonts.heading)
             .alignment(Alignment::CenterLeft)
             .draw(strip)
             .unwrap();
@@ -531,13 +532,19 @@ impl App<AppId> for FilesApp {
                 let entry = &self.entries[i];
                 let name = entry.display_name();
 
-                let mut label = BitmapDynLabel::<96>::new(region, self.ui_fonts.body)
+                let mut label = BitmapDynLabel::<128>::new(region, self.ui_fonts.body)
                     .alignment(Alignment::CenterLeft)
                     .inverted(i == self.selected);
-                if entry.is_dir {
-                    let _ = write!(label, "[DIR] {}", name);
+                if i == self.selected {
+                    if entry.is_dir {
+                        let _ = write!(label, "> [D] {}", name);
+                    } else {
+                        let _ = write!(label, "> {}", name);
+                    }
+                } else if entry.is_dir {
+                    let _ = write!(label, "  [D] {}", name);
                 } else {
-                    let _ = write!(label, "{}", name);
+                    let _ = write!(label, "  {}", name);
                 }
                 label.draw(strip).unwrap();
             } else {
@@ -576,6 +583,7 @@ fn phase40g_repair_is_ascii_space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
 }
 
+#[allow(dead_code)]
 fn phase40g_repair_contains_icase(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
         return false;
@@ -604,6 +612,7 @@ fn phase40g_repair_contains_icase(haystack: &[u8], needle: &[u8]) -> bool {
     false
 }
 
+#[allow(dead_code)]
 fn phase40g_repair_skip_text_title_line(line: &[u8]) -> bool {
     line.is_empty()
         || phase40g_repair_contains_icase(line, b"project gutenberg")
