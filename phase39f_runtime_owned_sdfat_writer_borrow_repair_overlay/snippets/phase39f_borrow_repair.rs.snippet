@@ -1,0 +1,4 @@
+let result = self
+    .ops
+    .write_record_direct(command.target_path.as_slice(), command.payload);
+self.record_result(result)

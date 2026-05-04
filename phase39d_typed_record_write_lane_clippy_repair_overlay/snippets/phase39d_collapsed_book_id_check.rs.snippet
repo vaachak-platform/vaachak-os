@@ -1,0 +1,5 @@
+if let Some(book_id) = request.book_id
+    && !book_id.is_hex8()
+{
+    return Phase39dTypedWriteDecision::RejectedInvalidBookId;
+}
