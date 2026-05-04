@@ -1,12 +1,10 @@
-// settings app UI; configuration types live in kernel::config
+// Settings app: Phase 42A app shell settings implementation.
+// phase42a=x4-app-shell-routing-settings-implementation-ok
 //
-// settings items (6 total, all fit on one screen at default font):
-//   0: Sleep After    – power management
-//   1: Ghost Clear    – e-paper refresh interval
-//   2: Book Font      – reading font size
-//   3: UI Font        – chrome font size
-//   4: Reading Theme  – Compact / Default / Relaxed / Spacious
-//   5: Swap Buttons   – swap Back/OK with Left/Right for left-handed use
+// The active runtime already owns AppId::Settings.  This screen keeps the
+// existing loaded SystemSettings available to the app manager, while Phase 42A
+// option rows are local/in-memory unless another component updates
+// SystemSettings through the existing safe settings path.
 
 use core::fmt::Write as _;
 
@@ -15,31 +13,153 @@ use crate::board::action::{Action, ActionEvent};
 use crate::board::{SCREEN_H, SCREEN_W};
 use crate::drivers::strip::StripBuffer;
 use crate::fonts;
-use crate::fonts::max_size_idx;
 use crate::kernel::KernelHandle;
 use crate::kernel::config::{
-    self, GHOST_CLEAR_STEP, MAX_GHOST_CLEAR, MAX_SLEEP_TIMEOUT, MIN_GHOST_CLEAR,
-    NUM_READING_THEMES, SLEEP_TIMEOUT_STEP, SystemSettings, WifiConfig, parse_settings_txt,
-    reading_theme, write_settings_txt,
+    self, SystemSettings, WifiConfig, parse_settings_txt, write_settings_txt,
 };
 use crate::ui::{
-    Alignment, BUTTON_BAR_H, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, LARGE_MARGIN, Region,
-    SECTION_GAP, StackFmt, TITLE_Y, wrap_next, wrap_prev,
+    Alignment, BUTTON_BAR_H, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W, LARGE_MARGIN,
+    Region, StackFmt, TITLE_Y, wrap_next, wrap_prev,
 };
 
-// layout constants
-const ROW_H: u16 = 40;
-const ROW_GAP: u16 = 6;
+pub const PHASE42A_APP_SHELL_SETTINGS_MARKER: &str =
+    "phase42a=x4-app-shell-routing-settings-implementation-ok";
+
+const ROW_H: u16 = 34;
+const ROW_GAP: u16 = 4;
 const ROW_STRIDE: u16 = ROW_H + ROW_GAP;
+const HEADER_LIST_GAP: u16 = 8;
 
 const LABEL_X: u16 = LARGE_MARGIN;
-const LABEL_W: u16 = 160;
-const COL_GAP: u16 = 8;
-const VALUE_X: u16 = LABEL_X + LABEL_W + COL_GAP;
-const VALUE_W: u16 = FULL_CONTENT_W - LABEL_W - COL_GAP;
+const VALUE_W: u16 = 156;
+const VALUE_X: u16 = SCREEN_W - LARGE_MARGIN - VALUE_W;
+const LABEL_W: u16 = FULL_CONTENT_W - VALUE_W - 8;
 
-const NUM_ITEMS: usize = 6;
-const HEADING_ITEMS_GAP: u16 = SECTION_GAP;
+const NUM_ROWS: usize = 23;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SettingsRowKind {
+    Section(&'static str),
+    ReaderFont,
+    ReaderLineSpacing,
+    ReaderMargins,
+    ReaderProgress,
+    DisplayRefresh,
+    DisplayInvert,
+    DisplayContrast,
+    StorageSdStatus,
+    StorageBooksCount,
+    StorageTitleCache,
+    StorageRebuildCache,
+    DeviceBattery,
+    DeviceSleepTimeout,
+    DeviceButtonTest,
+    AboutOs,
+    AboutDevice,
+    AboutBuild,
+    AboutStorage,
+}
+
+#[derive(Clone, Copy)]
+struct SettingsRow {
+    label: &'static str,
+    kind: SettingsRowKind,
+}
+
+const ROWS: [SettingsRow; NUM_ROWS] = [
+    SettingsRow {
+        label: "Reader",
+        kind: SettingsRowKind::Section("Reader"),
+    },
+    SettingsRow {
+        label: "Font size",
+        kind: SettingsRowKind::ReaderFont,
+    },
+    SettingsRow {
+        label: "Line spacing",
+        kind: SettingsRowKind::ReaderLineSpacing,
+    },
+    SettingsRow {
+        label: "Margins",
+        kind: SettingsRowKind::ReaderMargins,
+    },
+    SettingsRow {
+        label: "Show progress",
+        kind: SettingsRowKind::ReaderProgress,
+    },
+    SettingsRow {
+        label: "Display",
+        kind: SettingsRowKind::Section("Display"),
+    },
+    SettingsRow {
+        label: "Refresh mode",
+        kind: SettingsRowKind::DisplayRefresh,
+    },
+    SettingsRow {
+        label: "Invert colors",
+        kind: SettingsRowKind::DisplayInvert,
+    },
+    SettingsRow {
+        label: "Contrast",
+        kind: SettingsRowKind::DisplayContrast,
+    },
+    SettingsRow {
+        label: "Storage",
+        kind: SettingsRowKind::Section("Storage"),
+    },
+    SettingsRow {
+        label: "SD status",
+        kind: SettingsRowKind::StorageSdStatus,
+    },
+    SettingsRow {
+        label: "Books count",
+        kind: SettingsRowKind::StorageBooksCount,
+    },
+    SettingsRow {
+        label: "Title cache",
+        kind: SettingsRowKind::StorageTitleCache,
+    },
+    SettingsRow {
+        label: "Rebuild title cache",
+        kind: SettingsRowKind::StorageRebuildCache,
+    },
+    SettingsRow {
+        label: "Device",
+        kind: SettingsRowKind::Section("Device"),
+    },
+    SettingsRow {
+        label: "Battery",
+        kind: SettingsRowKind::DeviceBattery,
+    },
+    SettingsRow {
+        label: "Sleep timeout",
+        kind: SettingsRowKind::DeviceSleepTimeout,
+    },
+    SettingsRow {
+        label: "Button test",
+        kind: SettingsRowKind::DeviceButtonTest,
+    },
+    SettingsRow {
+        label: "About",
+        kind: SettingsRowKind::Section("About"),
+    },
+    SettingsRow {
+        label: "VaachakOS",
+        kind: SettingsRowKind::AboutOs,
+    },
+    SettingsRow {
+        label: "Xteink X4",
+        kind: SettingsRowKind::AboutDevice,
+    },
+    SettingsRow {
+        label: "Build",
+        kind: SettingsRowKind::AboutBuild,
+    },
+    SettingsRow {
+        label: "Storage layout",
+        kind: SettingsRowKind::AboutStorage,
+    },
+];
 
 impl Default for SettingsApp {
     fn default() -> Self {
@@ -55,7 +175,16 @@ pub struct SettingsApp {
     loaded: bool,
     save_needed: bool,
     ui_fonts: fonts::UiFonts,
-    items_top: u16,
+    rows_top: u16,
+
+    reader_font: u8,
+    reader_line_spacing: u8,
+    reader_margins: u8,
+    reader_show_progress: bool,
+    display_refresh: u8,
+    display_invert: bool,
+    display_contrast: bool,
+    device_sleep_timeout: u8,
 }
 
 impl SettingsApp {
@@ -69,13 +198,21 @@ impl SettingsApp {
             loaded: false,
             save_needed: false,
             ui_fonts: uf,
-            items_top: TITLE_Y + uf.heading.line_height + HEADING_ITEMS_GAP,
+            rows_top: TITLE_Y + uf.heading.line_height + HEADER_LIST_GAP,
+            reader_font: 1,
+            reader_line_spacing: 1,
+            reader_margins: 1,
+            reader_show_progress: true,
+            display_refresh: 1,
+            display_invert: false,
+            display_contrast: false,
+            device_sleep_timeout: 1,
         }
     }
 
     pub fn set_ui_font_size(&mut self, idx: u8) {
         self.ui_fonts = fonts::UiFonts::for_size(idx);
-        self.items_top = TITLE_Y + self.ui_fonts.heading.line_height + HEADING_ITEMS_GAP;
+        self.rows_top = TITLE_Y + self.ui_fonts.heading.line_height + HEADER_LIST_GAP;
     }
 
     pub fn system_settings(&self) -> &SystemSettings {
@@ -120,7 +257,24 @@ impl SettingsApp {
             }
         }
 
+        self.sync_local_from_system_settings();
         self.loaded = true;
+    }
+
+    fn sync_local_from_system_settings(&mut self) {
+        self.reader_font = match self.settings.book_font_size_idx {
+            0 | 1 => 0,
+            2 => 1,
+            _ => 2,
+        };
+        self.reader_line_spacing = self.settings.reading_theme.min(2);
+        self.reader_margins = self.settings.reading_theme.min(2);
+        self.device_sleep_timeout = match self.settings.sleep_timeout {
+            0 => 3,
+            1..=5 => 0,
+            6..=10 => 1,
+            _ => 2,
+        };
     }
 
     fn save(&self, k: &mut KernelHandle<'_>) -> bool {
@@ -138,156 +292,14 @@ impl SettingsApp {
         }
     }
 
-    // visible items: how many rows fit between items_top and BUTTON_BAR_H
-    fn visible_items(&self) -> usize {
-        let avail = SCREEN_H.saturating_sub(self.items_top + BUTTON_BAR_H);
+    fn visible_rows(&self) -> usize {
+        let avail = SCREEN_H.saturating_sub(self.rows_top + BUTTON_BAR_H);
         let count = (avail / ROW_STRIDE) as usize;
-        count.clamp(1, NUM_ITEMS)
+        count.clamp(1, NUM_ROWS)
     }
-
-    // item labels and values:
-
-    fn item_label(i: usize) -> &'static str {
-        match i {
-            0 => "Sleep After",
-            1 => "Ghost Clear",
-            2 => "Book Font",
-            3 => "UI Font",
-            4 => "Theme",
-            5 => "Swap Buttons",
-            _ => "",
-        }
-    }
-
-    fn format_value(&self, i: usize, buf: &mut StackFmt<20>) {
-        buf.clear();
-        match i {
-            0 => {
-                if self.settings.sleep_timeout == 0 {
-                    let _ = write!(buf, "Never");
-                } else {
-                    let _ = write!(buf, "{} min", self.settings.sleep_timeout);
-                }
-            }
-            1 => {
-                let _ = write!(buf, "Every {}", self.settings.ghost_clear_every);
-            }
-            2 => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    fonts::font_size_name(self.settings.book_font_size_idx)
-                );
-            }
-            3 => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    fonts::font_size_name(self.settings.ui_font_size_idx)
-                );
-            }
-            4 => {
-                let theme = reading_theme(self.settings.reading_theme);
-                let _ = write!(buf, "{}", theme.name);
-            }
-            5 => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    if self.settings.swap_buttons {
-                        "Yes"
-                    } else {
-                        "No"
-                    }
-                );
-            }
-            _ => {}
-        }
-    }
-
-    // increment/decrement:
-
-    fn increment(&mut self) {
-        match self.selected {
-            0 => {
-                self.settings.sleep_timeout = match self.settings.sleep_timeout {
-                    0 => SLEEP_TIMEOUT_STEP,
-                    t if t >= MAX_SLEEP_TIMEOUT => MAX_SLEEP_TIMEOUT,
-                    t => t + SLEEP_TIMEOUT_STEP,
-                };
-            }
-            1 => {
-                self.settings.ghost_clear_every = self
-                    .settings
-                    .ghost_clear_every
-                    .saturating_add(GHOST_CLEAR_STEP)
-                    .min(MAX_GHOST_CLEAR);
-            }
-            2 => {
-                if self.settings.book_font_size_idx < max_size_idx() {
-                    self.settings.book_font_size_idx += 1;
-                }
-            }
-            3 => {
-                if self.settings.ui_font_size_idx < max_size_idx() {
-                    self.settings.ui_font_size_idx += 1;
-                }
-            }
-            4 => {
-                if self.settings.reading_theme < NUM_READING_THEMES - 1 {
-                    self.settings.reading_theme += 1;
-                }
-            }
-            5 => {
-                self.settings.swap_buttons = !self.settings.swap_buttons;
-            }
-            _ => return,
-        }
-        self.save_needed = true;
-    }
-
-    fn decrement(&mut self) {
-        match self.selected {
-            0 => {
-                self.settings.sleep_timeout = match self.settings.sleep_timeout {
-                    t if t <= SLEEP_TIMEOUT_STEP => 0,
-                    t => t - SLEEP_TIMEOUT_STEP,
-                };
-            }
-            1 => {
-                self.settings.ghost_clear_every = self
-                    .settings
-                    .ghost_clear_every
-                    .saturating_sub(GHOST_CLEAR_STEP)
-                    .max(MIN_GHOST_CLEAR);
-            }
-            2 => {
-                if self.settings.book_font_size_idx > 0 {
-                    self.settings.book_font_size_idx -= 1;
-                }
-            }
-            3 => {
-                if self.settings.ui_font_size_idx > 0 {
-                    self.settings.ui_font_size_idx -= 1;
-                }
-            }
-            4 => {
-                if self.settings.reading_theme > 0 {
-                    self.settings.reading_theme -= 1;
-                }
-            }
-            5 => {
-                self.settings.swap_buttons = !self.settings.swap_buttons;
-            }
-            _ => return,
-        }
-        self.save_needed = true;
-    }
-
-    // scroll management:
 
     fn scroll_into_view(&mut self) {
-        let vis = self.visible_items();
+        let vis = self.visible_rows();
         if self.selected < self.scroll {
             self.scroll = self.selected;
         } else if self.selected >= self.scroll + vis {
@@ -295,46 +307,185 @@ impl SettingsApp {
         }
     }
 
-    // row region helpers (visible_idx = position on screen, 0 = first visible):
+    fn row_region(&self, visible_idx: usize) -> Region {
+        Region::new(
+            LABEL_X,
+            self.rows_top + visible_idx as u16 * ROW_STRIDE,
+            FULL_CONTENT_W,
+            ROW_H,
+        )
+    }
 
-    #[inline]
     fn label_region(&self, visible_idx: usize) -> Region {
         Region::new(
             LABEL_X,
-            self.items_top + visible_idx as u16 * ROW_STRIDE,
+            self.rows_top + visible_idx as u16 * ROW_STRIDE,
             LABEL_W,
             ROW_H,
         )
     }
 
-    #[inline]
     fn value_region(&self, visible_idx: usize) -> Region {
         Region::new(
             VALUE_X,
-            self.items_top + visible_idx as u16 * ROW_STRIDE,
+            self.rows_top + visible_idx as u16 * ROW_STRIDE,
             VALUE_W,
             ROW_H,
         )
     }
 
-    #[inline]
-    fn row_region(&self, visible_idx: usize) -> Region {
+    fn list_region(&self) -> Region {
         Region::new(
             LABEL_X,
-            self.items_top + visible_idx as u16 * ROW_STRIDE,
-            LABEL_W + COL_GAP + VALUE_W,
-            ROW_H,
+            self.rows_top,
+            FULL_CONTENT_W,
+            self.visible_rows() as u16 * ROW_STRIDE,
         )
     }
 
-    fn list_region(&self) -> Region {
-        let vis = self.visible_items();
-        Region::new(
-            LABEL_X,
-            self.items_top,
-            LABEL_W + COL_GAP + VALUE_W,
-            vis as u16 * ROW_STRIDE,
-        )
+    fn move_next(&mut self, ctx: &mut AppContext) {
+        self.move_to(wrap_next(self.selected, NUM_ROWS), ctx);
+    }
+
+    fn move_prev(&mut self, ctx: &mut AppContext) {
+        self.move_to(wrap_prev(self.selected, NUM_ROWS), ctx);
+    }
+
+    fn move_to(&mut self, selected: usize, ctx: &mut AppContext) {
+        let old_selected = self.selected;
+        let old_scroll = self.scroll;
+        self.selected = selected.min(NUM_ROWS - 1);
+        self.scroll_into_view();
+
+        if self.scroll != old_scroll {
+            ctx.mark_dirty(self.list_region());
+        } else if self.selected != old_selected {
+            ctx.mark_dirty(self.row_region(old_selected - old_scroll));
+            ctx.mark_dirty(self.row_region(self.selected - self.scroll));
+        }
+    }
+
+    fn cycle_selected(&mut self, delta: isize, ctx: &mut AppContext) {
+        let row = ROWS[self.selected];
+        match row.kind {
+            SettingsRowKind::ReaderFont => {
+                self.reader_font = cycle_index(self.reader_font, 3, delta);
+            }
+            SettingsRowKind::ReaderLineSpacing => {
+                self.reader_line_spacing = cycle_index(self.reader_line_spacing, 3, delta);
+            }
+            SettingsRowKind::ReaderMargins => {
+                self.reader_margins = cycle_index(self.reader_margins, 3, delta);
+            }
+            SettingsRowKind::ReaderProgress => {
+                self.reader_show_progress = !self.reader_show_progress;
+            }
+            SettingsRowKind::DisplayRefresh => {
+                self.display_refresh = cycle_index(self.display_refresh, 3, delta);
+            }
+            SettingsRowKind::DisplayInvert => {
+                self.display_invert = !self.display_invert;
+            }
+            SettingsRowKind::DisplayContrast => {
+                self.display_contrast = !self.display_contrast;
+            }
+            SettingsRowKind::DeviceSleepTimeout => {
+                self.device_sleep_timeout = cycle_index(self.device_sleep_timeout, 4, delta);
+            }
+            _ => {}
+        }
+        ctx.mark_dirty(self.row_region(self.selected - self.scroll));
+    }
+
+    fn format_value(&self, kind: SettingsRowKind, buf: &mut StackFmt<40>) {
+        buf.clear();
+        match kind {
+            SettingsRowKind::Section(name) => {
+                let _ = write!(buf, "{}", name);
+            }
+            SettingsRowKind::ReaderFont => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    ["Small", "Normal", "Large"][self.reader_font as usize]
+                );
+            }
+            SettingsRowKind::ReaderLineSpacing => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    ["Compact", "Normal", "Relaxed"][self.reader_line_spacing as usize]
+                );
+            }
+            SettingsRowKind::ReaderMargins => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    ["Compact", "Normal", "Wide"][self.reader_margins as usize]
+                );
+            }
+            SettingsRowKind::ReaderProgress => {
+                let _ = write!(buf, "{}", on_off(self.reader_show_progress));
+            }
+            SettingsRowKind::DisplayRefresh => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    ["Full", "Balanced", "Fast"][self.display_refresh as usize]
+                );
+            }
+            SettingsRowKind::DisplayInvert => {
+                let _ = write!(buf, "{}", on_off(self.display_invert));
+            }
+            SettingsRowKind::DisplayContrast => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    if self.display_contrast {
+                        "High"
+                    } else {
+                        "Normal"
+                    }
+                );
+            }
+            SettingsRowKind::StorageSdStatus => {
+                let _ = write!(buf, "Ready");
+            }
+            SettingsRowKind::StorageBooksCount => {
+                let _ = write!(buf, "Library");
+            }
+            SettingsRowKind::StorageTitleCache => {
+                let _ = write!(buf, "Host managed");
+            }
+            SettingsRowKind::StorageRebuildCache => {
+                let _ = write!(buf, "Host tool only");
+            }
+            SettingsRowKind::DeviceBattery => {
+                let _ = write!(buf, "Unknown");
+            }
+            SettingsRowKind::DeviceSleepTimeout => {
+                let _ = write!(
+                    buf,
+                    "{}",
+                    ["5 min", "10 min", "30 min", "Never"][self.device_sleep_timeout as usize]
+                );
+            }
+            SettingsRowKind::DeviceButtonTest => {
+                let _ = write!(buf, "Coming soon");
+            }
+            SettingsRowKind::AboutOs => {
+                let _ = write!(buf, "VaachakOS");
+            }
+            SettingsRowKind::AboutDevice => {
+                let _ = write!(buf, "Xteink X4");
+            }
+            SettingsRowKind::AboutBuild => {
+                let _ = write!(buf, "riscv32 release");
+            }
+            SettingsRowKind::AboutStorage => {
+                let _ = write!(buf, "_X4 + TITLES.BIN");
+            }
+        }
     }
 }
 
@@ -342,7 +493,6 @@ impl App<AppId> for SettingsApp {
     fn on_enter(&mut self, ctx: &mut AppContext, _k: &mut KernelHandle<'_>) {
         self.selected = 0;
         self.scroll = 0;
-        self.save_needed = false;
         ctx.mark_dirty(Region::new(
             0,
             CONTENT_TOP,
@@ -352,66 +502,28 @@ impl App<AppId> for SettingsApp {
     }
 
     fn on_event(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
-        let vis = self.visible_items();
-
         match event {
-            ActionEvent::Press(Action::Back) => Transition::Pop,
-            ActionEvent::LongPress(Action::Back) => Transition::Home,
-
-            ActionEvent::Press(Action::Next) => {
-                let old_selected = self.selected;
-                let old_scroll = self.scroll;
-                self.selected = wrap_next(self.selected, NUM_ITEMS);
-                if self.selected < old_selected {
-                    self.scroll = 0;
-                } else {
-                    self.scroll_into_view();
-                }
-                if self.scroll != old_scroll {
-                    ctx.mark_dirty(self.list_region());
-                } else if self.selected != old_selected {
-                    let old_vis = old_selected - old_scroll;
-                    let new_vis = self.selected - self.scroll;
-                    ctx.mark_dirty(self.row_region(old_vis));
-                    ctx.mark_dirty(self.row_region(new_vis));
-                }
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                Transition::Pop
+            }
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
+                self.move_next(ctx);
                 Transition::None
             }
-
-            ActionEvent::Press(Action::Prev) => {
-                let old_selected = self.selected;
-                let old_scroll = self.scroll;
-                self.selected = wrap_prev(self.selected, NUM_ITEMS);
-                if self.selected > old_selected {
-                    self.scroll = NUM_ITEMS.saturating_sub(vis);
-                } else {
-                    self.scroll_into_view();
-                }
-                if self.scroll != old_scroll {
-                    ctx.mark_dirty(self.list_region());
-                } else if self.selected != old_selected {
-                    let old_vis = old_selected - old_scroll;
-                    let new_vis = self.selected - self.scroll;
-                    ctx.mark_dirty(self.row_region(old_vis));
-                    ctx.mark_dirty(self.row_region(new_vis));
-                }
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
+                self.move_prev(ctx);
                 Transition::None
             }
-
-            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump) => {
-                self.increment();
-                let v = self.selected - self.scroll;
-                ctx.mark_dirty(self.value_region(v));
+            ActionEvent::Press(Action::NextJump)
+            | ActionEvent::Repeat(Action::NextJump)
+            | ActionEvent::Press(Action::Select) => {
+                self.cycle_selected(1, ctx);
                 Transition::None
             }
-
             ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump) => {
-                self.decrement();
-                let v = self.selected - self.scroll;
-                ctx.mark_dirty(self.value_region(v));
+                self.cycle_selected(-1, ctx);
                 Transition::None
             }
-
             _ => Transition::None,
         }
     }
@@ -429,52 +541,78 @@ impl App<AppId> for SettingsApp {
     }
 
     fn draw(&self, strip: &mut StripBuffer) {
-        // heading
-        let title_region = Region::new(
+        let header_region = Region::new(
             LARGE_MARGIN,
             TITLE_Y,
-            FULL_CONTENT_W,
+            HEADER_W,
             self.ui_fonts.heading.line_height,
         );
-        BitmapLabel::new(title_region, "Settings", self.ui_fonts.heading)
+        BitmapLabel::new(header_region, "Settings", self.ui_fonts.heading)
             .alignment(Alignment::CenterLeft)
             .draw(strip)
             .unwrap();
 
+        let context_region = Region::new(
+            SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(96),
+            TITLE_Y,
+            96,
+            self.ui_fonts.heading.line_height,
+        );
+        BitmapLabel::new(context_region, "x4", fonts::chrome_font())
+            .alignment(Alignment::CenterRight)
+            .draw(strip)
+            .unwrap();
+
         if !self.loaded {
-            let r = Region::new(LABEL_X, self.items_top, 200, ROW_H);
-            BitmapLabel::new(r, "Loading...", self.ui_fonts.body)
+            BitmapLabel::new(self.row_region(0), "Loading...", self.ui_fonts.body)
                 .alignment(Alignment::CenterLeft)
                 .draw(strip)
                 .unwrap();
             return;
         }
 
-        // draw visible settings rows
-        let vis = self.visible_items();
-        let visible_count = vis.min(NUM_ITEMS - self.scroll);
-        let mut val_buf = StackFmt::<20>::new();
+        let visible = self
+            .visible_rows()
+            .min(NUM_ROWS.saturating_sub(self.scroll));
+        let mut val_buf = StackFmt::<40>::new();
 
-        for vi in 0..visible_count {
-            let item_idx = self.scroll + vi;
-            let selected = item_idx == self.selected;
+        for vi in 0..visible {
+            let idx = self.scroll + vi;
+            let row = ROWS[idx];
+            let selected = idx == self.selected;
+            let is_section = matches!(row.kind, SettingsRowKind::Section(_));
 
-            BitmapLabel::new(
-                self.label_region(vi),
-                Self::item_label(item_idx),
-                self.ui_fonts.body,
-            )
-            .alignment(Alignment::CenterLeft)
-            .inverted(selected)
-            .draw(strip)
-            .unwrap();
+            if is_section {
+                BitmapLabel::new(self.row_region(vi), row.label, self.ui_fonts.body)
+                    .alignment(Alignment::CenterLeft)
+                    .inverted(selected)
+                    .draw(strip)
+                    .unwrap();
+            } else {
+                BitmapLabel::new(self.label_region(vi), row.label, self.ui_fonts.body)
+                    .alignment(Alignment::CenterLeft)
+                    .inverted(selected)
+                    .draw(strip)
+                    .unwrap();
 
-            self.format_value(item_idx, &mut val_buf);
-            BitmapLabel::new(self.value_region(vi), val_buf.as_str(), self.ui_fonts.body)
-                .alignment(Alignment::Center)
-                .inverted(selected)
-                .draw(strip)
-                .unwrap();
+                self.format_value(row.kind, &mut val_buf);
+                BitmapLabel::new(self.value_region(vi), val_buf.as_str(), self.ui_fonts.body)
+                    .alignment(Alignment::CenterRight)
+                    .inverted(selected)
+                    .draw(strip)
+                    .unwrap();
+            }
         }
     }
+}
+
+fn cycle_index(value: u8, count: u8, delta: isize) -> u8 {
+    if count == 0 {
+        return 0;
+    }
+    (value as isize + delta).rem_euclid(count as isize) as u8
+}
+
+const fn on_off(value: bool) -> &'static str {
+    if value { "On" } else { "Off" }
 }

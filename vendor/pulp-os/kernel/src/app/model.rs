@@ -10,6 +10,7 @@ pub enum AppScreen {
     Home,
     Browser,
     Reader,
+    Settings,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

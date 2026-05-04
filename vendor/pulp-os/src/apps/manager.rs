@@ -209,7 +209,8 @@ impl AppManager {
             AppId::Home => AppScreen::Home,
             AppId::Files => AppScreen::Browser,
             AppId::Reader => AppScreen::Reader,
-            AppId::Settings | AppId::Upload => self.app_shell.screen(),
+            AppId::Settings => AppScreen::Settings,
+            AppId::Upload => self.app_shell.screen(),
         };
         self.app_shell.set_screen(next);
     }
