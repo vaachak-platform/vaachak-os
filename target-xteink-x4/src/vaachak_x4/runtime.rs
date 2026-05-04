@@ -159,3 +159,7 @@ pub mod state_io_seed_txt_titlemap_into_titles_bin_repair_acceptance;
 pub mod state_io_title_cache_workflow_freeze;
 
 pub mod state_io_title_cache_workflow_freeze_acceptance;
+
+pub mod state_io_reader_ux_freeze_pre_refactor_cleanup_plan;
+
+pub mod state_io_reader_ux_freeze_pre_refactor_cleanup_plan_acceptance;

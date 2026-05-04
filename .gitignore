@@ -13,3 +13,8 @@ tools/phase-overlays/*.zip
 # Phase-generated backups
 /.odylith/
 /odylith/compass/runtime/refresh-state.v1.json
+# Vaachak OS local phase/deploy artifacts
+/phase*_overlay/
+/phase*.zip
+/_archive/phase-artifacts/
+/.deploy-cache/
