@@ -24,8 +24,8 @@ use crate::apps::reader_state;
 use crate::error::Result;
 use crate::kernel::KernelHandle;
 
-pub const PHASE_39I_ACTIVE_READER_SAVE_CALLSITE_WIRING_MARKER: &str =
-    "phase39i=x4-active-reader-save-callsite-wiring-bundle-ok";
+pub const ACTIVE_READER_SAVE_CALLSITE_WIRING_MARKER: &str =
+    "x4-active-reader-save-callsite-wiring-bundle-ok";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Phase39iReaderStateWriteKind {
@@ -98,7 +98,7 @@ pub fn write_app_subdir(
     match &result {
         Ok(()) => {
             log::debug!(
-                "phase39i: reader state write kind={} path={}/{} bytes={} ok=true",
+                "reader-state-io: write kind={} path={}/{} bytes={} ok=true",
                 kind.label(),
                 dir,
                 name,
@@ -107,7 +107,7 @@ pub fn write_app_subdir(
         }
         Err(e) => {
             log::warn!(
-                "phase39i: reader state write kind={} path={}/{} bytes={} ok=false err={}",
+                "reader-state-io: write kind={} path={}/{} bytes={} ok=false err={}",
                 kind.label(),
                 dir,
                 name,
@@ -181,6 +181,6 @@ pub fn classify_state_file_name(name: &str) -> Phase39iReaderStateWriteKind {
     }
 }
 
-pub fn phase39i_marker() -> &'static str {
-    PHASE_39I_ACTIVE_READER_SAVE_CALLSITE_WIRING_MARKER
+pub fn active_reader_save_callsite_wiring_marker() -> &'static str {
+    ACTIVE_READER_SAVE_CALLSITE_WIRING_MARKER
 }

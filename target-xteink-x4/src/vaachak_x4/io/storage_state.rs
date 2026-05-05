@@ -75,8 +75,8 @@ impl VaachakStorageStatePaths {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned storage state IO seam";
     pub const PHYSICAL_STORAGE_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const READER_CACHE_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35: bool = false;
-    pub const READER_CACHE_IO_OWNED_IN_PHASE35: bool = false;
+    pub const PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGE: bool = false;
+    pub const READER_CACHE_IO_OWNED_BY_BRIDGE: bool = false;
 
     pub fn state_path(
         book_id: &[u8],
@@ -108,8 +108,8 @@ impl VaachakStorageStatePaths {
             metadata_kind_ok: Self::state_path(book_id, VaachakStateIoKind::Metadata)
                 .is_ok_and(|path| path.as_bytes() == b"state/8A79A61F.MTA"),
             path_helpers_used: VaachakStoragePathHelpers::active_runtime_adoption_probe(),
-            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35,
-            reader_cache_io_owned: Self::READER_CACHE_IO_OWNED_IN_PHASE35,
+            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGE,
+            reader_cache_io_owned: Self::READER_CACHE_IO_OWNED_BY_BRIDGE,
         }
     }
 

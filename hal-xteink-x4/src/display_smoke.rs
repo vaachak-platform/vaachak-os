@@ -349,15 +349,15 @@ where
         self.init_display(delay);
     }
 
-    pub fn draw_phase5_smoke<D: DelayNs>(&mut self, delay: &mut D) {
+    pub fn draw_display_smoke<D: DelayNs>(&mut self, delay: &mut D) {
         self.draw_full_frame(delay, render_smoke_strip);
     }
 
-    pub fn draw_phase7_home<D: DelayNs>(&mut self, delay: &mut D, sd_ok: bool, battery_pct: u8) {
-        self.draw_phase8_home(delay, sd_ok, battery_pct, 0);
+    pub fn draw_minimal_home<D: DelayNs>(&mut self, delay: &mut D, sd_ok: bool, battery_pct: u8) {
+        self.draw_home_navigation(delay, sd_ok, battery_pct, 0);
     }
 
-    pub fn draw_phase8_home<D: DelayNs>(
+    pub fn draw_home_navigation<D: DelayNs>(
         &mut self,
         delay: &mut D,
         sd_ok: bool,
@@ -370,7 +370,7 @@ where
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn draw_phase9_library<D: DelayNs>(
+    pub fn draw_library_list<D: DelayNs>(
         &mut self,
         delay: &mut D,
         sd_ok: bool,
@@ -394,7 +394,7 @@ where
         });
     }
 
-    pub fn draw_phase11_reader<D: DelayNs>(
+    pub fn draw_reader_page<D: DelayNs>(
         &mut self,
         delay: &mut D,
         sd_ok: bool,
@@ -406,14 +406,14 @@ where
         });
     }
 
-    pub fn draw_phase12_reader<D: DelayNs>(
+    pub fn draw_reader_bookmark_page<D: DelayNs>(
         &mut self,
         delay: &mut D,
         sd_ok: bool,
         battery_pct: u8,
         page: &ReaderPage,
     ) {
-        self.draw_phase11_reader(delay, sd_ok, battery_pct, page);
+        self.draw_reader_page(delay, sd_ok, battery_pct, page);
     }
 
     pub fn is_busy(&mut self) -> bool {
@@ -1115,7 +1115,7 @@ mod tests {
     }
 
     #[test]
-    fn phase7_home_strip_has_expected_size() {
+    fn minimal_home_strip_has_expected_size() {
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
         render_home_strip(0, &mut strip, true, 92);
         assert_eq!(strip.len(), 4_000);
@@ -1123,7 +1123,7 @@ mod tests {
     }
 
     #[test]
-    fn phase8_home_nav_strip_has_expected_size() {
+    fn home_nav_strip_has_expected_size() {
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
         render_home_nav_strip(0, &mut strip, true, 92, 2);
         assert_eq!(strip.len(), 4_000);
@@ -1148,7 +1148,7 @@ mod tests {
     }
 
     #[test]
-    fn phase9_library_strip_has_expected_size() {
+    fn library_strip_has_expected_size() {
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
         let items = [LibraryListItem::new(b"BOOK1.TXT", 100)];
         render_library_strip(0, &mut strip, true, 92, 0, &items, 1, true);
@@ -1172,7 +1172,7 @@ mod tests {
     }
 
     #[test]
-    fn phase11_reader_page_indexes_lines() {
+    fn reader_page_indexes_lines() {
         let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
         assert_eq!(page.line_count(), 2);
         assert_eq!(page.name_str(), "SHORT.TXT");
@@ -1180,7 +1180,7 @@ mod tests {
     }
 
     #[test]
-    fn phase11_reader_strip_has_expected_size() {
+    fn reader_strip_has_expected_size() {
         let mut strip = [0xFFu8; X4_EPD_STRIP_BYTES];
         let page = ReaderPage::new(b"SHORT.TXT", 24, b"hello world\nline two");
         render_reader_strip(0, &mut strip, true, 92, &page);

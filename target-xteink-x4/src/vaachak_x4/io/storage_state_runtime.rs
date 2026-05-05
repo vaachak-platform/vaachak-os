@@ -77,7 +77,7 @@ impl VaachakStorageStatePathIo for VaachakStorageStatePathProbe {
 }
 
 impl VaachakStorageStateRuntimeBridge {
-    pub const PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35B: bool = false;
+    pub const PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGEB: bool = false;
     pub const PRE_HEAP_RUNTIME_PREFLIGHT_ALLOCATES: bool = false;
     pub const ALLOC_RUNTIME_PREFLIGHT_REQUIRES_HEAP: bool = true;
 
@@ -133,7 +133,7 @@ impl VaachakStorageStateRuntimeBridge {
                 && theme_adapter_ok
                 && metadata_adapter_ok
                 && adapter.backend().observed_all(),
-            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35B,
+            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGEB,
         }
     }
 

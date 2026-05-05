@@ -1,10 +1,4 @@
 // launcher screen: menu, bookmarks browser
-// phase40g-repair=x4-home-full-width-reader-titles-ok
-// phase41c=x4-home-biscuit-layout-patch-ok
-// phase41c-repair1=x4-visible-home-biscuit-shell-ok
-// phase41f=x4-home-app-placeholders-ok
-// phase41g=x4-biscuit-home-nav-polish-placeholder-routing-ok
-// phase42a=x4-app-shell-routing-settings-implementation-ok
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -28,9 +22,8 @@ use crate::ui::{
     LARGE_MARGIN, Region, SECTION_GAP, TITLE_Y_OFFSET,
 };
 
-pub const PHASE41G_HOME_DASHBOARD_MARKER: &str = "phase41g=x4-biscuit-home-dashboard-active-ok";
-pub const PHASE41G_HOME_NAV_POLISH_MARKER: &str =
-    "phase41g=x4-biscuit-home-nav-polish-placeholder-routing-ok";
+pub const HOME_DASHBOARD_MARKER: &str = "x4-biscuit-home-dashboard-active-ok";
+pub const HOME_NAV_POLISH_MARKER: &str = "x4-biscuit-home-nav-polish-placeholder-routing-ok";
 
 const HOME_CARD_COUNT: usize = 6;
 const HOME_GRID_COLS: usize = 2;
@@ -263,7 +256,7 @@ impl HomeApp {
         };
 
         let Some(rec) = reader_state::RecentBookRecord::decode_line(text) else {
-            log::warn!("phase6: ignored invalid typed recent record");
+            log::warn!("reader-state: ignored invalid typed recent record");
             return false;
         };
 
@@ -272,7 +265,7 @@ impl HomeApp {
         }
 
         log::info!(
-            "phase8: home loaded typed recent book_id={} path={}",
+            "reader-slice: home loaded typed recent book_id={} path={}",
             rec.book_id.as_str(),
             rec.open_path()
         );
@@ -302,7 +295,7 @@ impl HomeApp {
 
                 let rec = reader_state::RecentBookRecord::from_path(text);
                 log::info!(
-                    "phase6: upgraded legacy recent path to typed record book_id={} path={}",
+                    "reader-state: upgraded legacy recent path to typed record book_id={} path={}",
                     rec.book_id.as_str(),
                     rec.source_path
                 );
@@ -692,7 +685,7 @@ impl HomeApp {
                 MenuAction::Reader => {
                     if let Some(rec) = self.recent_record() {
                         log::info!(
-                            "phase8: continue from typed recent book_id={} path={}",
+                            "reader-slice: continue from typed recent book_id={} path={}",
                             rec.book_id.as_str(),
                             rec.open_path()
                         );
@@ -700,7 +693,7 @@ impl HomeApp {
                         Transition::Push(AppId::Reader)
                     } else {
                         log::info!(
-                            "phase41g: reader card selected without recent; opening library"
+                            "home-dashboard: reader card selected without recent; opening library"
                         );
                         ctx.clear_message();
                         Transition::Push(AppId::Files)
@@ -716,7 +709,10 @@ impl HomeApp {
                     Transition::None
                 }
                 MenuAction::Placeholder(name) => {
-                    log::info!("phase41g: placeholder home card selected app={}", name);
+                    log::info!(
+                        "home-dashboard: placeholder home card selected app={}",
+                        name
+                    );
                     Transition::None
                 }
             },

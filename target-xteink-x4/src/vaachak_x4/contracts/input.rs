@@ -34,7 +34,7 @@ pub struct VaachakButtonRoleInfo {
 }
 
 impl VaachakInputBoundary {
-    pub const PHASE_MARKER: &'static str = "phase22=x4-input-boundary-ok";
+    pub const INPUT_BOUNDARY_MARKER: &'static str = "x4-input-boundary-ok";
 
     /// Current source of truth for physical input behavior.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
@@ -45,10 +45,10 @@ impl VaachakInputBoundary {
     pub const POWER_BUTTON_GPIO: u8 = 3;
 
     /// Phase 22 records the boundary only. It does not move runtime behavior.
-    pub const PHYSICAL_ADC_READS_MOVED_IN_PHASE22: bool = false;
-    pub const BUTTON_LADDER_CALIBRATION_MOVED_IN_PHASE22: bool = false;
-    pub const DEBOUNCE_REPEAT_HANDLING_MOVED_IN_PHASE22: bool = false;
-    pub const BUTTON_EVENT_ROUTING_MOVED_IN_PHASE22: bool = false;
+    pub const PHYSICAL_ADC_READS_MOVED_TO_BOUNDARY: bool = false;
+    pub const BUTTON_LADDER_CALIBRATION_MOVED_TO_BOUNDARY: bool = false;
+    pub const DEBOUNCE_REPEAT_HANDLING_MOVED_TO_BOUNDARY: bool = false;
+    pub const BUTTON_EVENT_ROUTING_MOVED_TO_BOUNDARY: bool = false;
 
     /// Reader footer/action labels expected by Vaachak. The imported runtime
     /// continues to render and route actions in Phase 22.
@@ -67,7 +67,7 @@ impl VaachakInputBoundary {
     ];
 
     pub fn emit_boot_marker() {
-        esp_println::println!("{}", Self::PHASE_MARKER);
+        esp_println::println!("{}", Self::INPUT_BOUNDARY_MARKER);
     }
 
     pub const fn owns_physical_input_behavior() -> bool {

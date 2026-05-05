@@ -63,7 +63,7 @@ impl VaachakInputSemanticAdoptionReport {
 impl VaachakInputSemantics {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure input semantic helpers";
     pub const PHYSICAL_INPUT_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_INPUT_MOVED_IN_PHASE33: bool = false;
+    pub const PHYSICAL_INPUT_MOVED_TO_BOUNDARY: bool = false;
 
     pub const ROW1_ADC_GPIO: u8 = 1;
     pub const ROW2_ADC_GPIO: u8 = 2;
@@ -143,7 +143,7 @@ impl VaachakInputSemantics {
         }
     }
 
-    pub fn phase33_adoption_report() -> VaachakInputSemanticAdoptionReport {
+    pub fn input_semantics_adoption_report() -> VaachakInputSemanticAdoptionReport {
         let pins = Self::pin_contract();
 
         VaachakInputSemanticAdoptionReport {
@@ -176,12 +176,12 @@ impl VaachakInputSemantics {
                     == VaachakNavigationAction::Left
                 && Self::navigation_action_for_role(VaachakSemanticButtonRole::Right)
                     == VaachakNavigationAction::Right,
-            physical_input_moved: Self::PHYSICAL_INPUT_MOVED_IN_PHASE33,
+            physical_input_moved: Self::PHYSICAL_INPUT_MOVED_TO_BOUNDARY,
         }
     }
 
     pub fn active_runtime_adoption_probe() -> bool {
-        Self::phase33_adoption_report().adoption_ok()
+        Self::input_semantics_adoption_report().adoption_ok()
     }
 }
 
@@ -190,7 +190,7 @@ mod tests {
     use super::{VaachakInputSemantics, VaachakReaderAction, VaachakSemanticButtonRole};
 
     #[test]
-    fn phase33_adoption_probe_is_pure_and_valid() {
+    fn input_semantics_adoption_probe_is_pure_and_valid() {
         assert!(VaachakInputSemantics::active_runtime_adoption_probe());
     }
 

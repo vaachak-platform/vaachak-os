@@ -91,7 +91,7 @@ def main() -> int:
     print(f"titles={titles}")
     print(f"added={added}")
     print(f"total={len(existing)}")
-    print("marker=phase40k-tools=x4-title-cache-host-tools-ok")
+    print("marker=x4-title-cache-host-tools-ok")
     return 0
 
 

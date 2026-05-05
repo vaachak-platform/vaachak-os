@@ -13,7 +13,7 @@ use crate::apps::widgets::button_feedback::LabelMode;
 use crate::apps::{App, AppContext, AppId, Launcher, PendingSetting, Redraw, Transition};
 use esp_hal::delay::Delay;
 
-use crate::apps::widgets::quick_menu::{MAX_APP_ACTIONS, QuickMenuResult};
+use crate::apps::widgets::quick_menu::QuickMenuResult;
 use crate::apps::widgets::{ButtonFeedback, QuickMenu};
 use crate::board::action::{Action, ActionEvent, ButtonMapper};
 use crate::board::{Epd, SCREEN_H, SCREEN_W};
@@ -463,15 +463,30 @@ impl AppManager {
             self.handle_quick_menu(event, bm_cache)
         } else if matches!(event, ActionEvent::Press(Action::Menu)) {
             let active = self.launcher.active();
+
+            // Phase 42B-R3E: Reader background/entry can reload per-book theme/progress
+            // after Settings propagation. Re-apply shared Settings prefs before the
+            // quick menu snapshots Reader quick actions.
+            if active == AppId::Reader {
+                self.propagate_fonts();
+            }
+
             let actions: &[_] = with_app!(active, self, |app| app.quick_actions());
             self.quick_menu.show(actions);
             self.launcher.ctx.mark_dirty(self.quick_menu.region());
             Transition::None
         } else {
             let active = self.launcher.active();
-            with_app!(active, self, |app| {
+            let transition = with_app!(active, self, |app| {
                 app.on_event(event, &mut self.launcher.ctx)
-            })
+            });
+
+            if active == AppId::Settings {
+                self.sync_active_pending_setting();
+                self.propagate_fonts();
+            }
+
+            transition
         };
 
         self.sync_shell_from_runtime();
@@ -577,6 +592,11 @@ impl AppManager {
                 }
             }
 
+            // Phase 42B-R3: apply persisted/shared reader preferences after app entry.
+            // Reader on_enter/restore can load per-book state, so global Settings must
+            // be pushed after entry to keep Main Settings and Reader quick settings in sync.
+            self.propagate_fonts();
+
             if nav.resume {
                 self.launcher
                     .ctx
@@ -596,6 +616,12 @@ impl AppManager {
             app.background(&mut self.launcher.ctx, k).await
         });
 
+        // Phase 42B-R3E: active Reader background can load per-book theme/progress
+        // after app entry. Re-apply shared Settings prefs before the next draw/event.
+        if active == AppId::Reader || active == AppId::Settings {
+            self.propagate_fonts();
+        }
+
         for &id in &[AppId::Home, AppId::Files, AppId::Reader, AppId::Settings] {
             if id != active {
                 with_app!(id, self, |app| {
@@ -605,6 +631,10 @@ impl AppManager {
                 });
             }
         }
+
+        // Phase 42B-R3E: suspended Settings background can save a changed prefs snapshot.
+        // Keep the live Reader quick-setting cache aligned with the shared settings.
+        self.propagate_fonts();
 
         // sync button configuration from settings (may have changed)
         self.sync_button_config();
@@ -643,12 +673,14 @@ impl AppManager {
         let ui_idx = ss.ui_font_size_idx;
         let book_idx = ss.book_font_size_idx;
         let theme_idx = ss.reading_theme;
+        let show_progress = ss.reader_show_progress;
 
         self.home.set_ui_font_size(ui_idx);
         self.files.set_ui_font_size(ui_idx);
         self.settings.set_ui_font_size(ui_idx);
         self.reader.set_book_font_size(book_idx);
         self.reader.set_reading_theme(theme_idx);
+        self.reader.set_show_progress_chrome(show_progress);
 
         let chrome = fonts::chrome_font();
         self.reader.set_chrome_font(chrome);
@@ -656,10 +688,37 @@ impl AppManager {
         self.bumps.set_chrome_font(chrome);
     }
 
+    fn apply_pending_setting(&mut self, setting: PendingSetting) {
+        match setting {
+            PendingSetting::BookFontSize(idx) => {
+                let ss = self.settings.system_settings_mut();
+                if ss.book_font_size_idx != idx {
+                    ss.book_font_size_idx = idx;
+                    self.settings.mark_save_needed();
+                }
+            }
+            PendingSetting::ReaderPreferences(prefs) => {
+                let ss = self.settings.system_settings_mut();
+                if ss.reader_preferences() != prefs {
+                    ss.set_reader_preferences(prefs);
+                    self.settings.mark_save_needed();
+                }
+            }
+        }
+    }
+
+    fn sync_active_pending_setting(&mut self) {
+        let active = self.launcher.active();
+        let pending = with_app!(active, self, |app| app.pending_setting());
+        if let Some(setting) = pending {
+            self.apply_pending_setting(setting);
+        }
+    }
+
     fn sync_quick_menu(&mut self) {
         let active = self.launcher.active();
 
-        for id in 0..MAX_APP_ACTIONS as u8 {
+        for id in 0..=u8::MAX {
             if let Some(value) = self.quick_menu.app_cycle_value(id) {
                 with_app!(active, self, |app| {
                     app.on_quick_cycle_update(id, value, &mut self.launcher.ctx);
@@ -667,18 +726,7 @@ impl AppManager {
             }
         }
 
-        let pending = with_app!(active, self, |app| app.pending_setting());
-        if let Some(setting) = pending {
-            match setting {
-                PendingSetting::BookFontSize(idx) => {
-                    let ss = self.settings.system_settings_mut();
-                    if ss.book_font_size_idx != idx {
-                        ss.book_font_size_idx = idx;
-                        self.settings.mark_save_needed();
-                    }
-                }
-            }
-        }
+        self.sync_active_pending_setting();
     }
 
     #[inline]

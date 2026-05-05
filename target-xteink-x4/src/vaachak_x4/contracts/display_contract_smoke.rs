@@ -48,15 +48,15 @@ pub enum DisplayContractCheck {
 }
 
 impl VaachakDisplayContractSmoke {
-    pub const PHASE27_MARKER: &'static str = "phase27=x4-display-contract-smoke-ok";
+    pub const DISPLAY_CONTRACT_SMOKE_MARKER: &'static str = "x4-display-contract-smoke-ok";
 
     /// Physical behavior remains imported in Phase 27.
-    pub const PHYSICAL_DISPLAY_BEHAVIOR_MOVED_IN_PHASE27: bool = false;
-    pub const SSD1677_INIT_MOVED_IN_PHASE27: bool = false;
-    pub const SPI_TRANSACTIONS_MOVED_IN_PHASE27: bool = false;
-    pub const REFRESH_MOVED_IN_PHASE27: bool = false;
-    pub const STRIP_RENDERING_MOVED_IN_PHASE27: bool = false;
-    pub const FRAMEBUFFER_MOVED_IN_PHASE27: bool = false;
+    pub const PHYSICAL_DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
+    pub const SSD1677_INIT_MOVED_TO_BOUNDARY: bool = false;
+    pub const SPI_TRANSACTIONS_MOVED_TO_BOUNDARY: bool = false;
+    pub const REFRESH_MOVED_TO_BOUNDARY: bool = false;
+    pub const STRIP_RENDERING_MOVED_TO_BOUNDARY: bool = false;
+    pub const FRAMEBUFFER_MOVED_TO_BOUNDARY: bool = false;
 
     /// X4 display panel geometry.
     pub const NATIVE_WIDTH: u16 = 800;
@@ -176,18 +176,18 @@ impl VaachakDisplayContractSmoke {
             && Self::check(DisplayContractCheck::Ssd1677Commands)
             && Self::check(DisplayContractCheck::SharedSpi)
             && Self::check(DisplayContractCheck::StripRendering)
-            && !Self::PHYSICAL_DISPLAY_BEHAVIOR_MOVED_IN_PHASE27
-            && !Self::SSD1677_INIT_MOVED_IN_PHASE27
-            && !Self::SPI_TRANSACTIONS_MOVED_IN_PHASE27
-            && !Self::REFRESH_MOVED_IN_PHASE27
-            && !Self::STRIP_RENDERING_MOVED_IN_PHASE27
-            && !Self::FRAMEBUFFER_MOVED_IN_PHASE27
+            && !Self::PHYSICAL_DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY
+            && !Self::SSD1677_INIT_MOVED_TO_BOUNDARY
+            && !Self::SPI_TRANSACTIONS_MOVED_TO_BOUNDARY
+            && !Self::REFRESH_MOVED_TO_BOUNDARY
+            && !Self::STRIP_RENDERING_MOVED_TO_BOUNDARY
+            && !Self::FRAMEBUFFER_MOVED_TO_BOUNDARY
     }
 
     #[cfg(target_arch = "riscv32")]
     pub fn emit_boot_marker() {
         if Self::smoke_ok() {
-            esp_println::println!("{}", Self::PHASE27_MARKER);
+            esp_println::println!("{}", Self::DISPLAY_CONTRACT_SMOKE_MARKER);
         } else {
             esp_println::println!("display-contract-smoke-failed");
         }

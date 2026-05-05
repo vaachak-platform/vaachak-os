@@ -11,20 +11,20 @@ pub struct VaachakBoundaryContract;
 #[cfg(target_arch = "riscv32")]
 impl VaachakBoundaryContract {
     /// Phase 24 acceptance marker.
-    pub const PHASE24_MARKER: &'static str = "phase24=x4-boundary-contract-ok";
+    pub const BOUNDARY_CONTRACT_MARKER: &'static str = "x4-boundary-contract-ok";
 
     /// Current ownership model.
     pub const METADATA_OWNER: &'static str = "Vaachak runtime boundary contract";
     pub const PHYSICAL_BEHAVIOR_OWNER: &'static str = "vendor/pulp-os imported runtime";
 
     /// Phase 24 does not move physical hardware behavior.
-    pub const DISPLAY_BEHAVIOR_MOVED_IN_PHASE24: bool = false;
-    pub const INPUT_BEHAVIOR_MOVED_IN_PHASE24: bool = false;
-    pub const STORAGE_BEHAVIOR_MOVED_IN_PHASE24: bool = false;
+    pub const DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
+    pub const INPUT_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
+    pub const STORAGE_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
 
     /// Emit only the Phase 24 contract marker.
     pub fn emit_contract_marker() {
-        esp_println::println!("{}", Self::PHASE24_MARKER);
+        esp_println::println!("{}", Self::BOUNDARY_CONTRACT_MARKER);
     }
 
     /// Emit the consolidated boundary marker set.
@@ -37,7 +37,8 @@ impl VaachakBoundaryContract {
     /// - Add Phase 24 consolidated contract marker.
     pub fn emit_all_boundary_markers() {
         Self::emit_contract_marker();
-        crate::vaachak_x4::contracts::display::VaachakDisplayBoundary::emit_phase23_marker();
+        crate::vaachak_x4::contracts::display::VaachakDisplayBoundary::emit_display_boundary_marker(
+        );
         crate::vaachak_x4::contracts::storage::VaachakStorageBoundary::emit_boot_marker();
         crate::vaachak_x4::contracts::input::VaachakInputBoundary::emit_boot_marker();
         crate::vaachak_x4::contracts::display::VaachakDisplayBoundary::emit_scaffold_marker();
@@ -50,8 +51,8 @@ impl VaachakBoundaryContract {
 
     /// Physical behavior remains imported until explicit later extraction phases.
     pub fn physical_behavior_is_still_imported() -> bool {
-        !Self::DISPLAY_BEHAVIOR_MOVED_IN_PHASE24
-            && !Self::INPUT_BEHAVIOR_MOVED_IN_PHASE24
-            && !Self::STORAGE_BEHAVIOR_MOVED_IN_PHASE24
+        !Self::DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY
+            && !Self::INPUT_BEHAVIOR_MOVED_TO_BOUNDARY
+            && !Self::STORAGE_BEHAVIOR_MOVED_TO_BOUNDARY
     }
 }

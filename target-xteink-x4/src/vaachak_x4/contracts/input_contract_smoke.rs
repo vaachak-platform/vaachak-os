@@ -37,15 +37,15 @@ pub struct VaachakInputPinContract {
 }
 
 impl VaachakInputContractSmoke {
-    pub const PHASE26_MARKER: &'static str = "phase26=x4-input-contract-smoke-ok";
+    pub const INPUT_CONTRACT_SMOKE_MARKER: &'static str = "x4-input-contract-smoke-ok";
 
     /// Runtime behavior remains imported. Phase 26 owns only pure metadata and
     /// contract validation helpers.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_ADC_READS_MOVED_IN_PHASE26: bool = false;
-    pub const BUTTON_LADDER_CALIBRATION_MOVED_IN_PHASE26: bool = false;
-    pub const DEBOUNCE_REPEAT_HANDLING_MOVED_IN_PHASE26: bool = false;
-    pub const BUTTON_EVENT_ROUTING_MOVED_IN_PHASE26: bool = false;
+    pub const PHYSICAL_ADC_READS_MOVED_TO_BOUNDARY: bool = false;
+    pub const BUTTON_LADDER_CALIBRATION_MOVED_TO_BOUNDARY: bool = false;
+    pub const DEBOUNCE_REPEAT_HANDLING_MOVED_TO_BOUNDARY: bool = false;
+    pub const BUTTON_EVENT_ROUTING_MOVED_TO_BOUNDARY: bool = false;
 
     pub const REQUIRED_BUTTON_ROLES: [VaachakButtonRole; 7] = [
         VaachakButtonRole::Back,
@@ -149,15 +149,15 @@ impl VaachakInputContractSmoke {
                 == VaachakReaderInputAction::PreviousPage
             && Self::action_for_role(VaachakInputContext::Reader, VaachakButtonRole::Select)
                 == VaachakReaderInputAction::BookmarkOrMenu
-            && !Self::PHYSICAL_ADC_READS_MOVED_IN_PHASE26
-            && !Self::BUTTON_LADDER_CALIBRATION_MOVED_IN_PHASE26
-            && !Self::DEBOUNCE_REPEAT_HANDLING_MOVED_IN_PHASE26
-            && !Self::BUTTON_EVENT_ROUTING_MOVED_IN_PHASE26
+            && !Self::PHYSICAL_ADC_READS_MOVED_TO_BOUNDARY
+            && !Self::BUTTON_LADDER_CALIBRATION_MOVED_TO_BOUNDARY
+            && !Self::DEBOUNCE_REPEAT_HANDLING_MOVED_TO_BOUNDARY
+            && !Self::BUTTON_EVENT_ROUTING_MOVED_TO_BOUNDARY
     }
 
     pub fn emit_contract_marker() {
         if Self::smoke_validate_contract() {
-            esp_println::println!("{}", Self::PHASE26_MARKER);
+            esp_println::println!("{}", Self::INPUT_CONTRACT_SMOKE_MARKER);
         } else {
             esp_println::println!("input-contract-smoke-failed");
         }

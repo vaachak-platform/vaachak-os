@@ -59,7 +59,7 @@ impl VaachakDisplayGeometryAdoptionReport {
 impl VaachakDisplayGeometry {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure display geometry helpers";
     pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_DISPLAY_MOVED_IN_PHASE34: bool = false;
+    pub const PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY: bool = false;
 
     pub const NATIVE_WIDTH: u16 = 800;
     pub const NATIVE_HEIGHT: u16 = 480;
@@ -138,7 +138,7 @@ impl VaachakDisplayGeometry {
         Self::NATIVE_HEIGHT % Self::STRIP_ROWS == 0
     }
 
-    pub fn phase34_adoption_report() -> VaachakDisplayGeometryAdoptionReport {
+    pub fn display_geometry_adoption_report() -> VaachakDisplayGeometryAdoptionReport {
         let native = Self::native_size();
         let logical = Self::logical_size();
         let pins = Self::pins();
@@ -169,12 +169,12 @@ impl VaachakDisplayGeometry {
                 && pins.spi_sclk_gpio == 8
                 && pins.spi_mosi_gpio == 10
                 && pins.spi_miso_gpio == 7,
-            physical_display_moved: Self::PHYSICAL_DISPLAY_MOVED_IN_PHASE34,
+            physical_display_moved: Self::PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY,
         }
     }
 
     pub fn active_runtime_adoption_probe() -> bool {
-        Self::phase34_adoption_report().adoption_ok()
+        Self::display_geometry_adoption_report().adoption_ok()
     }
 }
 
@@ -183,7 +183,7 @@ mod tests {
     use super::{VaachakDisplayGeometry, VaachakDisplayOrientation};
 
     #[test]
-    fn phase34_adoption_probe_is_pure_and_valid() {
+    fn display_geometry_adoption_probe_is_pure_and_valid() {
         assert!(VaachakDisplayGeometry::active_runtime_adoption_probe());
     }
 

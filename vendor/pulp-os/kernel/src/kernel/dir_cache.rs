@@ -1,7 +1,4 @@
 // directory listing cache: sorted entries with title resolution
-// phase40h=x4-host-title-map-txt-display-names-ok
-// phase40g-repair=x4-home-full-width-reader-titles-ok
-// phase40g-repair3=x4-disable-txt-body-title-scanning-ok
 // loaded lazily from SD, held in RAM, invalidated on demand
 
 use crate::drivers::sdcard::SdStorage;
@@ -11,9 +8,9 @@ use crate::drivers::storage::{
 use crate::error::Result;
 
 const MAX_DIR_ENTRIES: usize = 128;
-const PHASE40H_TITLE_MAP_FILE: &str = "TITLEMAP.TSV";
-pub const PHASE40G_REPAIR_TITLE_KIND_EPUB: u8 = 1;
-pub const PHASE40G_REPAIR_TITLE_KIND_TEXT: u8 = 2;
+const TITLE_MAP_FILE: &str = "TITLEMAP.TSV";
+pub const TITLE_KIND_EPUB: u8 = 1;
+pub const TITLE_KIND_TEXT: u8 = 2;
 
 pub struct DirCache {
     entries: [DirEntry; MAX_DIR_ENTRIES],
@@ -28,7 +25,7 @@ impl Default for DirCache {
 }
 
 #[allow(dead_code)]
-fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
+fn is_epub_or_epu_name(name: &[u8]) -> bool {
     if name.len() >= 5
         && name[name.len() - 5] == b'.'
         && name[name.len() - 4..].eq_ignore_ascii_case(b"EPUB")
@@ -41,7 +38,7 @@ fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
         && name[name.len() - 3..].eq_ignore_ascii_case(b"EPU")
 }
 
-fn phase40g_repair_is_text_title_name(name: &[u8]) -> bool {
+fn is_text_title_name(name: &[u8]) -> bool {
     if name.len() >= 4
         && name[name.len() - 4] == b'.'
         && name[name.len() - 3..].eq_ignore_ascii_case(b"TXT")
@@ -71,7 +68,7 @@ impl DirCache {
         let count = list_root_files(sd, &mut self.entries)?;
         self.count = count;
         sort_entries(&mut self.entries, self.count);
-        self.phase40h_load_host_title_map(sd);
+        self.load_host_title_map(sd);
         self.load_titles(sd);
         for i in 0..self.count {
             self.entries[i].humanize_sfn();
@@ -80,9 +77,9 @@ impl DirCache {
         Ok(())
     }
 
-    fn phase40h_load_host_title_map(&mut self, sd: &SdStorage) {
+    fn load_host_title_map(&mut self, sd: &SdStorage) {
         let mut buf = [0u8; 4096];
-        let n = match read_file_start_in_dir(sd, X4_DIR, PHASE40H_TITLE_MAP_FILE, &mut buf) {
+        let n = match read_file_start_in_dir(sd, X4_DIR, TITLE_MAP_FILE, &mut buf) {
             Ok((_, n)) => n,
             Err(_) => return,
         };
@@ -173,7 +170,7 @@ impl DirCache {
                 continue;
             }
             let name = e.name_str().as_bytes();
-            if phase38i_is_epub_or_epu_name(name) {
+            if is_epub_or_epu_name(name) {
                 return Some((i, e.name, e.name_len));
             }
         }
@@ -188,15 +185,15 @@ impl DirCache {
             }
 
             let name = e.name_str().as_bytes();
-            if phase38i_is_epub_or_epu_name(name) {
-                return Some((i, e.name, e.name_len, PHASE40G_REPAIR_TITLE_KIND_EPUB));
+            if is_epub_or_epu_name(name) {
+                return Some((i, e.name, e.name_len, TITLE_KIND_EPUB));
             }
 
             // Phase 40G Repair 3:
             // TXT/MD body-title scanning is disabled. It was unsafe because
             // license/body lines can be cached as display titles. A future
             // FAT LFN/title-map lane should provide proper TXT display names.
-            if phase40g_repair_is_text_title_name(name) {
+            if is_text_title_name(name) {
                 continue;
             }
         }

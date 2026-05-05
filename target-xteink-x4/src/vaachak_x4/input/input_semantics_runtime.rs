@@ -117,8 +117,8 @@ impl VaachakInputSemanticsRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned input semantic runtime facade";
     pub const PHYSICAL_INPUT_SAMPLING_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const DEBOUNCE_REPEAT_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_INPUT_SAMPLING_OWNED_IN_PHASE35E0: bool = false;
-    pub const DEBOUNCE_REPEAT_OWNED_IN_PHASE35E0: bool = false;
+    pub const PHYSICAL_INPUT_SAMPLING_OWNED_BY_BRIDGE: bool = false;
+    pub const DEBOUNCE_REPEAT_OWNED_BY_BRIDGE: bool = false;
 
     pub fn active_runtime_preflight() -> bool {
         Self::preflight_report().preflight_ok()
@@ -129,8 +129,8 @@ impl VaachakInputSemanticsRuntimeBridge {
             default_layout_ok: Self::default_layout_ok(),
             swapped_layout_ok: Self::swapped_layout_ok(),
             event_mapping_ok: Self::event_mapping_ok(),
-            physical_input_sampling_owned: Self::PHYSICAL_INPUT_SAMPLING_OWNED_IN_PHASE35E0,
-            debounce_repeat_owned: Self::DEBOUNCE_REPEAT_OWNED_IN_PHASE35E0,
+            physical_input_sampling_owned: Self::PHYSICAL_INPUT_SAMPLING_OWNED_BY_BRIDGE,
+            debounce_repeat_owned: Self::DEBOUNCE_REPEAT_OWNED_BY_BRIDGE,
         }
     }
 

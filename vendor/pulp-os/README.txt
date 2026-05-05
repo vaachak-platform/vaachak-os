@@ -167,7 +167,7 @@ design notes
     for the portrait rotation. windowed mode for partial refresh.
 
     3-phase partial refresh. write BW RAM, kick DU waveform, collect
-    input during ~400 ms refresh, then sync RED RAM. phase3 skipped
+    input during ~400 ms refresh, then sync RED RAM. final RED sync skipped
     during rapid navigation (RED marked stale; next partial uses
     inv_red recovery). full GC promoted after configurable number
     of partials to clear ghosting.

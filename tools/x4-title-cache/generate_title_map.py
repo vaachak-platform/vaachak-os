@@ -99,7 +99,7 @@ def main() -> int:
     print(f"sd={sd}")
     print(f"out={out_path}")
     print(f"lines={len(lines)}")
-    print("marker=phase40k-tools=x4-title-cache-host-tools-ok")
+    print("marker=x4-title-cache-host-tools-ok")
     return 0
 
 

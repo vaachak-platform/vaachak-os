@@ -50,8 +50,8 @@ impl VaachakInputAdcRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned input ADC classification facade";
     pub const PHYSICAL_ADC_SAMPLING_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const DEBOUNCE_LOOP_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_ADC_SAMPLING_OWNED_IN_PHASE35G0: bool = false;
-    pub const DEBOUNCE_LOOP_OWNED_IN_PHASE35G0: bool = false;
+    pub const PHYSICAL_ADC_SAMPLING_OWNED_BY_BRIDGE: bool = false;
+    pub const DEBOUNCE_LOOP_OWNED_BY_BRIDGE: bool = false;
 
     pub const ROW1_GPIO: u8 = 1;
     pub const ROW2_GPIO: u8 = 2;
@@ -112,8 +112,8 @@ impl VaachakInputAdcRuntimeBridge {
             row2_classification_ok: Self::row2_classification_ok(),
             boundary_rejection_ok: Self::boundary_rejection_ok(),
             timing_policy_ok: Self::timing_policy_ok(),
-            physical_adc_sampling_owned: Self::PHYSICAL_ADC_SAMPLING_OWNED_IN_PHASE35G0,
-            debounce_loop_owned: Self::DEBOUNCE_LOOP_OWNED_IN_PHASE35G0,
+            physical_adc_sampling_owned: Self::PHYSICAL_ADC_SAMPLING_OWNED_BY_BRIDGE,
+            debounce_loop_owned: Self::DEBOUNCE_LOOP_OWNED_BY_BRIDGE,
         }
     }
 

@@ -596,9 +596,9 @@ impl VaachakReaderThemeRecord {
 }
 
 pub const READER_STATE_FACADE_OWNER: &str = "Vaachak-owned reader state facade";
-pub const ACTIVE_READER_STATE_IO_OWNER_IN_PHASE35C0: &str = "vendor/pulp-os imported runtime";
-pub const ACTIVE_READER_STATE_IO_MOVED_IN_PHASE35C0: bool = false;
-pub const ACTIVE_PROGRESS_BOOKMARK_IO_MOVED_IN_PHASE35D0: bool = false;
+pub const ACTIVE_READER_STATE_IO_OWNER: &str = "vendor/pulp-os imported runtime";
+pub const ACTIVE_READER_STATE_IO_MOVED_TO_IMPORTED_RUNTIME: bool = false;
+pub const ACTIVE_PROGRESS_BOOKMARK_IO_MOVED_TO_IMPORTED_RUNTIME: bool = false;
 pub const BOOK_ID_MODEL: &str = "path-fnv1a32-v2";
 pub const STATE_DIR: &str = VaachakStoragePathHelpers::STATE_DIR_STR;
 pub const BOOKMARKS_INDEX_FILE: &str = VaachakStoragePathHelpers::BOOKMARK_INDEX_FILE;

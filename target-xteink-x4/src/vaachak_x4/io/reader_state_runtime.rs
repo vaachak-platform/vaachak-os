@@ -39,9 +39,9 @@ impl VaachakReaderStateRuntimePreflightReport {
 }
 
 impl VaachakReaderStateRuntimeBridge {
-    pub const PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35D1: bool = false;
-    pub const ACTIVE_PERSISTENCE_OWNED_IN_PHASE35D1: bool = false;
-    pub const REQUIRES_HEAP_ALLOCATOR_IN_PHASE35D2: bool = true;
+    pub const PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGED1: bool = false;
+    pub const ACTIVE_PERSISTENCE_OWNED_BY_BRIDGE: bool = false;
+    pub const REQUIRES_HEAP_ALLOCATOR: bool = true;
 
     pub fn active_runtime_preflight() -> bool {
         Self::preflight_report().preflight_ok()
@@ -58,8 +58,8 @@ impl VaachakReaderStateRuntimeBridge {
             theme_record_ok: Self::theme_record_round_trips(&identity),
             metadata_record_ok: Self::metadata_record_round_trips(&identity),
             layout_paths_ok: Self::layout_paths_match(&identity.book_id),
-            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_IN_PHASE35D1,
-            active_persistence_owned: Self::ACTIVE_PERSISTENCE_OWNED_IN_PHASE35D1,
+            physical_storage_io_owned: Self::PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGED1,
+            active_persistence_owned: Self::ACTIVE_PERSISTENCE_OWNED_BY_BRIDGE,
         }
     }
 

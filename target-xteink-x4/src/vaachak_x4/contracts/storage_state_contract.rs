@@ -26,7 +26,7 @@ pub enum VaachakStateContractError {
 }
 
 impl VaachakStorageStateContract {
-    pub const PHASE25_MARKER: &'static str = "phase25=x4-storage-contract-smoke-ok";
+    pub const STORAGE_CONTRACT_SMOKE_MARKER: &'static str = "x4-storage-contract-smoke-ok";
 
     pub const STATE_DIR: &'static str = VaachakStoragePathHelpers::STATE_DIR_STR;
     pub const BOOK_ID_LEN: usize = VaachakStoragePathHelpers::BOOK_ID_LEN;
@@ -39,8 +39,8 @@ impl VaachakStorageStateContract {
 
     pub const BOOKMARK_INDEX_FILE: &'static str = VaachakStoragePathHelpers::BOOKMARK_INDEX_FILE;
     pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_SD_IO_MOVED_IN_PHASE25: bool = false;
-    pub const EPUB_CACHE_IO_MOVED_IN_PHASE25: bool = false;
+    pub const PHYSICAL_SD_IO_MOVED_TO_BOUNDARY: bool = false;
+    pub const EPUB_CACHE_IO_MOVED_TO_BOUNDARY: bool = false;
 
     pub const fn extension_for(kind: VaachakStateRecordKind) -> &'static str {
         match kind {
@@ -125,13 +125,13 @@ impl VaachakStorageStateContract {
             && Self::is_valid_state_file_name("8A79A61F.THM")
             && Self::is_valid_state_file_name("8A79A61F.MTA")
             && Self::is_valid_state_file_name(Self::BOOKMARK_INDEX_FILE)
-            && !Self::PHYSICAL_SD_IO_MOVED_IN_PHASE25
-            && !Self::EPUB_CACHE_IO_MOVED_IN_PHASE25
+            && !Self::PHYSICAL_SD_IO_MOVED_TO_BOUNDARY
+            && !Self::EPUB_CACHE_IO_MOVED_TO_BOUNDARY
     }
 
     pub fn emit_contract_marker() {
         if Self::smoke_validate_contract() {
-            esp_println::println!("{}", Self::PHASE25_MARKER);
+            esp_println::println!("{}", Self::STORAGE_CONTRACT_SMOKE_MARKER);
         } else {
             esp_println::println!("storage-contract-smoke-failed");
         }

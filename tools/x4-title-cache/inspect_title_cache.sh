@@ -34,4 +34,4 @@ else
 fi
 
 echo
-echo "marker=phase40k-tools=x4-title-cache-host-tools-ok"
+echo "marker=x4-title-cache-host-tools-ok"

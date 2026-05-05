@@ -71,8 +71,8 @@ impl VaachakDisplayGeometryRuntimeReport {
 impl VaachakDisplayGeometryRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned display geometry runtime facade";
     pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_DISPLAY_INIT_OWNED_IN_PHASE35F0: bool = false;
-    pub const REFRESH_OR_STRIP_RENDER_OWNED_IN_PHASE35F0: bool = false;
+    pub const PHYSICAL_DISPLAY_INIT_OWNED_BY_BRIDGE: bool = false;
+    pub const REFRESH_OR_STRIP_RENDER_OWNED_BY_BRIDGE: bool = false;
 
     pub const NATIVE_BOUNDS: VaachakDisplayRect = VaachakDisplayRect::new(
         0,
@@ -107,8 +107,8 @@ impl VaachakDisplayGeometryRuntimeBridge {
             rotation_mapping_ok: Self::rotation_mapping_ok(),
             strip_mapping_ok: Self::strip_mapping_ok(),
             reader_bounds_ok: Self::reader_bounds_ok(),
-            physical_display_init_owned: Self::PHYSICAL_DISPLAY_INIT_OWNED_IN_PHASE35F0,
-            refresh_or_strip_render_owned: Self::REFRESH_OR_STRIP_RENDER_OWNED_IN_PHASE35F0,
+            physical_display_init_owned: Self::PHYSICAL_DISPLAY_INIT_OWNED_BY_BRIDGE,
+            refresh_or_strip_render_owned: Self::REFRESH_OR_STRIP_RENDER_OWNED_BY_BRIDGE,
         }
     }
 

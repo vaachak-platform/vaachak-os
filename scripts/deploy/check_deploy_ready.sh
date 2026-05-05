@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SD="${SD:-/media/mindseye73/SD_CARD}"
-OUT="${OUT:-/tmp/phase40k-deploy-ready-check.txt}"
+OUT="${OUT:-/tmp/x4-deploy-ready-check.txt}"
 
 status="ACCEPTED"
 reason="DeployReady"
@@ -22,7 +22,7 @@ overlay_count="$(find . -maxdepth 1 -type d -name 'phase*_overlay' | wc -l | tr 
 zip_count="$(find . -maxdepth 1 -type f -name 'phase*.zip' | wc -l | tr -d ' ')"
 
 old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' vendor/pulp-os/src/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
-bad_txt_body_return="$((rg -n 'PHASE40G_REPAIR_TITLE_KIND_TEXT.*return Some|return Some.*PHASE40G_REPAIR_TITLE_KIND_TEXT' vendor/pulp-os/kernel/src/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
+bad_txt_body_return="$((rg -n 'TITLE_KIND_TEXT.*return Some|return Some.*TITLE_KIND_TEXT' vendor/pulp-os/kernel/src/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
 
 titlemap_status="missing"
 titles_status="missing"
@@ -59,7 +59,7 @@ fi
   echo "bad_phrase_lines=$bad_phrase_lines"
   echo "old_footer_count=$old_footer_count"
   echo "bad_txt_body_return=$bad_txt_body_return"
-  echo "marker=phase40k=x4-repository-cleanup-new-device-deploy-baseline-ok"
+  echo "marker=x4-repository-cleanup-new-device-deploy-baseline-ok"
 } | tee "$OUT"
 
 echo "Wrote: $OUT"

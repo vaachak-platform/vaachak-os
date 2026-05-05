@@ -22,8 +22,7 @@
 use core::fmt;
 
 /// Phase marker emitted by validation / boot marker plumbing.
-pub const PHASE_35C_PROGRESS_STATE_IO_ADAPTER_MARKER: &str =
-    "phase35c=x4-progress-state-io-adapter-ok";
+pub const PROGRESS_STATE_IO_ADAPTER_MARKER: &str = "x4-progress-state-io-adapter-ok";
 
 pub const PROGRESS_STATE_DIR: &str = "state";
 pub const PROGRESS_STATE_EXTENSION: &str = "PRG";
@@ -254,8 +253,8 @@ where
     }
 }
 
-pub fn phase35c_progress_state_io_adapter_marker() -> &'static str {
-    PHASE_35C_PROGRESS_STATE_IO_ADAPTER_MARKER
+pub fn progress_state_io_adapter_marker() -> &'static str {
+    PROGRESS_STATE_IO_ADAPTER_MARKER
 }
 
 pub fn write_progress_state_path(

@@ -25,8 +25,7 @@
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
 /// Phase marker emitted by validation / boot marker plumbing.
-pub const PHASE_35F_BOOKMARK_STATE_IO_ADAPTER_MARKER: &str =
-    "phase35f=x4-bookmark-state-io-adapter-ok";
+pub const BOOKMARK_STATE_IO_ADAPTER_MARKER: &str = "x4-bookmark-state-io-adapter-ok";
 
 pub const BOOKMARK_STATE_DIR: &str = "state";
 pub const BOOKMARK_STATE_EXTENSION: &str = "BKM";
@@ -370,8 +369,8 @@ where
     }
 }
 
-pub fn phase35f_bookmark_state_io_adapter_marker() -> &'static str {
-    PHASE_35F_BOOKMARK_STATE_IO_ADAPTER_MARKER
+pub fn bookmark_state_io_adapter_marker() -> &'static str {
+    BOOKMARK_STATE_IO_ADAPTER_MARKER
 }
 
 pub fn write_bookmark_state_path(

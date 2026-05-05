@@ -1,29 +1,30 @@
 // Settings app: Phase 42A app shell settings implementation.
-// phase42a=x4-app-shell-routing-settings-implementation-ok
 //
 // The active runtime already owns AppId::Settings.  This screen keeps the
-// existing loaded SystemSettings available to the app manager, while Phase 42A
-// option rows are local/in-memory unless another component updates
-// SystemSettings through the existing safe settings path.
+// existing loaded SystemSettings available to the app manager, while Phase 42B
+// persists the safe Settings rows through the existing _X4/SETTINGS.TXT path.
 
 use core::fmt::Write as _;
 
-use crate::apps::{App, AppContext, AppId, Transition};
+use crate::apps::{App, AppContext, AppId, PendingSetting, Transition, reader_state};
 use crate::board::action::{Action, ActionEvent};
 use crate::board::{SCREEN_H, SCREEN_W};
 use crate::drivers::strip::StripBuffer;
 use crate::fonts;
 use crate::kernel::KernelHandle;
 use crate::kernel::config::{
-    self, SystemSettings, WifiConfig, parse_settings_txt, write_settings_txt,
+    self, ReaderPreferences, SystemSettings, WifiConfig, parse_settings_txt, write_settings_txt,
 };
 use crate::ui::{
     Alignment, BUTTON_BAR_H, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W, LARGE_MARGIN,
     Region, StackFmt, TITLE_Y, wrap_next, wrap_prev,
 };
 
-pub const PHASE42A_APP_SHELL_SETTINGS_MARKER: &str =
-    "phase42a=x4-app-shell-routing-settings-implementation-ok";
+pub const APP_SHELL_SETTINGS_MARKER: &str = "x4-app-shell-routing-settings-implementation-ok";
+pub const SETTINGS_PERSISTENCE_MARKER: &str = "x4-settings-persistence-reader-preview-ok";
+pub const READER_VOCABULARY_ALIGNMENT_MARKER: &str = "x4-settings-reader-vocabulary-alignment-ok";
+pub const SHARED_READER_PREFS_MARKER: &str = "x4-shared-reader-preferences-sync-ok";
+pub const SETTINGS_TO_READER_SYNC_MARKER: &str = "x4-settings-to-reader-runtime-sync-ok";
 
 const ROW_H: u16 = 34;
 const ROW_GAP: u16 = 4;
@@ -35,14 +36,13 @@ const VALUE_W: u16 = 156;
 const VALUE_X: u16 = SCREEN_W - LARGE_MARGIN - VALUE_W;
 const LABEL_W: u16 = FULL_CONTENT_W - VALUE_W - 8;
 
-const NUM_ROWS: usize = 23;
+const NUM_ROWS: usize = 22;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsRowKind {
     Section(&'static str),
     ReaderFont,
-    ReaderLineSpacing,
-    ReaderMargins,
+    ReaderTheme,
     ReaderProgress,
     DisplayRefresh,
     DisplayInvert,
@@ -76,12 +76,8 @@ const ROWS: [SettingsRow; NUM_ROWS] = [
         kind: SettingsRowKind::ReaderFont,
     },
     SettingsRow {
-        label: "Line spacing",
-        kind: SettingsRowKind::ReaderLineSpacing,
-    },
-    SettingsRow {
-        label: "Margins",
-        kind: SettingsRowKind::ReaderMargins,
+        label: "Reading theme",
+        kind: SettingsRowKind::ReaderTheme,
     },
     SettingsRow {
         label: "Show progress",
@@ -178,8 +174,7 @@ pub struct SettingsApp {
     rows_top: u16,
 
     reader_font: u8,
-    reader_line_spacing: u8,
-    reader_margins: u8,
+    reader_theme: u8,
     reader_show_progress: bool,
     display_refresh: u8,
     display_invert: bool,
@@ -199,9 +194,8 @@ impl SettingsApp {
             save_needed: false,
             ui_fonts: uf,
             rows_top: TITLE_Y + uf.heading.line_height + HEADER_LIST_GAP,
-            reader_font: 1,
-            reader_line_spacing: 1,
-            reader_margins: 1,
+            reader_font: config::DEFAULT_FONT_SIZE_IDX,
+            reader_theme: config::DEFAULT_READING_THEME,
             reader_show_progress: true,
             display_refresh: 1,
             display_invert: false,
@@ -241,7 +235,7 @@ impl SettingsApp {
     }
 
     fn load(&mut self, k: &mut KernelHandle<'_>) {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; 1024];
 
         self.settings = SystemSettings::defaults();
         self.wifi = WifiConfig::empty();
@@ -262,13 +256,15 @@ impl SettingsApp {
     }
 
     fn sync_local_from_system_settings(&mut self) {
-        self.reader_font = match self.settings.book_font_size_idx {
-            0 | 1 => 0,
-            2 => 1,
-            _ => 2,
-        };
-        self.reader_line_spacing = self.settings.reading_theme.min(2);
-        self.reader_margins = self.settings.reading_theme.min(2);
+        self.reader_font = self.settings.book_font_size_idx.min(fonts::max_size_idx());
+        self.reader_theme = self
+            .settings
+            .reading_theme
+            .min(reader_theme_count().saturating_sub(1));
+        self.reader_show_progress = self.settings.reader_show_progress;
+        self.display_refresh = self.settings.display_refresh_mode.min(2);
+        self.display_invert = self.settings.display_invert_colors;
+        self.display_contrast = self.settings.display_contrast_high;
         self.device_sleep_timeout = match self.settings.sleep_timeout {
             0 => 3,
             1..=5 => 0,
@@ -277,8 +273,28 @@ impl SettingsApp {
         };
     }
 
+    fn sync_system_from_local(&mut self) {
+        self.settings.set_reader_preferences(ReaderPreferences {
+            book_font: self.reader_font.min(fonts::max_size_idx()),
+            reading_theme: self
+                .reader_theme
+                .min(reader_theme_count().saturating_sub(1)),
+            show_progress: self.reader_show_progress,
+        });
+        self.settings.display_refresh_mode = self.display_refresh.min(2);
+        self.settings.display_invert_colors = self.display_invert;
+        self.settings.display_contrast_high = self.display_contrast;
+        self.settings.sleep_timeout = match self.device_sleep_timeout {
+            0 => 5,
+            1 => 10,
+            2 => 30,
+            _ => 0,
+        };
+        self.settings.sanitize();
+    }
+
     fn save(&self, k: &mut KernelHandle<'_>) -> bool {
-        let mut buf = [0u8; 512];
+        let mut buf = [0u8; 1024];
         let len = write_settings_txt(&self.settings, &self.wifi, &mut buf);
         match k.write_app_data(config::SETTINGS_FILE, &buf[..len]) {
             Ok(_) => {
@@ -367,32 +383,42 @@ impl SettingsApp {
 
     fn cycle_selected(&mut self, delta: isize, ctx: &mut AppContext) {
         let row = ROWS[self.selected];
-        match row.kind {
+        let changed = match row.kind {
             SettingsRowKind::ReaderFont => {
-                self.reader_font = cycle_index(self.reader_font, 3, delta);
+                self.reader_font =
+                    cycle_index(self.reader_font, fonts::FONT_SIZE_COUNT as u8, delta);
+                true
             }
-            SettingsRowKind::ReaderLineSpacing => {
-                self.reader_line_spacing = cycle_index(self.reader_line_spacing, 3, delta);
-            }
-            SettingsRowKind::ReaderMargins => {
-                self.reader_margins = cycle_index(self.reader_margins, 3, delta);
+            SettingsRowKind::ReaderTheme => {
+                self.reader_theme = cycle_index(self.reader_theme, reader_theme_count(), delta);
+                true
             }
             SettingsRowKind::ReaderProgress => {
                 self.reader_show_progress = !self.reader_show_progress;
+                true
             }
             SettingsRowKind::DisplayRefresh => {
                 self.display_refresh = cycle_index(self.display_refresh, 3, delta);
+                true
             }
             SettingsRowKind::DisplayInvert => {
                 self.display_invert = !self.display_invert;
+                true
             }
             SettingsRowKind::DisplayContrast => {
                 self.display_contrast = !self.display_contrast;
+                true
             }
             SettingsRowKind::DeviceSleepTimeout => {
                 self.device_sleep_timeout = cycle_index(self.device_sleep_timeout, 4, delta);
+                true
             }
-            _ => {}
+            _ => false,
+        };
+
+        if changed {
+            self.sync_system_from_local();
+            self.save_needed = true;
         }
         ctx.mark_dirty(self.row_region(self.selected - self.scroll));
     }
@@ -404,25 +430,10 @@ impl SettingsApp {
                 let _ = write!(buf, "{}", name);
             }
             SettingsRowKind::ReaderFont => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    ["Small", "Normal", "Large"][self.reader_font as usize]
-                );
+                let _ = write!(buf, "{}", fonts::font_size_name(self.reader_font));
             }
-            SettingsRowKind::ReaderLineSpacing => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    ["Compact", "Normal", "Relaxed"][self.reader_line_spacing as usize]
-                );
-            }
-            SettingsRowKind::ReaderMargins => {
-                let _ = write!(
-                    buf,
-                    "{}",
-                    ["Compact", "Normal", "Wide"][self.reader_margins as usize]
-                );
+            SettingsRowKind::ReaderTheme => {
+                let _ = write!(buf, "{}", reader_theme_name(self.reader_theme));
             }
             SettingsRowKind::ReaderProgress => {
                 let _ = write!(buf, "{}", on_off(self.reader_show_progress));
@@ -491,6 +502,9 @@ impl SettingsApp {
 
 impl App<AppId> for SettingsApp {
     fn on_enter(&mut self, ctx: &mut AppContext, _k: &mut KernelHandle<'_>) {
+        if self.loaded {
+            self.sync_local_from_system_settings();
+        }
         self.selected = 0;
         self.scroll = 0;
         ctx.mark_dirty(Region::new(
@@ -535,6 +549,22 @@ impl App<AppId> for SettingsApp {
             return;
         }
 
+        if self.save_needed && self.save(k) {
+            self.save_needed = false;
+        }
+    }
+
+    fn pending_setting(&self) -> Option<PendingSetting> {
+        Some(PendingSetting::ReaderPreferences(
+            self.settings.reader_preferences(),
+        ))
+    }
+
+    fn has_background_when_suspended(&self) -> bool {
+        self.save_needed
+    }
+
+    fn background_suspended(&mut self, k: &mut KernelHandle<'_>) {
         if self.save_needed && self.save(k) {
             self.save_needed = false;
         }
@@ -611,6 +641,17 @@ fn cycle_index(value: u8, count: u8, delta: isize) -> u8 {
         return 0;
     }
     (value as isize + delta).rem_euclid(count as isize) as u8
+}
+
+fn reader_theme_count() -> u8 {
+    reader_state::THEME_NAMES.len() as u8
+}
+
+fn reader_theme_name(idx: u8) -> &'static str {
+    reader_state::THEME_NAMES
+        .get(idx as usize)
+        .copied()
+        .unwrap_or("Default")
 }
 
 const fn on_off(value: bool) -> &'static str {

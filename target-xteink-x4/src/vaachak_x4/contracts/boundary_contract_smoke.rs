@@ -26,7 +26,7 @@ impl BoundaryContractSmokeReport {
 }
 
 impl VaachakBoundaryContractSmoke {
-    pub const PHASE28_MARKER: &'static str = "phase28=x4-boundary-contract-smoke-ok";
+    pub const BOUNDARY_CONTRACT_SMOKE_MARKER: &'static str = "x4-boundary-contract-smoke-ok";
 
     pub const STORAGE_CONTRACT_SOURCE: &'static str =
         "vaachak_x4/contracts/storage_state_contract.rs";
@@ -34,15 +34,15 @@ impl VaachakBoundaryContractSmoke {
     pub const DISPLAY_CONTRACT_SOURCE: &'static str =
         "vaachak_x4/contracts/display_contract_smoke.rs";
 
-    pub const STORAGE_CONTRACT_MARKER: &'static str = "phase25=x4-storage-contract-smoke-ok";
-    pub const INPUT_CONTRACT_MARKER: &'static str = "phase26=x4-input-contract-smoke-ok";
-    pub const DISPLAY_CONTRACT_MARKER: &'static str = "phase27=x4-display-contract-smoke-ok";
+    pub const STORAGE_CONTRACT_MARKER: &'static str = "x4-storage-contract-smoke-ok";
+    pub const INPUT_CONTRACT_MARKER: &'static str = "x4-input-contract-smoke-ok";
+    pub const DISPLAY_CONTRACT_MARKER: &'static str = "x4-display-contract-smoke-ok";
 
     /// Phase 28 remains non-invasive. Physical behavior is still imported from
     /// vendor/pulp-os and is not owned by this Vaachak contract smoke layer.
-    pub const PHYSICAL_STORAGE_MOVED_IN_PHASE28: bool = false;
-    pub const PHYSICAL_INPUT_MOVED_IN_PHASE28: bool = false;
-    pub const PHYSICAL_DISPLAY_MOVED_IN_PHASE28: bool = false;
+    pub const PHYSICAL_STORAGE_MOVED_TO_BOUNDARY: bool = false;
+    pub const PHYSICAL_INPUT_MOVED_TO_BOUNDARY: bool = false;
+    pub const PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY: bool = false;
 
     /// Compile-time dependency names used by the contract smoke. These strings
     /// intentionally keep the relationship to the Phase 25/26/27 modules visible
@@ -66,9 +66,9 @@ impl VaachakBoundaryContractSmoke {
     }
 
     pub const fn physical_behavior_moved() -> bool {
-        Self::PHYSICAL_STORAGE_MOVED_IN_PHASE28
-            || Self::PHYSICAL_INPUT_MOVED_IN_PHASE28
-            || Self::PHYSICAL_DISPLAY_MOVED_IN_PHASE28
+        Self::PHYSICAL_STORAGE_MOVED_TO_BOUNDARY
+            || Self::PHYSICAL_INPUT_MOVED_TO_BOUNDARY
+            || Self::PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY
     }
 
     pub const fn report() -> BoundaryContractSmokeReport {
@@ -87,7 +87,7 @@ impl VaachakBoundaryContractSmoke {
     #[cfg(target_arch = "riscv32")]
     pub fn emit_boot_marker() {
         if Self::smoke_ok() {
-            esp_println::println!("{}", Self::PHASE28_MARKER);
+            esp_println::println!("{}", Self::BOUNDARY_CONTRACT_SMOKE_MARKER);
         } else {
             esp_println::println!("boundary-contract-smoke-failed");
         }
@@ -96,7 +96,7 @@ impl VaachakBoundaryContractSmoke {
     #[cfg(not(target_arch = "riscv32"))]
     pub fn emit_boot_marker() {
         if Self::smoke_ok() {
-            println!("{}", Self::PHASE28_MARKER);
+            println!("{}", Self::BOUNDARY_CONTRACT_SMOKE_MARKER);
         } else {
             println!("boundary-contract-smoke-failed");
         }
@@ -113,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn phase28_does_not_move_physical_behavior() {
+    fn boundary_contract_smoke_preserves_physical_behavior() {
         assert!(!VaachakBoundaryContractSmoke::physical_behavior_moved());
     }
 }

@@ -22,7 +22,7 @@
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
 /// Phase marker emitted by validation / boot marker plumbing.
-pub const PHASE_35D_THEME_STATE_IO_ADAPTER_MARKER: &str = "phase35d=x4-theme-state-io-adapter-ok";
+pub const THEME_STATE_IO_ADAPTER_MARKER: &str = "x4-theme-state-io-adapter-ok";
 
 pub const THEME_STATE_DIR: &str = "state";
 pub const THEME_STATE_EXTENSION: &str = "THM";
@@ -228,8 +228,8 @@ where
     }
 }
 
-pub fn phase35d_theme_state_io_adapter_marker() -> &'static str {
-    PHASE_35D_THEME_STATE_IO_ADAPTER_MARKER
+pub fn theme_state_io_adapter_marker() -> &'static str {
+    THEME_STATE_IO_ADAPTER_MARKER
 }
 
 pub fn write_theme_state_path(

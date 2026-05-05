@@ -26,9 +26,9 @@ use crate::ui::Region;
 
 use super::KernelHandle;
 use super::bookmarks::BookmarkCache;
-use super::config::{SystemSettings, WifiConfig};
+use super::config::{ReaderPreferences, SystemSettings, WifiConfig};
 
-pub const MAX_APP_ACTIONS: usize = 6;
+pub const MAX_APP_ACTIONS: usize = 8;
 
 #[derive(Debug, Clone, Copy)]
 pub enum QuickActionKind {
@@ -85,6 +85,7 @@ pub trait AppIdType: Copy + Eq + core::fmt::Debug {
 #[derive(Clone, Copy, Debug)]
 pub enum PendingSetting {
     BookFontSize(u8),
+    ReaderPreferences(ReaderPreferences),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

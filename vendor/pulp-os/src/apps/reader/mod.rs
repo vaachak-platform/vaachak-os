@@ -1,3 +1,5 @@
+const READER_STATUS_PREFIX: &str = "Read ";
+const READER_LOADING_LABEL: &str = "Reading";
 mod epubs;
 mod images;
 mod paging;
@@ -124,13 +126,15 @@ pub(super) const LOADING_REGION: Region = Region::new(MARGIN, TEXT_Y, LOADING_W,
 
 pub const QA_FONT_SIZE: u8 = 1;
 pub(super) const QA_THEME: u8 = 2;
-pub(super) const QA_PREV_CHAPTER: u8 = 3;
-pub(super) const QA_NEXT_CHAPTER: u8 = 4;
-pub(super) const QA_TOC: u8 = 5;
-pub(super) const QA_BOOKMARKS: u8 = 6;
-pub(super) const QA_BOOKMARK_TOGGLE: u8 = 7;
+pub(super) const QA_SHOW_PROGRESS: u8 = 3;
+pub(super) const QA_PREV_CHAPTER: u8 = 4;
+pub(super) const QA_NEXT_CHAPTER: u8 = 5;
+pub(super) const QA_TOC: u8 = 6;
+pub(super) const QA_BOOKMARKS: u8 = 7;
+pub(super) const QA_BOOKMARK_TOGGLE: u8 = 8;
 
-pub(super) const QA_MAX: usize = 7;
+pub(super) const QA_MAX: usize = 8;
+const SHOW_PROGRESS_OPTIONS: &[&str] = &["Off", "On"];
 
 // reader state machine:
 // NeedBookmark -> NeedInit -> NeedOpf -> NeedToc -> NeedCache -> NeedIndex -> NeedPage -> Ready
@@ -383,6 +387,7 @@ pub struct ReaderApp {
     pub(super) applied_font_idx: u8,
 
     pub(super) chrome_font: Option<&'static BitmapFont>,
+    pub(super) show_progress_chrome: bool,
     pub(super) qa_buf: [QuickAction; QA_MAX],
     pub(super) qa_count: u8,
 
@@ -438,6 +443,7 @@ impl ReaderApp {
             applied_font_idx: 0,
 
             chrome_font: None,
+            show_progress_chrome: true,
 
             qa_buf: [QuickAction::trigger(0, "", ""); QA_MAX],
             qa_count: 0,
@@ -464,6 +470,7 @@ impl ReaderApp {
         self.reading_theme_idx = idx;
         self.apply_theme_layout();
         self.apply_font_metrics();
+        self.rebuild_quick_actions();
     }
 
     fn apply_theme_layout(&mut self) {
@@ -476,6 +483,11 @@ impl ReaderApp {
 
     pub fn set_chrome_font(&mut self, font: &'static BitmapFont) {
         self.chrome_font = Some(font);
+    }
+
+    pub fn set_show_progress_chrome(&mut self, show: bool) {
+        self.show_progress_chrome = show;
+        self.rebuild_quick_actions();
     }
 
     pub fn has_bg_work(&self) -> bool {
@@ -595,6 +607,14 @@ impl ReaderApp {
             "Book Font",
             self.book_font_size_idx,
             fonts::FONT_SIZE_NAMES,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_SHOW_PROGRESS,
+            "Show Progress",
+            self.show_progress_chrome as u8,
+            SHOW_PROGRESS_OPTIONS,
         );
         n += 1;
 
@@ -762,7 +782,7 @@ impl ReaderApp {
 
     fn ensure_current_book_state_foundation(&self, k: &mut KernelHandle<'_>) -> bool {
         let Some(meta) = self.current_meta_record() else {
-            log::warn!("phase6.1: cannot ensure book state without a current filename");
+            log::warn!("reader-state: cannot ensure book state without a current filename");
             return false;
         };
 
@@ -782,13 +802,13 @@ impl ReaderApp {
 
         if let Some(slice) = self.current_reader_slice_descriptor() {
             log::info!(
-                "phase8: extraction-ready reader slice {}",
+                "reader-slice: extraction-ready reader slice {}",
                 slice.log_summary()
             );
         }
 
         log::info!(
-            "phase6.1: book state foundation book_id={} meta=state/{} state_dir={} ok={}",
+            "reader-state: book state foundation book_id={} meta=state/{} state_dir={} ok={}",
             meta.book_id.as_str(),
             meta_file.as_str(),
             ensured_state,
@@ -825,7 +845,7 @@ impl ReaderApp {
                             }
 
                             log::info!(
-                                "phase6.1: loaded progress book_id={} file=state/{} src={} ch={} off={} font={}",
+                                "reader-state: loaded progress book_id={} file=state/{} src={} ch={} off={} font={}",
                                 rec.book_id.as_str(),
                                 progress_file.as_str(),
                                 rec.source_path,
@@ -837,7 +857,7 @@ impl ReaderApp {
                         }
 
                         log::warn!(
-                            "phase6.1: skipped progress with mismatched book_id={} for current={}",
+                            "reader-state: skipped progress with mismatched book_id={} for current={}",
                             rec.book_id.as_str(),
                             book_id.as_str()
                         );
@@ -870,7 +890,7 @@ impl ReaderApp {
 
             if rec.book_id != book_id {
                 log::warn!(
-                    "phase6.1: skipped legacy progress with mismatched book_id={} for current={}",
+                    "reader-state: skipped legacy progress with mismatched book_id={} for current={}",
                     rec.book_id.as_str(),
                     book_id.as_str()
                 );
@@ -888,7 +908,7 @@ impl ReaderApp {
             }
 
             log::info!(
-                "phase6.1: loaded legacy progress from {}/{} src={} ch={} off={} font={}",
+                "reader-state: loaded legacy progress from {}/{} src={} ch={} off={} font={}",
                 subdir.as_str(),
                 reader_state::PROGRESS_RECORD_FILE,
                 rec.source_path,
@@ -935,7 +955,7 @@ impl ReaderApp {
         .is_ok();
 
         log::info!(
-            "phase6.1: wrote meta book_id={} file=state/{} ok={}",
+            "reader-state: wrote meta book_id={} file=state/{} ok={}",
             meta.book_id.as_str(),
             meta_file.as_str(),
             wrote
@@ -963,7 +983,7 @@ impl ReaderApp {
         self.persist_recent_record(k);
 
         log::info!(
-            "phase6.1: persisted progress book_id={} file=state/{} ok={} src={} ch={} page={} off={} font={}",
+            "reader-state: persisted progress book_id={} file=state/{} ok={} src={} ch={} page={} off={} font={}",
             progress.book_id.as_str(),
             progress_file.as_str(),
             wrote_progress,
@@ -1001,7 +1021,7 @@ impl ReaderApp {
         let theme = ReaderThemeRecord::new(self.name(), self.current_theme_preset());
         if theme.book_id != book_id {
             log::warn!(
-                "phase6: skipped theme persist due to book_id mismatch current={} theme={}",
+                "reader-state: skipped theme persist due to book_id mismatch current={} theme={}",
                 book_id.as_str(),
                 theme.book_id.as_str()
             );
@@ -1020,7 +1040,7 @@ impl ReaderApp {
         .is_ok();
 
         log::info!(
-            "phase6.1: persisted theme book_id={} file=state/{} ok={}",
+            "reader-state: persisted theme book_id={} file=state/{} ok={}",
             book_id.as_str(),
             theme_file.as_str(),
             wrote_theme
@@ -1044,7 +1064,7 @@ impl ReaderApp {
                     let theme = if let Some(record) = ReaderThemeRecord::decode_line(trimmed) {
                         if record.book_id != book_id {
                             log::warn!(
-                                "phase6.1: skipped theme with mismatched book_id={} for current={}",
+                                "reader-state: skipped theme with mismatched book_id={} for current={}",
                                 record.book_id.as_str(),
                                 book_id.as_str()
                             );
@@ -1064,7 +1084,7 @@ impl ReaderApp {
                             reader_state::theme_idx_from_name(&theme.theme_name);
                         self.apply_theme_layout();
                         log::info!(
-                            "phase6.1: loaded theme book_id={} file=state/{} font={} theme={}",
+                            "reader-state: loaded theme book_id={} file=state/{} font={} theme={}",
                             book_id.as_str(),
                             theme_file.as_str(),
                             self.book_font_size_idx,
@@ -1097,7 +1117,7 @@ impl ReaderApp {
             let theme = if let Some(record) = ReaderThemeRecord::decode_line(line) {
                 if record.book_id != book_id {
                     log::warn!(
-                        "phase6.1: skipped legacy theme with mismatched book_id={} for current={}",
+                        "reader-state: skipped legacy theme with mismatched book_id={} for current={}",
                         record.book_id.as_str(),
                         book_id.as_str()
                     );
@@ -1114,7 +1134,7 @@ impl ReaderApp {
             self.reading_theme_idx = reader_state::theme_idx_from_name(&theme.theme_name);
             self.apply_theme_layout();
             log::info!(
-                "phase6.1: loaded legacy theme from {}/{} font={} theme={}",
+                "reader-state: loaded legacy theme from {}/{} font={} theme={}",
                 subdir.as_str(),
                 reader_state::THEME_RECORD_FILE,
                 self.book_font_size_idx,
@@ -1437,7 +1457,7 @@ impl ReaderApp {
         self.goto_last_page = false;
 
         log::info!(
-            "phase7.1: {} file={} ch={} off={} page={} stay=true",
+            "reader-navigation: {} file={} ch={} off={} page={} stay=true",
             toast,
             self.name(),
             chapter,
@@ -1491,7 +1511,7 @@ impl ReaderApp {
         self.select_nearest_bookmark_for_current_position();
         self.state = State::ShowBookmarks;
         log::info!(
-            "phase7: bookmark overlay opened file={} selected={} total={}",
+            "reader-bookmarks: bookmark overlay opened file={} selected={} total={}",
             self.name(),
             self.bookmark_selected,
             self.bookmarks.len()
@@ -1690,7 +1710,7 @@ impl ReaderApp {
                 let _ = write!(out, "Pg {}", self.pg.page + 1);
             }
         } else {
-            let _ = write!(out, "Opening");
+            let _ = write!(out, "{}", READER_LOADING_LABEL);
         }
 
         if include_progress {
@@ -1699,23 +1719,8 @@ impl ReaderApp {
     }
 
     fn write_reader_status_label<const N: usize>(&self, out: &mut StackFmt<N>) {
+        let _ = write!(out, "{}", READER_STATUS_PREFIX);
         self.write_position_label(out, true);
-
-        if self.is_epub && self.epub.bg_cache != BgCacheState::Idle {
-            let cached = self.cached_chapter_count();
-            let total = self.epub.spine.len();
-            if cached < total {
-                let _ = write!(out, " · Cache {}/{}", cached, total);
-            } else if self.epub.img_found_count > 0 {
-                let _ = write!(
-                    out,
-                    " · Img {}/{}",
-                    self.epub.img_cached_count, self.epub.img_found_count
-                );
-            } else {
-                let _ = write!(out, " · Img");
-            }
-        }
     }
 }
 
@@ -1857,7 +1862,7 @@ impl App<AppId> for ReaderApp {
 
         log::info!("reader: opening {}", self.name());
 
-        ctx.set_loading(LOADING_REGION, "Opening", 0);
+        ctx.set_loading(LOADING_REGION, READER_LOADING_LABEL, 0);
         ctx.mark_dirty(PAGE_REGION);
     }
 
@@ -2512,11 +2517,20 @@ impl App<AppId> for ReaderApp {
                 }
             }
             self.rebuild_quick_actions();
+        } else if id == QA_SHOW_PROGRESS {
+            self.show_progress_chrome = value != 0;
+            self.rebuild_quick_actions();
         }
     }
 
     fn pending_setting(&self) -> Option<PendingSetting> {
-        Some(PendingSetting::BookFontSize(self.book_font_size_idx))
+        Some(PendingSetting::ReaderPreferences(
+            crate::kernel::config::ReaderPreferences {
+                book_font: self.book_font_size_idx,
+                reading_theme: self.reading_theme_idx,
+                show_progress: self.show_progress_chrome,
+            },
+        ))
     }
 
     fn save_state(&self, bm: &mut bookmarks::BookmarkCache) {
@@ -2567,7 +2581,9 @@ impl App<AppId> for ReaderApp {
                 Alignment::CenterRight,
                 status_font,
             );
-        } else if self.file_size > 0 || (self.is_epub && !self.epub.spine.is_empty()) {
+        } else if self.show_progress_chrome
+            && (self.file_size > 0 || (self.is_epub && !self.epub.spine.is_empty()))
+        {
             let mut sbuf = StackFmt::<64>::new();
             self.write_reader_status_label(&mut sbuf);
             draw_chrome_text(

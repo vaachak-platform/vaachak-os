@@ -46,23 +46,23 @@ pub struct Ssd1677RefreshContract {
     pub previous_ram_command: u8,
     pub display_update_control_2_command: u8,
     pub master_activation_command: u8,
-    pub physical_refresh_moved_in_phase23: bool,
+    pub physical_refresh_moved_to_boundary: bool,
 }
 
 #[cfg(target_arch = "riscv32")]
 impl VaachakDisplayBoundary {
-    pub const PHASE23_MARKER: &'static str = "phase23=x4-display-boundary-ok";
-    pub const PHASE20_MARKER: &'static str = "phase20=x4-boundary-scaffold-ok";
+    pub const DISPLAY_BOUNDARY_MARKER: &'static str = "x4-display-boundary-ok";
+    pub const BOUNDARY_SCAFFOLD_MARKER: &'static str = "x4-boundary-scaffold-ok";
 
     /// Current source of truth for display behavior.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const RUNTIME_OWNER: DisplayRuntimeOwner = DisplayRuntimeOwner::ImportedPulpRuntime;
 
     /// Phase 23 records the contract only. It must not move physical display IO.
-    pub const PHYSICAL_DISPLAY_INIT_MOVED_IN_PHASE23: bool = false;
-    pub const PHYSICAL_DISPLAY_REFRESH_MOVED_IN_PHASE23: bool = false;
-    pub const SSD1677_SPI_TRANSACTIONS_MOVED_IN_PHASE23: bool = false;
-    pub const FRAMEBUFFER_OR_STRIP_RENDER_MOVED_IN_PHASE23: bool = false;
+    pub const PHYSICAL_DISPLAY_INIT_MOVED_TO_BOUNDARY: bool = false;
+    pub const PHYSICAL_DISPLAY_REFRESH_MOVED_TO_BOUNDARY: bool = false;
+    pub const SSD1677_SPI_TRANSACTIONS_MOVED_TO_BOUNDARY: bool = false;
+    pub const FRAMEBUFFER_OR_STRIP_RENDER_MOVED_TO_BOUNDARY: bool = false;
 
     /// Xteink X4 e-paper pins.
     pub const EPD_CS_GPIO: u8 = 21;
@@ -95,15 +95,15 @@ impl VaachakDisplayBoundary {
     pub const ROTATION_OWNER: &'static str = "vendor/pulp-os display transform";
     pub const STRIP_RENDER_OWNER: &'static str = "vendor/pulp-os strip renderer";
 
-    pub fn emit_phase23_marker() {
-        esp_println::println!("{}", Self::PHASE23_MARKER);
+    pub fn emit_display_boundary_marker() {
+        esp_println::println!("{}", Self::DISPLAY_BOUNDARY_MARKER);
     }
 
     pub const fn owns_physical_display_runtime() -> bool {
-        Self::PHYSICAL_DISPLAY_INIT_MOVED_IN_PHASE23
-            || Self::PHYSICAL_DISPLAY_REFRESH_MOVED_IN_PHASE23
-            || Self::SSD1677_SPI_TRANSACTIONS_MOVED_IN_PHASE23
-            || Self::FRAMEBUFFER_OR_STRIP_RENDER_MOVED_IN_PHASE23
+        Self::PHYSICAL_DISPLAY_INIT_MOVED_TO_BOUNDARY
+            || Self::PHYSICAL_DISPLAY_REFRESH_MOVED_TO_BOUNDARY
+            || Self::SSD1677_SPI_TRANSACTIONS_MOVED_TO_BOUNDARY
+            || Self::FRAMEBUFFER_OR_STRIP_RENDER_MOVED_TO_BOUNDARY
     }
 
     pub const fn uses_shared_spi_with_storage() -> bool {
@@ -139,7 +139,7 @@ impl VaachakDisplayBoundary {
             previous_ram_command: Self::SSD1677_WRITE_PREVIOUS_RAM_CMD,
             display_update_control_2_command: Self::SSD1677_DISPLAY_UPDATE_CONTROL_2_CMD,
             master_activation_command: Self::SSD1677_MASTER_ACTIVATION_CMD,
-            physical_refresh_moved_in_phase23: Self::PHYSICAL_DISPLAY_REFRESH_MOVED_IN_PHASE23,
+            physical_refresh_moved_to_boundary: Self::PHYSICAL_DISPLAY_REFRESH_MOVED_TO_BOUNDARY,
         }
     }
 
@@ -182,6 +182,6 @@ impl VaachakDisplayBoundary {
     /// expects this scaffold marker to remain available through the display
     /// boundary.
     pub fn emit_scaffold_marker() {
-        esp_println::println!("{}", Self::PHASE20_MARKER);
+        esp_println::println!("{}", Self::BOUNDARY_SCAFFOLD_MARKER);
     }
 }

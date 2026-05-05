@@ -84,9 +84,9 @@ impl VaachakStatePath {
 impl VaachakStoragePathHelpers {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure path helpers";
     pub const PHYSICAL_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHASE29_MARKER: &'static str = "phase29=x4-storage-path-helpers-ok";
-    pub const PHASE31_ADOPTION_CHECK: &'static str = "phase31=storage-path-helper-adoption";
-    pub const PHYSICAL_STORAGE_IO_MOVED_IN_PHASE31: bool = false;
+    pub const STORAGE_PATH_HELPERS_MARKER: &'static str = "x4-storage-path-helpers-ok";
+    pub const STORAGE_PATH_ADOPTION_CHECK: &'static str = "storage-path-helper-adoption";
+    pub const PHYSICAL_STORAGE_IO_MOVED_TO_BOUNDARY: bool = false;
 
     pub const STATE_DIR: &'static [u8] = b"state";
     pub const STATE_DIR_STR: &'static str = "state";
@@ -105,12 +105,12 @@ impl VaachakStoragePathHelpers {
     /// Phase 29 boot marker. This is the only phase marker emitted by the
     /// Vaachak facade after previous development-phase logging is quieted.
     #[cfg(target_arch = "riscv32")]
-    pub fn emit_phase29_marker() {
-        esp_println::println!("{}", Self::PHASE29_MARKER);
+    pub fn emit_storage_path_helpers_marker() {
+        esp_println::println!("{}", Self::STORAGE_PATH_HELPERS_MARKER);
     }
 
     #[cfg(not(target_arch = "riscv32"))]
-    pub fn emit_phase29_marker() {}
+    pub fn emit_storage_path_helpers_marker() {}
 
     pub fn smoke_ok() -> bool {
         Self::is_valid_book_id(b"8A79A61F")
@@ -123,7 +123,7 @@ impl VaachakStoragePathHelpers {
                 == b"8A79A61F.PRG"
     }
 
-    pub fn phase31_adoption_report() -> VaachakStoragePathAdoptionReport {
+    pub fn storage_path_adoption_report() -> VaachakStoragePathAdoptionReport {
         let book_id = *b"8A79A61F";
 
         VaachakStoragePathAdoptionReport {
@@ -137,12 +137,12 @@ impl VaachakStoragePathHelpers {
                 && !Self::is_valid_upper_book_id(b"8a79a61f")
                 && Self::is_supported_state_extension(b"prg")
                 && Self::is_reserved_state_file(b"bMiDx.TxT"),
-            physical_io_moved: Self::PHYSICAL_STORAGE_IO_MOVED_IN_PHASE31,
+            physical_io_moved: Self::PHYSICAL_STORAGE_IO_MOVED_TO_BOUNDARY,
         }
     }
 
     pub fn active_runtime_adoption_probe() -> bool {
-        Self::phase31_adoption_report().adoption_ok()
+        Self::storage_path_adoption_report().adoption_ok()
     }
 
     pub fn state_file_name(
@@ -254,7 +254,7 @@ mod tests {
     use super::{VaachakStateFileKind, VaachakStoragePathHelpers};
 
     #[test]
-    fn phase31_adoption_probe_uses_pure_helpers() {
+    fn storage_path_adoption_probe_uses_pure_helpers() {
         assert!(VaachakStoragePathHelpers::active_runtime_adoption_probe());
     }
 

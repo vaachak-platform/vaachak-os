@@ -1,12 +1,8 @@
 // paginated file browser for SD card root directory
-// phase41d=x4-files-biscuit-list-patch-ok
-// phase40g-repair=x4-home-full-width-reader-titles-ok
-// phase40g-repair2=x4-text-title-cache-safety-ok
 // background title scanner resolves EPUB titles from OPF metadata
 
 // Phase 40F: Library title layout polish is intentionally limited to
 // display/layout treatment. Title source/cache behavior remains unchanged.
-// marker=phase40f=x4-library-title-layout-polish-patch-ok
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 
@@ -33,9 +29,9 @@ use smol_epub::epub::{self, EpubMeta, EpubSpine};
 use smol_epub::zip::ZipIndex;
 
 const MAX_PAGE_SIZE: usize = 14;
-const PHASE40G_REPAIR_TITLE_KIND_TEXT: u8 = 2;
-const PHASE40G_REPAIR_TEXT_SCAN_BYTES: usize = 768;
-const PHASE40G_REPAIR_TEXT_TITLE_MAX_BYTES: usize = 96;
+const TITLE_KIND_TEXT: u8 = 2;
+const TEXT_TITLE_SCAN_BYTES: usize = 768;
+const TEXT_TITLE_MAX_BYTES: usize = 96;
 
 const QA_DELETE_FILE: u8 = 1;
 const QA_DELETE_CACHE: u8 = 2;
@@ -270,7 +266,7 @@ impl FilesApp {
         let (is_file, is_epub) = if self.selected < self.count {
             let e = &self.entries[self.selected];
             let nm = &e.name[..e.name_len as usize];
-            let epub = !e.is_dir && phase38i_is_epub_or_epu_name(nm);
+            let epub = !e.is_dir && is_epub_or_epu_name(nm);
             (!e.is_dir, epub)
         } else {
             (false, false)
@@ -579,12 +575,12 @@ struct TitleScanResult {
     resolved: bool,
 }
 
-fn phase40g_repair_is_ascii_space(byte: u8) -> bool {
+fn is_ascii_space(byte: u8) -> bool {
     matches!(byte, b' ' | b'\t' | b'\r' | b'\n')
 }
 
 #[allow(dead_code)]
-fn phase40g_repair_contains_icase(haystack: &[u8], needle: &[u8]) -> bool {
+fn contains_icase(haystack: &[u8], needle: &[u8]) -> bool {
     if needle.is_empty() || haystack.len() < needle.len() {
         return false;
     }
@@ -613,24 +609,24 @@ fn phase40g_repair_contains_icase(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 #[allow(dead_code)]
-fn phase40g_repair_skip_text_title_line(line: &[u8]) -> bool {
+fn skip_text_title_line(line: &[u8]) -> bool {
     line.is_empty()
-        || phase40g_repair_contains_icase(line, b"project gutenberg")
-        || phase40g_repair_contains_icase(line, b"ebook")
-        || phase40g_repair_contains_icase(line, b"produced by")
-        || phase40g_repair_contains_icase(line, b"transcribed by")
-        || phase40g_repair_contains_icase(line, b"***")
-        || phase40g_repair_contains_icase(line, b"chapter ")
+        || contains_icase(line, b"project gutenberg")
+        || contains_icase(line, b"ebook")
+        || contains_icase(line, b"produced by")
+        || contains_icase(line, b"transcribed by")
+        || contains_icase(line, b"***")
+        || contains_icase(line, b"chapter ")
 }
 
-fn phase40g_repair_copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
+fn copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
     let mut start = 0usize;
     let mut end = line.len();
 
-    while start < end && phase40g_repair_is_ascii_space(line[start]) {
+    while start < end && is_ascii_space(line[start]) {
         start += 1;
     }
-    while end > start && phase40g_repair_is_ascii_space(line[end - 1]) {
+    while end > start && is_ascii_space(line[end - 1]) {
         end -= 1;
     }
 
@@ -639,14 +635,14 @@ fn phase40g_repair_copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
         && line[start..start + title_prefix.len()].eq_ignore_ascii_case(title_prefix)
     {
         start += title_prefix.len();
-        while start < end && phase40g_repair_is_ascii_space(line[start]) {
+        while start < end && is_ascii_space(line[start]) {
             start += 1;
         }
     }
 
     let mut written = 0usize;
     let mut prev_space = false;
-    let max = out.len().min(PHASE40G_REPAIR_TEXT_TITLE_MAX_BYTES);
+    let max = out.len().min(TEXT_TITLE_MAX_BYTES);
 
     let mut index = start;
     while index < end && written < max {
@@ -657,7 +653,7 @@ fn phase40g_repair_copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
             byte
         };
 
-        if phase40g_repair_is_ascii_space(normalized) {
+        if is_ascii_space(normalized) {
             if written > 0 && !prev_space {
                 out[written] = b' ';
                 written += 1;
@@ -679,7 +675,7 @@ fn phase40g_repair_copy_text_title(line: &[u8], out: &mut [u8]) -> usize {
     written
 }
 
-fn phase40g_repair_extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
+fn extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
     let mut start = 0usize;
     let mut lines_seen = 0usize;
 
@@ -697,10 +693,10 @@ fn phase40g_repair_extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
 
         let mut trimmed_start = 0usize;
         let mut trimmed_end = line.len();
-        while trimmed_start < trimmed_end && phase40g_repair_is_ascii_space(line[trimmed_start]) {
+        while trimmed_start < trimmed_end && is_ascii_space(line[trimmed_start]) {
             trimmed_start += 1;
         }
-        while trimmed_end > trimmed_start && phase40g_repair_is_ascii_space(line[trimmed_end - 1]) {
+        while trimmed_end > trimmed_start && is_ascii_space(line[trimmed_end - 1]) {
             trimmed_end -= 1;
         }
 
@@ -709,7 +705,7 @@ fn phase40g_repair_extract_text_title(data: &[u8], out: &mut [u8]) -> usize {
         if trimmed.len() > title_prefix.len()
             && trimmed[..title_prefix.len()].eq_ignore_ascii_case(title_prefix)
         {
-            let title_len = phase40g_repair_copy_text_title(trimmed, out);
+            let title_len = copy_text_title(trimmed, out);
             if title_len >= 3 {
                 return title_len;
             }
@@ -728,12 +724,12 @@ fn scan_one_text_title(
     name: &str,
     next_idx: usize,
 ) -> Option<TitleScanResult> {
-    let mut buf = [0u8; PHASE40G_REPAIR_TEXT_SCAN_BYTES];
-    let mut title = [0u8; PHASE40G_REPAIR_TEXT_TITLE_MAX_BYTES];
+    let mut buf = [0u8; TEXT_TITLE_SCAN_BYTES];
+    let mut title = [0u8; TEXT_TITLE_MAX_BYTES];
 
     let result = (|| -> crate::error::Result<usize> {
         let n = k.read_chunk(name, 0, &mut buf)?;
-        let title_len = phase40g_repair_extract_text_title(&buf[..n], &mut title);
+        let title_len = extract_text_title(&buf[..n], &mut title);
         if title_len == 0 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
@@ -760,7 +756,7 @@ fn scan_one_text_title(
     })
 }
 
-fn phase38i_is_epub_or_epu_name(name: &[u8]) -> bool {
+fn is_epub_or_epu_name(name: &[u8]) -> bool {
     if name.len() >= 5
         && name[name.len() - 5] == b'.'
         && name[name.len() - 4..].eq_ignore_ascii_case(b"EPUB")
@@ -779,7 +775,7 @@ fn scan_one_reader_title(k: &mut KernelHandle<'_>, from: usize) -> Option<TitleS
     let name = core::str::from_utf8(&name_buf[..name_len as usize]).unwrap_or("");
     let next_idx = idx + 1;
 
-    if title_kind == PHASE40G_REPAIR_TITLE_KIND_TEXT {
+    if title_kind == TITLE_KIND_TEXT {
         return scan_one_text_title(k, idx, name, next_idx);
     }
 

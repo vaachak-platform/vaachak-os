@@ -71,9 +71,9 @@ impl VaachakSpiBusRuntimeBridge {
     pub const PHYSICAL_SD_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
 
-    pub const PHYSICAL_SPI_OWNED_IN_PHASE35H0: bool = false;
-    pub const PHYSICAL_SD_OWNED_IN_PHASE35H0: bool = false;
-    pub const PHYSICAL_DISPLAY_OWNED_IN_PHASE35H0: bool = false;
+    pub const PHYSICAL_SPI_OWNED_BY_BRIDGE: bool = false;
+    pub const PHYSICAL_SD_OWNED_BY_BRIDGE: bool = false;
+    pub const PHYSICAL_DISPLAY_OWNED_BY_BRIDGE: bool = false;
 
     pub const PINS: VaachakSpiPinContract = VaachakSpiPinContract {
         sclk_gpio: 8,
@@ -102,9 +102,9 @@ impl VaachakSpiBusRuntimeBridge {
             timing_ok: Self::timing_ok(),
             selection_rules_ok: Self::selection_rules_ok(),
             phase_rules_ok: Self::phase_rules_ok(),
-            physical_spi_owned: Self::PHYSICAL_SPI_OWNED_IN_PHASE35H0,
-            physical_sd_owned: Self::PHYSICAL_SD_OWNED_IN_PHASE35H0,
-            physical_display_owned: Self::PHYSICAL_DISPLAY_OWNED_IN_PHASE35H0,
+            physical_spi_owned: Self::PHYSICAL_SPI_OWNED_BY_BRIDGE,
+            physical_sd_owned: Self::PHYSICAL_SD_OWNED_BY_BRIDGE,
+            physical_display_owned: Self::PHYSICAL_DISPLAY_OWNED_BY_BRIDGE,
         }
     }
 

@@ -42,6 +42,11 @@ pub const DEFAULT_FONT_SIZE_IDX: u8 = 2;
 pub const NUM_READING_THEMES: u8 = 4;
 pub const DEFAULT_READING_THEME: u8 = 1;
 
+pub const DEFAULT_READER_SHOW_PROGRESS: bool = true;
+pub const DEFAULT_DISPLAY_REFRESH_MODE: u8 = 1;
+pub const DEFAULT_DISPLAY_INVERT_COLORS: bool = false;
+pub const DEFAULT_DISPLAY_CONTRAST_HIGH: bool = false;
+
 #[derive(Clone, Copy)]
 pub struct ReadingTheme {
     pub name: &'static str,
@@ -95,9 +100,22 @@ pub struct SystemSettings {
 
     // reading settings
     pub reading_theme: u8, // index into READING_THEMES
+    pub reader_show_progress: bool,
+
+    // display preference preview settings; persisted, not applied to hardware
+    pub display_refresh_mode: u8, // 0 = Full, 1 = Balanced, 2 = Fast
+    pub display_invert_colors: bool,
+    pub display_contrast_high: bool,
 
     // control settings
     pub swap_buttons: bool, // swap Back/Select with Left/Right physical buttons
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReaderPreferences {
+    pub book_font: u8,
+    pub reading_theme: u8,
+    pub show_progress: bool,
 }
 
 impl Default for SystemSettings {
@@ -114,6 +132,10 @@ impl SystemSettings {
             book_font_size_idx: DEFAULT_FONT_SIZE_IDX,
             ui_font_size_idx: DEFAULT_FONT_SIZE_IDX,
             reading_theme: DEFAULT_READING_THEME,
+            reader_show_progress: DEFAULT_READER_SHOW_PROGRESS,
+            display_refresh_mode: DEFAULT_DISPLAY_REFRESH_MODE,
+            display_invert_colors: DEFAULT_DISPLAY_INVERT_COLORS,
+            display_contrast_high: DEFAULT_DISPLAY_CONTRAST_HIGH,
             swap_buttons: false,
         }
     }
@@ -130,6 +152,21 @@ impl SystemSettings {
         self.book_font_size_idx = self.book_font_size_idx.min(max_font);
         self.ui_font_size_idx = self.ui_font_size_idx.min(max_font);
         self.reading_theme = self.reading_theme.min(NUM_READING_THEMES - 1);
+        self.display_refresh_mode = self.display_refresh_mode.min(2);
+    }
+
+    pub fn reader_preferences(&self) -> ReaderPreferences {
+        ReaderPreferences {
+            book_font: self.book_font_size_idx,
+            reading_theme: self.reading_theme,
+            show_progress: self.reader_show_progress,
+        }
+    }
+
+    pub fn set_reader_preferences(&mut self, prefs: ReaderPreferences) {
+        self.book_font_size_idx = prefs.book_font.min(Self::DEFAULT_MAX_FONT_IDX);
+        self.reading_theme = prefs.reading_theme.min(NUM_READING_THEMES - 1);
+        self.reader_show_progress = prefs.show_progress;
     }
 
     // reasonable default - override via sanitize_with_max_font
@@ -207,6 +244,14 @@ fn parse_u16(s: &[u8]) -> Option<u16> {
     Some(val)
 }
 
+fn parse_bool(s: &[u8]) -> Option<bool> {
+    match s {
+        b"1" | b"true" | b"on" => Some(true),
+        b"0" | b"false" | b"off" => Some(false),
+        _ => None,
+    }
+}
+
 fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiConfig) {
     match key {
         b"sleep_timeout" => {
@@ -234,6 +279,31 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
                 s.reading_theme = v as u8;
             }
         }
+        b"reader_show_progress" => {
+            if let Some(v) = parse_bool(val) {
+                s.reader_show_progress = v;
+            }
+        }
+        b"show_progress" => {
+            if let Some(v) = parse_bool(val) {
+                s.reader_show_progress = v;
+            }
+        }
+        b"display_refresh_mode" => {
+            if let Some(v) = parse_u16(val) {
+                s.display_refresh_mode = v as u8;
+            }
+        }
+        b"display_invert_colors" => {
+            if let Some(v) = parse_bool(val) {
+                s.display_invert_colors = v;
+            }
+        }
+        b"display_contrast_high" => {
+            if let Some(v) = parse_bool(val) {
+                s.display_contrast_high = v;
+            }
+        }
         b"swap_buttons" => {
             s.swap_buttons = val == b"1" || val == b"true";
         }
@@ -243,7 +313,20 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
     }
 }
 
+fn book_font_from_legacy_reader_font_pref(idx: u8) -> u8 {
+    match idx {
+        0 => 1,
+        1 => 2,
+        _ => 3,
+    }
+}
+
 pub fn parse_settings_txt(data: &[u8], settings: &mut SystemSettings, wifi: &mut WifiConfig) {
+    let mut saw_book_font = false;
+    let mut saw_reading_theme = false;
+    let mut legacy_reader_font_pref = None;
+    let mut legacy_reader_theme_pref = None;
+
     for line in data.split(|&b| b == b'\n') {
         let line = trim(line);
         if line.is_empty() || line[0] == b'#' {
@@ -252,8 +335,24 @@ pub fn parse_settings_txt(data: &[u8], settings: &mut SystemSettings, wifi: &mut
         if let Some(eq) = line.iter().position(|&b| b == b'=') {
             let key = trim(&line[..eq]);
             let val = trim(&line[eq + 1..]);
+            match key {
+                b"book_font" => saw_book_font = true,
+                b"reading_theme" => saw_reading_theme = true,
+                b"reader_font_pref" => legacy_reader_font_pref = parse_u16(val),
+                b"reader_line_spacing" | b"reader_margins" => {
+                    legacy_reader_theme_pref = parse_u16(val)
+                }
+                _ => {}
+            }
             apply_setting(key, val, settings, wifi);
         }
+    }
+
+    if !saw_book_font && let Some(v) = legacy_reader_font_pref {
+        settings.book_font_size_idx = book_font_from_legacy_reader_font_pref(v as u8);
+    }
+    if !saw_reading_theme && let Some(v) = legacy_reader_theme_pref {
+        settings.reading_theme = v as u8;
     }
 }
 
@@ -319,6 +418,20 @@ pub fn write_settings_txt(s: &SystemSettings, w: &WifiConfig, buf: &mut [u8]) ->
 
     wr.put(b"\n# reading settings (0=Compact, 1=Default, 2=Relaxed, 3=Spacious)\n");
     wr.kv_num(b"reading_theme", s.reading_theme as u16);
+
+    wr.put(b"\n# reader preferences\n");
+    wr.kv_num(b"show_progress", if s.reader_show_progress { 1 } else { 0 });
+
+    wr.put(b"\n# display preferences (persisted only)\n");
+    wr.kv_num(b"display_refresh_mode", s.display_refresh_mode as u16);
+    wr.kv_num(
+        b"display_invert_colors",
+        if s.display_invert_colors { 1 } else { 0 },
+    );
+    wr.kv_num(
+        b"display_contrast_high",
+        if s.display_contrast_high { 1 } else { 0 },
+    );
 
     wr.put(b"\n# control settings\n");
     wr.kv_num(b"swap_buttons", if s.swap_buttons { 1 } else { 0 });

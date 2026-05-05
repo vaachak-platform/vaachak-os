@@ -14,4 +14,4 @@ python3 "$SCRIPT_DIR/seed_titlemap_into_titles_bin.py" --sd "$SD"
 SD="$SD" "$SCRIPT_DIR/inspect_title_cache.sh"
 
 sync
-echo "phase40k-tools=x4-title-cache-host-tools-ok"
+echo "x4-title-cache-host-tools-ok"

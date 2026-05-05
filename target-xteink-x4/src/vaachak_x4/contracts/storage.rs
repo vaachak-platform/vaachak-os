@@ -32,16 +32,16 @@ pub struct VaachakStorageArtifact {
 }
 
 impl VaachakStorageBoundary {
-    pub const PHASE21_MARKER: &'static str = "phase21=x4-storage-boundary-ok";
+    pub const STORAGE_BOUNDARY_MARKER: &'static str = "x4-storage-boundary-ok";
 
     /// Current source of truth for behavior.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
 
     /// Phase 21 only extracts metadata/helpers. Runtime behavior is still imported.
-    pub const BEHAVIOR_MOVED_IN_PHASE21: bool = false;
-    pub const PHYSICAL_SD_INIT_MOVED_IN_PHASE21: bool = false;
-    pub const FILE_IO_MOVED_IN_PHASE21: bool = false;
-    pub const EPUB_CACHE_IO_MOVED_IN_PHASE21: bool = false;
+    pub const BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
+    pub const PHYSICAL_SD_INIT_MOVED_TO_BOUNDARY: bool = false;
+    pub const FILE_IO_MOVED_TO_BOUNDARY: bool = false;
+    pub const EPUB_CACHE_IO_MOVED_TO_BOUNDARY: bool = false;
 
     /// X4 storage pin facts preserved for future Vaachak-owned HAL extraction.
     pub const SD_CS_GPIO: u8 = 12;
@@ -60,7 +60,7 @@ impl VaachakStorageBoundary {
 
     /// EPUB cache remains owned by the imported Pulp/smol-epub path in Phase 21.
     pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os + vendor/smol-epub";
-    pub const EPUB_CACHE_MOVED_IN_PHASE21: bool = false;
+    pub const EPUB_CACHE_MOVED_TO_BOUNDARY: bool = false;
 
     pub const ARTIFACTS: &'static [VaachakStorageArtifact] = &[
         VaachakStorageArtifact {
@@ -109,7 +109,7 @@ impl VaachakStorageBoundary {
 
     #[cfg(target_arch = "riscv32")]
     pub fn emit_boot_marker() {
-        esp_println::println!("{}", Self::PHASE21_MARKER);
+        esp_println::println!("{}", Self::STORAGE_BOUNDARY_MARKER);
     }
 
     #[cfg(not(target_arch = "riscv32"))]

@@ -5,10 +5,9 @@
 
 #![allow(dead_code)]
 
-pub const PHASE_40F_LIBRARY_TITLE_LAYOUT_HELPER_MARKER: &str =
-    "phase40f-helper=x4-library-title-layout-helper-ok";
+pub const LIBRARY_TITLE_LAYOUT_HELPER_MARKER: &str = "x4-library-title-layout-helper-ok";
 
-pub const PHASE_40F_LIBRARY_TITLE_MAX_BYTES: usize = 42;
+pub const LIBRARY_TITLE_MAX_BYTES: usize = 42;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Phase40fTitlePolishOutcome {
@@ -32,7 +31,7 @@ fn is_separator(byte: u8) -> bool {
     matches!(byte, b'_' | b'-')
 }
 
-pub fn phase40f_polish_library_title<'a>(
+pub fn polish_library_title<'a>(
     input: &[u8],
     output: &'a mut [u8],
 ) -> (&'a [u8], Phase40fTitlePolishReport) {
@@ -68,7 +67,7 @@ pub fn phase40f_polish_library_title<'a>(
 
     let mut written = 0usize;
     let mut previous_space = false;
-    let max = core::cmp::min(output.len(), PHASE_40F_LIBRARY_TITLE_MAX_BYTES);
+    let max = core::cmp::min(output.len(), LIBRARY_TITLE_MAX_BYTES);
 
     let mut index = start;
     while index < end && written < max {
@@ -117,6 +116,6 @@ pub fn phase40f_polish_library_title<'a>(
     )
 }
 
-pub fn phase40f_helper_marker() -> &'static str {
-    PHASE_40F_LIBRARY_TITLE_LAYOUT_HELPER_MARKER
+pub fn library_title_layout_helper_marker() -> &'static str {
+    LIBRARY_TITLE_LAYOUT_HELPER_MARKER
 }

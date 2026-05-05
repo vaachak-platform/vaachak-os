@@ -34,7 +34,7 @@ use super::theme_state_io_adapter::{
 };
 
 /// Phase marker emitted by validation / boot marker plumbing.
-pub const PHASE_35G_STATE_REGISTRY_ADAPTER_MARKER: &str = "phase35g=x4-state-registry-adapter-ok";
+pub const STATE_REGISTRY_ADAPTER_MARKER: &str = "x4-state-registry-adapter-ok";
 
 pub const STATE_REGISTRY_DIR: &str = "state";
 pub const STATE_REGISTRY_FILE_COUNT: usize = 4;

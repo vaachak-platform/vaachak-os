@@ -24,8 +24,7 @@
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
 /// Phase marker emitted by validation / boot marker plumbing.
-pub const PHASE_35E_METADATA_STATE_IO_ADAPTER_MARKER: &str =
-    "phase35e=x4-metadata-state-io-adapter-ok";
+pub const METADATA_STATE_IO_ADAPTER_MARKER: &str = "x4-metadata-state-io-adapter-ok";
 
 pub const METADATA_STATE_DIR: &str = "state";
 pub const METADATA_STATE_EXTENSION: &str = "MTA";
@@ -265,8 +264,8 @@ where
     }
 }
 
-pub fn phase35e_metadata_state_io_adapter_marker() -> &'static str {
-    PHASE_35E_METADATA_STATE_IO_ADAPTER_MARKER
+pub fn metadata_state_io_adapter_marker() -> &'static str {
+    METADATA_STATE_IO_ADAPTER_MARKER
 }
 
 pub fn write_metadata_state_path(
