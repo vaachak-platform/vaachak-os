@@ -1,6 +1,5 @@
 //! Biscuit-inspired Home screen layout descriptors.
 //!
-//! Phase 41C intentionally keeps behavior in the existing Home app. This module
 //! provides a stable descriptor for the accepted Home polish patch.
 
 #![allow(dead_code)]

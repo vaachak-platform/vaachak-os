@@ -491,18 +491,23 @@ impl super::Kernel {
             self.bm_cache.flush(&self.sd);
         }
 
+        let sleep_bitmap_rendered = self.render_daily_sleep_bitmap().await;
+        if !sleep_bitmap_rendered {
+            self.epd
+                .full_refresh_async(self.strip, &mut self.delay, &|s: &mut StripBuffer| {
+                    let style = MonoTextStyle::new(&FONT_9X18, BinaryColor::On);
+                    let _ = Text::new("(sleep)", Point::new(210, 400), style).draw(s);
+                })
+                .await;
+            esp_println::println!("display: fallback sleep screen rendered");
+        }
+
         self.sd_card_sleep();
 
-        self.epd
-            .full_refresh_async(self.strip, &mut self.delay, &|s: &mut StripBuffer| {
-                let style = MonoTextStyle::new(&FONT_9X18, BinaryColor::On);
-                let _ = Text::new("(sleep)", Point::new(210, 400), style).draw(s);
-            })
-            .await;
-        info!("display: sleep screen rendered");
-
         self.epd.enter_deep_sleep();
-        info!("display: deep sleep mode 1");
+        esp_println::println!("display: deep sleep mode 1");
+
+        self.wait_for_power_button_release_before_sleep();
 
         // safety: deep sleep never returns, the MCU resets on wake, so
         // these stolen peripherals cannot alias with their original
@@ -520,7 +525,7 @@ impl super::Kernel {
         let mut sleep_config = RtcSleepConfig::deep();
         sleep_config.set_rtc_fastmem_pd_en(false); // keep RTC FAST powered
 
-        info!("mcu: entering deep sleep (power button to wake, RTC FAST retained)");
+        esp_println::println!("mcu: entering deep sleep (power button to wake, RTC FAST retained)");
         rtc.sleep(&sleep_config, &[&rtcio]);
 
         // deep sleep resets the MCU; backstop if sleep returns
@@ -528,6 +533,195 @@ impl super::Kernel {
         loop {
             core::hint::spin_loop();
         }
+    }
+
+    async fn render_daily_sleep_bitmap(&mut self) -> bool {
+        use super::sleep_bitmap::{self, SleepImageMode};
+        use core::cell::Cell;
+        use embassy_time::Instant;
+
+        let total_start = Instant::now();
+
+        let mode_start = Instant::now();
+        let mode = sleep_bitmap::read_sleep_image_mode(&self.sd);
+        esp_println::println!(
+            "sleep image: mode={} mode_read_ms={}",
+            mode.name(),
+            mode_start.elapsed().as_millis()
+        );
+
+        match mode {
+            SleepImageMode::NoRedraw => {
+                esp_println::println!(
+                    "sleep image: no-redraw total_ms={}",
+                    total_start.elapsed().as_millis()
+                );
+                return true;
+            }
+            SleepImageMode::TextFallback => {
+                esp_println::println!(
+                    "sleep image: text fallback requested total_ms={}",
+                    total_start.elapsed().as_millis()
+                );
+                return false;
+            }
+            SleepImageMode::DailyMantra
+            | SleepImageMode::FastDaily
+            | SleepImageMode::StaticBitmap
+            | SleepImageMode::Cached => {}
+        }
+
+        let bmp_decode_ms = Cell::new(0u64);
+        let resolve_start = Instant::now();
+        let Some(info) =
+            sleep_bitmap::resolve_sleep_bitmap_for_mode_timed(&self.sd, mode, &bmp_decode_ms)
+        else {
+            esp_println::println!(
+                "sleep image: no valid bitmap found mode={} resolve_ms={} bmp_decode_ms={} total_ms={}",
+                mode.name(),
+                resolve_start.elapsed().as_millis(),
+                bmp_decode_ms.get(),
+                total_start.elapsed().as_millis()
+            );
+            return false;
+        };
+
+        let cache_key = sleep_bitmap::sleep_bitmap_cache_hint_for_info(&info);
+        esp_println::println!(
+            "sleep image: bitmap resolved mode={} resolve_ms={} bmp_decode_ms={} cache_key={}",
+            mode.name(),
+            resolve_start.elapsed().as_millis(),
+            bmp_decode_ms.get(),
+            cache_key
+        );
+
+        if mode == SleepImageMode::Cached
+            && sleep_bitmap::sleep_bitmap_cache_hint_matches(&self.sd, &info)
+        {
+            esp_println::println!(
+                "sleep image: cached redraw skipped mode={} total_ms={}",
+                mode.name(),
+                total_start.elapsed().as_millis()
+            );
+            return true;
+        }
+
+        let bmp_prefetch_ms = Cell::new(0u64);
+        let prefetched =
+            sleep_bitmap::prefetch_sleep_bitmap_timed(&self.sd, &info, &bmp_prefetch_ms);
+        if prefetched.is_some() {
+            esp_println::println!(
+                "sleep image: bitmap prefetched mode={} bmp_prefetch_ms={}",
+                mode.name(),
+                bmp_prefetch_ms.get()
+            );
+        } else {
+            esp_println::println!(
+                "sleep image: prefetch unavailable mode={} bmp_prefetch_ms={} fallback=streaming",
+                mode.name(),
+                bmp_prefetch_ms.get()
+            );
+        }
+
+        let bmp_draw_ms = Cell::new(0u64);
+        let ok = Cell::new(true);
+        let sd = &self.sd;
+        let epd_start = Instant::now();
+
+        match mode {
+            SleepImageMode::FastDaily => {
+                self.epd
+                    .partial_refresh_async(
+                        self.strip,
+                        &mut self.delay,
+                        0,
+                        0,
+                        800,
+                        480,
+                        &|s: &mut StripBuffer| {
+                            let drawn = if let Some(bitmap) = prefetched.as_ref() {
+                                sleep_bitmap::draw_prefetched_sleep_bitmap_strip_timed(
+                                    bitmap,
+                                    s,
+                                    &bmp_draw_ms,
+                                )
+                            } else {
+                                sleep_bitmap::draw_sleep_bitmap_strip_timed(
+                                    sd,
+                                    &info,
+                                    s,
+                                    &bmp_draw_ms,
+                                )
+                            };
+                            if !drawn {
+                                ok.set(false);
+                            }
+                        },
+                    )
+                    .await;
+            }
+            SleepImageMode::DailyMantra | SleepImageMode::StaticBitmap | SleepImageMode::Cached => {
+                self.epd
+                    .full_refresh_async(self.strip, &mut self.delay, &|s: &mut StripBuffer| {
+                        let drawn = if let Some(bitmap) = prefetched.as_ref() {
+                            sleep_bitmap::draw_prefetched_sleep_bitmap_strip_timed(
+                                bitmap,
+                                s,
+                                &bmp_draw_ms,
+                            )
+                        } else {
+                            sleep_bitmap::draw_sleep_bitmap_strip_timed(sd, &info, s, &bmp_draw_ms)
+                        };
+                        if !drawn {
+                            ok.set(false);
+                        }
+                    })
+                    .await;
+            }
+            SleepImageMode::TextFallback | SleepImageMode::NoRedraw => {}
+        }
+
+        let epd_refresh_ms = epd_start.elapsed().as_millis();
+        if ok.get() {
+            esp_println::println!(
+                "display: sleep bitmap rendered mode={} bmp_prefetch_ms={} bmp_draw_ms={} bmp_decode_ms={} epd_refresh_ms={} total_ms={}",
+                mode.name(),
+                bmp_prefetch_ms.get(),
+                bmp_draw_ms.get(),
+                bmp_decode_ms.get(),
+                epd_refresh_ms,
+                total_start.elapsed().as_millis()
+            );
+        } else {
+            esp_println::println!(
+                "display: sleep bitmap render failed mode={} bmp_prefetch_ms={} bmp_draw_ms={} bmp_decode_ms={} epd_refresh_ms={} total_ms={}",
+                mode.name(),
+                bmp_prefetch_ms.get(),
+                bmp_draw_ms.get(),
+                bmp_decode_ms.get(),
+                epd_refresh_ms,
+                total_start.elapsed().as_millis()
+            );
+        }
+        ok.get()
+    }
+
+    fn wait_for_power_button_release_before_sleep(&mut self) {
+        use embedded_hal::delay::DelayNs;
+
+        const RELEASE_POLL_MS: u32 = 10;
+        const RELEASE_SETTLE_MS: u32 = 120;
+
+        if crate::board::power_button_is_low() {
+            log::info!("sleep: waiting for power button release before deep sleep");
+        }
+
+        while crate::board::power_button_is_low() {
+            self.delay.delay_ms(RELEASE_POLL_MS);
+        }
+
+        self.delay.delay_ms(RELEASE_SETTLE_MS);
+        log::info!("sleep: power button released; entering deep sleep");
     }
 
     // send cmd0 to put sd card into idle/sleep state;

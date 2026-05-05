@@ -11,7 +11,7 @@ use super::biscuit_tokens::{BISCUIT_SPACING, BISCUIT_TYPOGRAPHY};
 pub const HOME_APP_PLACEHOLDERS_MARKER: &str = "x4-home-app-placeholders-ok";
 
 pub const HOME_APP_PLACEHOLDERS_VISUAL_ONLY: bool = true;
-pub const HOME_PLACEHOLDER_APPS: [&str; 3] = ["Reader", "Sync", "Settings"];
+pub const HOME_PLACEHOLDER_APPS: [&str; 3] = ["Apps", "Sync", "Settings"];
 
 pub const CHANGES_HOME_RENDERING: bool = true;
 pub const CHANGES_APP_ROUTING: bool = false;
@@ -64,4 +64,13 @@ impl BiscuitHomeAppShelfLayout {
 
 pub const fn home_apps_marker() -> &'static str {
     HOME_APP_PLACEHOLDERS_MARKER
+}
+
+pub const HOME_APP_CONTAINER_COUNT: usize = 2;
+pub const HOME_APP_CONTAINER_SUBTITLE: &str = "2 apps";
+pub const fn home_app_container_count() -> usize {
+    HOME_APP_CONTAINER_COUNT
+}
+pub const fn home_app_container_subtitle() -> &'static str {
+    HOME_APP_CONTAINER_SUBTITLE
 }

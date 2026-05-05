@@ -81,6 +81,11 @@ impl<'k> KernelHandle<'k> {
     }
 
     #[inline]
+    pub fn write_file(&mut self, name: &str, data: &[u8]) -> Result<()> {
+        storage::write_file(&self.kernel.sd, name, data)
+    }
+
+    #[inline]
     pub fn save_title(&mut self, filename: &str, title: &str) -> Result<()> {
         storage::save_title(&self.kernel.sd, filename, title)
     }

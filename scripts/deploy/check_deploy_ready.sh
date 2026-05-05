@@ -18,7 +18,7 @@ fail() {
 [ -f vendor/pulp-os/src/apps/files.rs ] || fail "MissingFilesApp"
 [ -f vendor/pulp-os/src/apps/reader/mod.rs ] || fail "MissingReaderApp"
 
-overlay_count="$(find . -maxdepth 1 -type d -name 'phase*_overlay' | wc -l | tr -d ' ')"
+overlay_count="$(find . -maxdepth 1 -type d -name '*_overlay' | wc -l | tr -d ' ')"
 zip_count="$(find . -maxdepth 1 -type f -name 'phase*.zip' | wc -l | tr -d ' ')"
 
 old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' vendor/pulp-os/src/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
@@ -51,7 +51,7 @@ fi
   echo "status=$status"
   echo "reason=$reason"
   echo "sd=$SD"
-  echo "root_phase_overlay_dirs=$overlay_count"
+  echo "root_overlay_dirs=$overlay_count"
   echo "root_phase_zip_files=$zip_count"
   echo "titlemap_status=$titlemap_status"
   echo "titles_status=$titles_status"

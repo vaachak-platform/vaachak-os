@@ -1,0 +1,5 @@
+scripts/apply_sleep_settings_ui.sh
+scripts/audit_sleep_settings_ui.sh
+docs/sleep-settings-ui.md
+README-APPLY.txt
+MANIFEST.txt

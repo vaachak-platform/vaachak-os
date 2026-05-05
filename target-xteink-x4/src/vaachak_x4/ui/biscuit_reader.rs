@@ -1,6 +1,5 @@
 //! Biscuit-inspired Reader shell descriptors.
 //!
-//! Phase 41E changes only Reader chrome/status labels. It does not change text
 //! layout, pagination, restore, input mapping, title-cache, or write-lane behavior.
 
 #![allow(dead_code)]

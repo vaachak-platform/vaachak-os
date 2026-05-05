@@ -495,6 +495,39 @@ pub fn read_file_start_in_dir(
     })
 }
 
+pub fn read_file_chunk_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+    offset: u32,
+    buf: &mut [u8],
+) -> crate::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_read_chunk!(
+            inner, dir_h, name, offset, buf
+        ))
+    })
+}
+
+pub fn read_file_start_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+    buf: &mut [u8],
+) -> crate::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_read_start!(
+            inner, dir_h, name, buf
+        ))
+    })
+}
+
 // async boot path (runs inside the real executor)
 
 pub async fn ensure_x4_dir_async(sd: &SdStorage) -> crate::error::Result<()> {

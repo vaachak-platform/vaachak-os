@@ -1,0 +1,5 @@
+scripts/apply_sleep_image_serial_timing_repair.sh
+scripts/audit_sleep_image_serial_timing_repair.sh
+docs/sleep-image-serial-timing-repair.md
+README-APPLY.txt
+MANIFEST.txt

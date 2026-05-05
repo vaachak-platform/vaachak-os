@@ -1,0 +1,10 @@
+files/vendor/pulp-os/kernel/src/kernel/sleep_bitmap.rs
+files/scripts/write_sleep_image_mode.sh
+files/scripts/verify_sleep_image_mode.sh
+files/scripts/write_sleep_image_cache_hint.sh
+files/scripts/clear_sleep_image_cache_hint.sh
+scripts/apply_sleep_bitmap_prefetch_cache.sh
+scripts/audit_sleep_bitmap_prefetch_cache.sh
+docs/sleep-bitmap-prefetch-cache.md
+README-APPLY.txt
+MANIFEST.txt

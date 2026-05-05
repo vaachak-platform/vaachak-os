@@ -36,7 +36,26 @@ const VALUE_W: u16 = 156;
 const VALUE_X: u16 = SCREEN_W - LARGE_MARGIN - VALUE_W;
 const LABEL_W: u16 = FULL_CONTENT_W - VALUE_W - 8;
 
-const NUM_ROWS: usize = 22;
+const NUM_ROWS: usize = 23;
+
+const SLEEP_IMAGE_MODE_FILE: &str = "SLPMODE.TXT";
+const SLEEP_IMAGE_MODE_COUNT: u8 = 6;
+const SLEEP_IMAGE_MODE_VALUES: [&str; SLEEP_IMAGE_MODE_COUNT as usize] = [
+    "daily",
+    "fast-daily",
+    "static",
+    "cached",
+    "text",
+    "no-redraw",
+];
+const SLEEP_IMAGE_MODE_LABELS: [&str; SLEEP_IMAGE_MODE_COUNT as usize] = [
+    "Daily",
+    "Fast Daily",
+    "Static",
+    "Cached",
+    "Text",
+    "No Redraw",
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsRowKind {
@@ -53,6 +72,7 @@ enum SettingsRowKind {
     StorageRebuildCache,
     DeviceBattery,
     DeviceSleepTimeout,
+    DeviceSleepImageMode,
     DeviceButtonTest,
     AboutOs,
     AboutDevice,
@@ -132,6 +152,10 @@ const ROWS: [SettingsRow; NUM_ROWS] = [
         kind: SettingsRowKind::DeviceSleepTimeout,
     },
     SettingsRow {
+        label: "Sleep image",
+        kind: SettingsRowKind::DeviceSleepImageMode,
+    },
+    SettingsRow {
         label: "Button test",
         kind: SettingsRowKind::DeviceButtonTest,
     },
@@ -180,6 +204,7 @@ pub struct SettingsApp {
     display_invert: bool,
     display_contrast: bool,
     device_sleep_timeout: u8,
+    sleep_image_mode: u8,
 }
 
 impl SettingsApp {
@@ -201,6 +226,7 @@ impl SettingsApp {
             display_invert: false,
             display_contrast: false,
             device_sleep_timeout: 1,
+            sleep_image_mode: 0,
         }
     }
 
@@ -252,7 +278,28 @@ impl SettingsApp {
         }
 
         self.sync_local_from_system_settings();
+        self.load_sleep_image_mode(k);
         self.loaded = true;
+    }
+
+    fn load_sleep_image_mode(&mut self, k: &mut KernelHandle<'_>) {
+        let mut buf = [0u8; 32];
+        self.sleep_image_mode = match k.read_file_start(SLEEP_IMAGE_MODE_FILE, &mut buf) {
+            Ok((_size, n)) if n > 0 => parse_sleep_image_mode(&buf[..n]),
+            _ => 0,
+        };
+    }
+
+    fn save_sleep_image_mode(&self, k: &mut KernelHandle<'_>) -> bool {
+        let mut buf = [0u8; 16];
+        let len = write_sleep_image_mode(self.sleep_image_mode, &mut buf);
+        match k.write_file(SLEEP_IMAGE_MODE_FILE, &buf[..len]) {
+            Ok(_) => true,
+            Err(e) => {
+                log::error!("settings: sleep image mode save failed: {}", e);
+                false
+            }
+        }
     }
 
     fn sync_local_from_system_settings(&mut self) {
@@ -296,7 +343,7 @@ impl SettingsApp {
     fn save(&self, k: &mut KernelHandle<'_>) -> bool {
         let mut buf = [0u8; 1024];
         let len = write_settings_txt(&self.settings, &self.wifi, &mut buf);
-        match k.write_app_data(config::SETTINGS_FILE, &buf[..len]) {
+        let settings_saved = match k.write_app_data(config::SETTINGS_FILE, &buf[..len]) {
             Ok(_) => {
                 log::info!("settings: saved to {}", config::SETTINGS_FILE);
                 true
@@ -305,7 +352,10 @@ impl SettingsApp {
                 log::error!("settings: save failed: {}", e);
                 false
             }
-        }
+        };
+
+        let sleep_mode_saved = self.save_sleep_image_mode(k);
+        settings_saved && sleep_mode_saved
     }
 
     fn visible_rows(&self) -> usize {
@@ -413,6 +463,11 @@ impl SettingsApp {
                 self.device_sleep_timeout = cycle_index(self.device_sleep_timeout, 4, delta);
                 true
             }
+            SettingsRowKind::DeviceSleepImageMode => {
+                self.sleep_image_mode =
+                    cycle_index(self.sleep_image_mode, SLEEP_IMAGE_MODE_COUNT, delta);
+                true
+            }
             _ => false,
         };
 
@@ -480,6 +535,9 @@ impl SettingsApp {
                     "{}",
                     ["5 min", "10 min", "30 min", "Never"][self.device_sleep_timeout as usize]
                 );
+            }
+            SettingsRowKind::DeviceSleepImageMode => {
+                let _ = write!(buf, "{}", sleep_image_mode_name(self.sleep_image_mode));
             }
             SettingsRowKind::DeviceButtonTest => {
                 let _ = write!(buf, "Coming soon");
@@ -613,7 +671,9 @@ impl App<AppId> for SettingsApp {
             let is_section = matches!(row.kind, SettingsRowKind::Section(_));
 
             if is_section {
-                BitmapLabel::new(self.row_region(vi), row.label, self.ui_fonts.body)
+                let section_font = fonts::FontSet::for_size(self.settings.ui_font_size_idx)
+                    .font(fonts::Style::Bold);
+                BitmapLabel::new(self.row_region(vi), row.label, section_font)
                     .alignment(Alignment::CenterLeft)
                     .inverted(selected)
                     .draw(strip)
@@ -634,6 +694,50 @@ impl App<AppId> for SettingsApp {
             }
         }
     }
+}
+
+fn sleep_image_mode_name(idx: u8) -> &'static str {
+    SLEEP_IMAGE_MODE_LABELS
+        .get(idx as usize)
+        .copied()
+        .unwrap_or("Daily")
+}
+
+fn sleep_image_mode_value(idx: u8) -> &'static str {
+    SLEEP_IMAGE_MODE_VALUES
+        .get(idx as usize)
+        .copied()
+        .unwrap_or("daily")
+}
+
+fn parse_sleep_image_mode(data: &[u8]) -> u8 {
+    let Ok(text) = core::str::from_utf8(data) else {
+        return 0;
+    };
+    let trimmed = text.trim();
+    for (idx, value) in SLEEP_IMAGE_MODE_VALUES.iter().enumerate() {
+        if trimmed.eq_ignore_ascii_case(value) {
+            return idx as u8;
+        }
+    }
+    if trimmed.eq_ignore_ascii_case("off") {
+        return 5;
+    }
+    0
+}
+
+fn write_sleep_image_mode(idx: u8, out: &mut [u8]) -> usize {
+    let value = sleep_image_mode_value(idx).as_bytes();
+    let mut pos = 0usize;
+    while pos < value.len() && pos < out.len() {
+        out[pos] = value[pos];
+        pos += 1;
+    }
+    if pos < out.len() {
+        out[pos] = b'\n';
+        pos += 1;
+    }
+    pos
 }
 
 fn cycle_index(value: u8, count: u8, delta: isize) -> u8 {

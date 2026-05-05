@@ -1,0 +1,8 @@
+files/vendor/pulp-os/kernel/src/kernel/sleep_bitmap.rs
+files/scripts/write_daily_mantra_today_file.sh
+files/scripts/verify_daily_mantra_direct_sleep_files.sh
+scripts/apply_daily_mantra_direct_sleep_loader.sh
+scripts/audit_daily_mantra_direct_sleep_loader.sh
+docs/daily-mantra-direct-sleep-loader.md
+README-APPLY.txt
+MANIFEST.txt

@@ -1,7 +1,6 @@
 //! Biscuit-inspired UI tokens for the X4 target.
 //!
-//! Phase 41B adds tokens only. These constants do not change screen behavior
-//! until later phases explicitly adopt them in Home/Files/Reader rendering.
+//! until later UI work adopts them in Home/Files/Reader rendering.
 
 #![allow(dead_code)]
 

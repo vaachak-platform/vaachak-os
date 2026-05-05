@@ -463,8 +463,6 @@ impl AppManager {
             self.handle_quick_menu(event, bm_cache)
         } else if matches!(event, ActionEvent::Press(Action::Menu)) {
             let active = self.launcher.active();
-
-            // Phase 42B-R3E: Reader background/entry can reload per-book theme/progress
             // after Settings propagation. Re-apply shared Settings prefs before the
             // quick menu snapshots Reader quick actions.
             if active == AppId::Reader {
@@ -591,8 +589,6 @@ impl AppManager {
                     });
                 }
             }
-
-            // Phase 42B-R3: apply persisted/shared reader preferences after app entry.
             // Reader on_enter/restore can load per-book state, so global Settings must
             // be pushed after entry to keep Main Settings and Reader quick settings in sync.
             self.propagate_fonts();
@@ -615,8 +611,6 @@ impl AppManager {
         with_app!(active, self, |app| {
             app.background(&mut self.launcher.ctx, k).await
         });
-
-        // Phase 42B-R3E: active Reader background can load per-book theme/progress
         // after app entry. Re-apply shared Settings prefs before the next draw/event.
         if active == AppId::Reader || active == AppId::Settings {
             self.propagate_fonts();
@@ -631,8 +625,6 @@ impl AppManager {
                 });
             }
         }
-
-        // Phase 42B-R3E: suspended Settings background can save a changed prefs snapshot.
         // Keep the live Reader quick-setting cache aligned with the shared settings.
         self.propagate_fonts();
 

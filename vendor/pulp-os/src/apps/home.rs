@@ -105,11 +105,13 @@ fn compute_item_regions(heading_line_h: u16) -> [Region; MAX_ITEMS] {
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum HomeState {
     Menu,
+    ShowApps,
+    ShowDailyMantra,
     ShowBookmarks,
 }
 
 enum MenuAction {
-    Reader,
+    OpenApps,
     Push(AppId),
     OpenBookmarks,
     Placeholder(&'static str),
@@ -175,7 +177,9 @@ impl HomeApp {
     pub fn state_id(&self) -> u8 {
         match self.state {
             HomeState::Menu => 0,
-            HomeState::ShowBookmarks => 1,
+            HomeState::ShowApps => 1,
+            HomeState::ShowDailyMantra => 2,
+            HomeState::ShowBookmarks => 3,
         }
     }
 
@@ -203,7 +207,9 @@ impl HomeApp {
         bm_scroll: usize,
     ) {
         self.state = match state_id {
-            1 => HomeState::ShowBookmarks,
+            1 => HomeState::ShowApps,
+            2 => HomeState::ShowDailyMantra,
+            3 => HomeState::ShowBookmarks,
             _ => HomeState::Menu,
         };
         self.selected = selected.min(HOME_CARD_COUNT - 1);
@@ -382,7 +388,7 @@ impl HomeApp {
 
     fn item_action(&self, idx: usize) -> MenuAction {
         match idx {
-            0 => MenuAction::Reader,
+            0 => MenuAction::OpenApps,
             1 => MenuAction::Push(AppId::Files),
             2 => MenuAction::OpenBookmarks,
             3 => MenuAction::Push(AppId::Settings),
@@ -650,6 +656,8 @@ impl App<AppId> for HomeApp {
     fn on_event(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match self.state {
             HomeState::Menu => self.on_event_menu(event, ctx),
+            HomeState::ShowApps => self.on_event_apps(event, ctx),
+            HomeState::ShowDailyMantra => self.on_event_daily_mantra(event, ctx),
             HomeState::ShowBookmarks => self.on_event_bookmarks(event, ctx),
         }
     }
@@ -657,6 +665,8 @@ impl App<AppId> for HomeApp {
     fn draw(&self, strip: &mut StripBuffer) {
         match self.state {
             HomeState::Menu => self.draw_menu(strip),
+            HomeState::ShowApps => self.draw_apps(strip),
+            HomeState::ShowDailyMantra => self.draw_daily_mantra(strip),
             HomeState::ShowBookmarks => self.draw_bookmarks(strip),
         }
     }
@@ -682,22 +692,11 @@ impl HomeApp {
                 Transition::None
             }
             ActionEvent::Press(Action::Select) => match self.item_action(self.selected) {
-                MenuAction::Reader => {
-                    if let Some(rec) = self.recent_record() {
-                        log::info!(
-                            "reader-slice: continue from typed recent book_id={} path={}",
-                            rec.book_id.as_str(),
-                            rec.open_path()
-                        );
-                        ctx.set_message(rec.open_path().as_bytes());
-                        Transition::Push(AppId::Reader)
-                    } else {
-                        log::info!(
-                            "home-dashboard: reader card selected without recent; opening library"
-                        );
-                        ctx.clear_message();
-                        Transition::Push(AppId::Files)
-                    }
+                MenuAction::OpenApps => {
+                    self.selected = 0;
+                    self.state = HomeState::ShowApps;
+                    ctx.request_full_redraw();
+                    Transition::None
                 }
                 MenuAction::Push(app) => Transition::Push(app),
                 MenuAction::OpenBookmarks => {
@@ -716,6 +715,71 @@ impl HomeApp {
                     Transition::None
                 }
             },
+            _ => Transition::None,
+        }
+    }
+
+    fn open_reader_entry(&mut self, ctx: &mut AppContext) -> Transition {
+        if let Some(rec) = self.recent_record() {
+            log::info!(
+                "reader-slice: continue from typed recent book_id={} path={}",
+                rec.book_id.as_str(),
+                rec.open_path()
+            );
+            ctx.set_message(rec.open_path().as_bytes());
+            Transition::Push(AppId::Reader)
+        } else {
+            log::info!("home-dashboard: reader app selected without recent; opening library");
+            ctx.clear_message();
+            Transition::Push(AppId::Files)
+        }
+    }
+
+    fn on_event_apps(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
+                let previous = self.selected.min(Self::app_count().saturating_sub(1));
+                let next = (previous + 1).min(Self::app_count().saturating_sub(1));
+                self.selected = next;
+                self.request_apps_list_selection_redraw(ctx, previous, next);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
+                let previous = self.selected.min(Self::app_count().saturating_sub(1));
+                let next = previous.saturating_sub(1);
+                self.selected = next;
+                self.request_apps_list_selection_redraw(ctx, previous, next);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                self.selected = 0;
+                self.state = HomeState::Menu;
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) => match self.selected {
+                0 => self.open_reader_entry(ctx),
+                1 => {
+                    self.state = HomeState::ShowDailyMantra;
+                    ctx.request_full_redraw();
+                    Transition::None
+                }
+                _ => Transition::None,
+            },
+            _ => Transition::None,
+        }
+    }
+
+    fn on_event_daily_mantra(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back)
+            | ActionEvent::LongPress(Action::Back)
+            | ActionEvent::Press(Action::Select) => {
+                self.state = HomeState::ShowApps;
+                self.selected = 1;
+                ctx.request_full_redraw();
+                Transition::None
+            }
             _ => Transition::None,
         }
     }
@@ -932,7 +996,7 @@ impl HomeApp {
 
     fn card_title(&self, idx: usize) -> &'static str {
         match idx {
-            0 => "Reader",
+            0 => "Apps",
             1 => "Library",
             2 => "Bookmarks",
             3 => "Settings",
@@ -943,7 +1007,7 @@ impl HomeApp {
 
     fn card_subtitle(&self, idx: usize) -> &'static str {
         match idx {
-            0 => "Continue reading",
+            0 => "2 apps",
             1 => "Browse books",
             2 => "Saved places",
             3 => "Device & reader",
@@ -954,10 +1018,7 @@ impl HomeApp {
 
     fn card_detail(&self, idx: usize) -> String {
         match idx {
-            0 => self
-                .recent_preview_text()
-                .map(|title| Self::ellipsize_ascii(&title, HOME_DETAIL_MAX_CHARS))
-                .unwrap_or_else(|| String::from("Choose from Library")),
+            0 => String::from("Reader, Daily Mantra"),
             2 if self.bm_count > 0 => {
                 let mut out = String::new();
                 let _ = write!(out, "{} saved", self.bm_count);
@@ -966,6 +1027,166 @@ impl HomeApp {
             4 => String::from("Placeholder"),
             5 => String::from("Placeholder"),
             _ => String::new(),
+        }
+    }
+
+    const fn app_count() -> usize {
+        2
+    }
+
+    const fn app_title(idx: usize) -> &'static str {
+        match idx {
+            0 => "Reader",
+            1 => "Daily Mantra",
+            _ => "",
+        }
+    }
+
+    const fn app_detail(idx: usize) -> &'static str {
+        match idx {
+            0 => "Read books and documents",
+            1 => "Weekday mantra sleep images",
+            _ => "",
+        }
+    }
+
+    fn draw_screen_header(&self, strip: &mut StripBuffer, title: &str, status: &str) {
+        let header_region = Region::new(
+            LARGE_MARGIN,
+            BM_TITLE_Y,
+            HEADER_W,
+            self.ui_fonts.heading.line_height,
+        );
+        BitmapLabel::new(header_region, title, self.ui_fonts.heading)
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+
+        let status_region = Region::new(
+            SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(104),
+            BM_TITLE_Y,
+            104,
+            self.card_meta_font().line_height,
+        );
+        BitmapLabel::new(status_region, status, self.card_meta_font())
+            .alignment(Alignment::CenterRight)
+            .draw(strip)
+            .unwrap();
+    }
+
+    fn app_row_region(&self, idx: usize) -> Region {
+        let row_y = match idx {
+            0 => BM_TITLE_Y + self.ui_fonts.heading.line_height + 24,
+            1 => BM_TITLE_Y + self.ui_fonts.heading.line_height + 96,
+            _ => BM_TITLE_Y + self.ui_fonts.heading.line_height + 168,
+        };
+        Region::new(LARGE_MARGIN, row_y, FULL_CONTENT_W, 58)
+    }
+
+    fn merged_redraw_region(first: Region, second: Region) -> Region {
+        let x0 = first.x.min(second.x);
+        let y0 = first.y.min(second.y);
+        let x1 = first
+            .x
+            .saturating_add(first.w)
+            .max(second.x.saturating_add(second.w));
+        let y1 = first
+            .y
+            .saturating_add(first.h)
+            .max(second.y.saturating_add(second.h));
+        Region::new(x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0))
+    }
+
+    fn request_apps_list_selection_redraw(
+        &self,
+        ctx: &mut AppContext,
+        previous: usize,
+        next: usize,
+    ) {
+        if previous == next {
+            return;
+        }
+
+        let previous_region = self.app_row_region(previous);
+        let next_region = self.app_row_region(next);
+        ctx.request_partial_redraw(Self::merged_redraw_region(previous_region, next_region));
+    }
+
+    fn draw_apps(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Apps", "2 apps");
+
+        for idx in 0..Self::app_count() {
+            self.draw_app_row(strip, idx);
+        }
+    }
+
+    fn draw_app_row(&self, strip: &mut StripBuffer, idx: usize) {
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let row = self.app_row_region(idx);
+        let selected = idx == self.selected.min(Self::app_count().saturating_sub(1));
+
+        let fill = if selected {
+            BinaryColor::On
+        } else {
+            BinaryColor::Off
+        };
+        row.to_rect()
+            .into_styled(PrimitiveStyle::with_fill(fill))
+            .draw(strip)
+            .unwrap();
+
+        let text_x = row.x + HOME_CARD_PAD_X;
+        let text_w = row.w.saturating_sub(HOME_CARD_PAD_X * 2);
+        BitmapLabel::new(
+            Region::new(text_x, row.y + 8, text_w, title_font.line_height),
+            Self::app_title(idx),
+            title_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .inverted(selected)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                text_x,
+                row.y + 8 + title_font.line_height + HOME_CARD_TEXT_GAP,
+                text_w,
+                meta_font.line_height,
+            ),
+            Self::app_detail(idx),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .inverted(selected)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_daily_mantra(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Daily Mantra", "Sleep");
+
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+
+        let lines = [
+            "Prepared weekday images",
+            "/sleep/daily/mon.bmp ... sun.bmp",
+            "/sleep/daily/default.bmp fallback",
+            "Back returns to Apps",
+        ];
+
+        for (idx, line) in lines.iter().enumerate() {
+            let font = if idx == 0 { title_font } else { meta_font };
+            BitmapLabel::new(Region::new(x, y, w, font.line_height), line, font)
+                .alignment(Alignment::CenterLeft)
+                .draw(strip)
+                .unwrap();
+            y += font.line_height + 12;
         }
     }
 

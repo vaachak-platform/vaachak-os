@@ -13,3 +13,9 @@ pub mod physical;
 pub mod state;
 
 pub mod ui;
+
+pub mod text;
+
+pub mod sleep;
+
+pub mod time;
