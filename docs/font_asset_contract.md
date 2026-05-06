@@ -35,6 +35,13 @@ target are clipped safely, and transparent or opaque blit modes can be selected.
 The low-level origin is the top-left bitmap placement; glyph bearing, baseline,
 line layout, fallback, and shaping are deliberately outside this renderer.
 
+The glyph run renderer is also in-memory only. It renders prepared positioned
+glyph records in order, looks up the referenced VFNT font by asset id, and
+forwards each glyph to the bitmap renderer. Empty runs are no-ops. Multiple font
+ids can be served from a borrowed slice, but this remains a prepared-run smoke
+path: it does not parse `.vrun` bytes, perform shaping, compute layout, or apply
+cluster ordering.
+
 Prepared text runs use the `.vrun` contract. A prepared run records positioned
 glyphs and source-text cluster ranges so future host or companion tooling can
 perform shaping off-device and provide a compact result to the e-paper
@@ -54,7 +61,7 @@ normalize, reorder, combine, or substitute characters. Reader, Daily Mantra,
 Sleep Screen, and active UI rendering are also intentionally not wired to these
 contracts yet.
 
-The parser, asset reader, and in-memory glyph renderer do not scan SD cards,
+The parser, asset reader, and in-memory glyph renderers do not scan SD cards,
 discover fonts, perform file IO, or draw to the e-paper display. They are meant
 to support future app-specific text renderers and host-prepared font assets once
 those pieces are introduced deliberately.

@@ -10,6 +10,7 @@ pub mod font_catalog;
 pub mod glyph_bitmap_renderer;
 pub mod glyph_cache;
 pub mod glyph_run;
+pub mod glyph_run_renderer;
 pub mod layout;
 pub mod script;
 pub mod text_run;
