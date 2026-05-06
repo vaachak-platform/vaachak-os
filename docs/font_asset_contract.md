@@ -6,8 +6,16 @@ The contract records the asset magic, version, script class, bitmap format,
 font metrics, glyph metrics table location, bitmap index location, and bitmap
 payload location.
 
-The `.vfnt` types are data contracts only. They do not parse files, read from
-SD, allocate glyph caches, or draw pixels.
+The `.vfnt` parser works over borrowed byte slices. It reads little-endian
+integer fields explicitly, validates the header before slicing tables, checks
+table bounds with checked arithmetic, and verifies that each glyph bitmap record
+points inside the declared bitmap payload. It does not read from SD, allocate
+glyph caches, or draw pixels.
+
+Lookup is intentionally simple and allocation-free. The parser can return
+metrics, bitmap index records, and borrowed bitmap byte slices for a glyph id.
+Malformed assets fail with explicit parser errors instead of exposing unchecked
+slices.
 
 Prepared text runs use the `.vrun` contract. A prepared run records positioned
 glyphs and source-text cluster ranges so future host or companion tooling can
@@ -26,6 +34,10 @@ The current script run splitter performs deterministic Unicode script grouping:
 Indic shaping is intentionally not implemented here. The splitter does not
 normalize, reorder, combine, or substitute characters. Reader rendering is also
 intentionally not wired to these contracts yet.
+
+The parser does not scan SD cards or discover fonts. It is meant to support a
+future X4 glyph bitmap renderer and host-prepared font assets once those pieces
+are introduced deliberately.
 
 Expected future text pipeline:
 
