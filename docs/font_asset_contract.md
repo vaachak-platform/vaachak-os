@@ -17,6 +17,16 @@ metrics, bitmap index records, and borrowed bitmap byte slices for a glyph id.
 Malformed assets fail with explicit parser errors instead of exposing unchecked
 slices.
 
+The read-only asset reader binds borrowed VFNT bytes to a loaded font face. A
+loaded face carries a semantic asset name, the script recorded in the parsed
+header, and the parsed font handle. The bytes are not copied.
+
+Catalog binding can select a loaded face for a requested script class. Exact
+Latin, Devanagari, and Gujarati matches win. Unknown and common text prefer a
+Latin fallback when present. If a requested complex-script face is missing, the
+binding falls back to Latin, then to the first available loaded face. This only
+selects a face; it does not claim that fallback renders every script correctly.
+
 Prepared text runs use the `.vrun` contract. A prepared run records positioned
 glyphs and source-text cluster ranges so future host or companion tooling can
 perform shaping off-device and provide a compact result to the e-paper
@@ -35,12 +45,12 @@ Indic shaping is intentionally not implemented here. The splitter does not
 normalize, reorder, combine, or substitute characters. Reader rendering is also
 intentionally not wired to these contracts yet.
 
-The parser does not scan SD cards or discover fonts. It is meant to support a
-future X4 glyph bitmap renderer and host-prepared font assets once those pieces
-are introduced deliberately.
+The parser and asset reader do not scan SD cards or discover fonts. They are
+meant to support a future X4 glyph bitmap renderer and host-prepared font
+assets once those pieces are introduced deliberately.
 
 Expected future text pipeline:
 
 ```text
-Unicode text -> script runs -> font fallback -> prepared glyph runs -> glyph atlas -> X4 strip renderer
+SD/static asset bytes -> VfntFont parser -> LoadedFontFace -> FontCatalogBinding -> glyph renderer -> app-specific text renderer
 ```

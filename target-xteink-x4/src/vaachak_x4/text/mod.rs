@@ -4,6 +4,7 @@
 //! contracts needed by reader, home, settings, and sleep-screen apps before a
 //! real shaped glyph atlas renderer is wired in.
 
+pub mod font_asset_reader;
 pub mod font_assets;
 pub mod font_catalog;
 pub mod glyph_cache;
