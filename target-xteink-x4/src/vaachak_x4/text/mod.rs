@@ -7,6 +7,7 @@
 pub mod font_asset_reader;
 pub mod font_assets;
 pub mod font_catalog;
+pub mod glyph_bitmap_renderer;
 pub mod glyph_cache;
 pub mod glyph_run;
 pub mod layout;

@@ -27,6 +27,14 @@ Latin fallback when present. If a requested complex-script face is missing, the
 binding falls back to Latin, then to the first available loaded face. This only
 selects a face; it does not claim that fallback renders every script correctly.
 
+The glyph bitmap renderer is an in-memory primitive for parsed glyphs. It
+renders 1bpp VFNT bitmap data into a borrowed monochrome buffer using
+most-significant-bit-first pixels in each byte: bit 7 is the leftmost pixel and
+bit 0 is the rightmost pixel. Source row stride is honored, pixels outside the
+target are clipped safely, and transparent or opaque blit modes can be selected.
+The low-level origin is the top-left bitmap placement; glyph bearing, baseline,
+line layout, fallback, and shaping are deliberately outside this renderer.
+
 Prepared text runs use the `.vrun` contract. A prepared run records positioned
 glyphs and source-text cluster ranges so future host or companion tooling can
 perform shaping off-device and provide a compact result to the e-paper
@@ -42,12 +50,14 @@ The current script run splitter performs deterministic Unicode script grouping:
   of the original input.
 
 Indic shaping is intentionally not implemented here. The splitter does not
-normalize, reorder, combine, or substitute characters. Reader rendering is also
-intentionally not wired to these contracts yet.
+normalize, reorder, combine, or substitute characters. Reader, Daily Mantra,
+Sleep Screen, and active UI rendering are also intentionally not wired to these
+contracts yet.
 
-The parser and asset reader do not scan SD cards or discover fonts. They are
-meant to support a future X4 glyph bitmap renderer and host-prepared font
-assets once those pieces are introduced deliberately.
+The parser, asset reader, and in-memory glyph renderer do not scan SD cards,
+discover fonts, perform file IO, or draw to the e-paper display. They are meant
+to support future app-specific text renderers and host-prepared font assets once
+those pieces are introduced deliberately.
 
 Expected future text pipeline:
 
