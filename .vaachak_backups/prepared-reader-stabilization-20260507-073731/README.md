@@ -50,10 +50,3 @@ The current `x4-reader-os-rs` repo remains the X4 proving-ground and hardware tr
 
 This workspace is still host-friendly and bootstrap-oriented.
 It establishes the seams and the first extracted slice, but it is not yet a full embedded runtime.
-
-## Prepared Reader Stabilization
-
-Prepared TXT/EPUB caches under `/FCACHE/<BOOKID>` are used for mixed-script books that need host-generated Noto glyph runs. When a cache opens successfully, Reader shows `Prep Pg ...`. If a cache fails, Reader shows `Read cache:<BOOKID> err:<CODE>` so the failing loader step can be diagnosed.
-
-For large cache folders, use Wi-Fi Transfer's `Chunked Resume` tab. See `docs/prepared_reader_stabilization_cleanup.md` for limits and validation.
-

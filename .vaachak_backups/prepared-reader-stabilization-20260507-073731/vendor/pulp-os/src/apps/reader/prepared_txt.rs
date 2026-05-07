@@ -548,21 +548,18 @@ fn source_matches(_cache_source: &str, _reader_source: &str) -> bool {
     true
 }
 
-#[allow(dead_code)]
 fn path_basename(path: &str) -> &str {
     path.rsplit(|ch| ch == '/' || ch == '\\')
         .next()
         .unwrap_or(path)
 }
 
-#[allow(dead_code)]
 fn normalized_eq(a: &str, b: &str) -> bool {
     a.bytes()
         .map(normalize_path_byte)
         .eq(b.bytes().map(normalize_path_byte))
 }
 
-#[allow(dead_code)]
 fn normalize_path_byte(b: u8) -> u8 {
     match b {
         b'\\' => b'/',

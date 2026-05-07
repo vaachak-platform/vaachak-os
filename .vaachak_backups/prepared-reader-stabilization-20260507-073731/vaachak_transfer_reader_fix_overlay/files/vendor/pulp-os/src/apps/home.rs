@@ -1301,6 +1301,11 @@ impl HomeApp {
     }
 
     #[allow(dead_code)]
+    fn open_usb_transfer(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.state = HomeState::ShowUsbTransfer;
+        ctx.request_full_redraw();
+    }
 
     fn open_panchang_lite(&mut self, ctx: &mut AppContext) {
         self.return_target = ReturnTarget::CategoryItems;

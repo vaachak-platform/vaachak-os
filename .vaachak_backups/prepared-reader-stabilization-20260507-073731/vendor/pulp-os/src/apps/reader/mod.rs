@@ -1866,10 +1866,20 @@ impl ReaderApp {
             return;
         }
 
-        if let (Some(id), Some(err)) = (self.prepared_cache_debug_id, self.prepared_cache_debug_err)
-        {
+        if let Some(id) = self.prepared_cache_debug_id {
             let id_str = core::str::from_utf8(&id).unwrap_or("????????");
-            let _ = write!(out, "Read cache:{} err:{} ", id_str, err);
+            if let Some(err) = self.prepared_cache_debug_err {
+                let _ = write!(out, "Read cache:{} err:{} ", id_str, err);
+            } else {
+                let _ = write!(out, "Read cache:{} err:OPEN ", id_str);
+            }
+            self.write_position_label(out, true);
+            return;
+        }
+
+        if let Some(book_id) = self.current_book_id() {
+            let id = reader_state::book_id_hex8(&book_id);
+            let _ = write!(out, "Read cache:{} err:OPEN ", id);
             self.write_position_label(out, true);
             return;
         }
