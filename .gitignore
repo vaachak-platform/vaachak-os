@@ -28,3 +28,5 @@ tools/font_prepare/*.pyc
 # USB transfer host-tool artifacts
 tools/usb_transfer/__pycache__/
 tools/usb_transfer/*.pyc
+
+/.vaachak*/
