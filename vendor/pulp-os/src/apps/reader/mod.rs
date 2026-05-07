@@ -3,6 +3,7 @@ const READER_LOADING_LABEL: &str = "Reading";
 mod epubs;
 mod images;
 mod paging;
+mod prepared_txt;
 
 pub use x4_kernel::util::decode_utf8_char;
 
@@ -10,7 +11,7 @@ use crate::apps::PendingSetting;
 use crate::fonts::bitmap::{self, BitmapFont};
 
 use alloc::boxed::Box;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::apps::reader_state::{
@@ -388,6 +389,10 @@ pub struct ReaderApp {
 
     pub(super) chrome_font: Option<&'static BitmapFont>,
     pub(super) show_progress_chrome: bool,
+    pub(super) prepared_font_profile: u8,
+    pub(super) prepared_fallback_policy: u8,
+    pub(super) prepared_cache_debug_id: Option<[u8; 8]>,
+    pub(super) prepared_cache_debug_err: Option<&'static str>,
     pub(super) qa_buf: [QuickAction; QA_MAX],
     pub(super) qa_count: u8,
 
@@ -399,6 +404,7 @@ pub struct ReaderApp {
     pub(super) pending_bookmark_toggle: bool,
     pub(super) pending_open_bookmarks: bool,
     pub(super) pending_theme_persist: bool,
+    prepared_txt: prepared_txt::PreparedTxtState,
 }
 
 impl ReaderApp {
@@ -444,6 +450,10 @@ impl ReaderApp {
 
             chrome_font: None,
             show_progress_chrome: true,
+            prepared_font_profile: crate::kernel::config::DEFAULT_PREPARED_FONT_PROFILE,
+            prepared_fallback_policy: crate::kernel::config::DEFAULT_PREPARED_FALLBACK_POLICY,
+            prepared_cache_debug_id: None,
+            prepared_cache_debug_err: None,
 
             qa_buf: [QuickAction::trigger(0, "", ""); QA_MAX],
             qa_count: 0,
@@ -456,6 +466,7 @@ impl ReaderApp {
             pending_bookmark_toggle: false,
             pending_open_bookmarks: false,
             pending_theme_persist: false,
+            prepared_txt: prepared_txt::PreparedTxtState::new(),
         }
     }
 
@@ -488,6 +499,16 @@ impl ReaderApp {
     pub fn set_show_progress_chrome(&mut self, show: bool) {
         self.show_progress_chrome = show;
         self.rebuild_quick_actions();
+    }
+
+    pub fn set_prepared_font_profile(&mut self, idx: u8) {
+        self.prepared_font_profile =
+            idx.min(crate::kernel::config::PREPARED_FONT_PROFILE_COUNT - 1);
+    }
+
+    pub fn set_prepared_fallback_policy(&mut self, idx: u8) {
+        self.prepared_fallback_policy =
+            idx.min(crate::kernel::config::PREPARED_FALLBACK_POLICY_COUNT - 1);
     }
 
     pub fn has_bg_work(&self) -> bool {
@@ -631,6 +652,126 @@ impl ReaderApp {
         }
 
         self.qa_count = n as u8;
+    }
+
+    fn clear_prepared_cache_error(&mut self) {
+        self.prepared_cache_debug_id = None;
+        self.prepared_cache_debug_err = None;
+    }
+
+    fn record_prepared_cache_error(
+        &mut self,
+        cache_book_id: &str,
+        err: prepared_txt::PreparedTxtError,
+    ) {
+        let mut debug_id = [0u8; 8];
+        let bytes = cache_book_id.as_bytes();
+        let n = bytes.len().min(debug_id.len());
+        debug_id[..n].copy_from_slice(&bytes[..n]);
+        self.prepared_cache_debug_id = Some(debug_id);
+        self.prepared_cache_debug_err = Some(err.code());
+    }
+
+    fn try_open_prepared_book_cache(
+        &mut self,
+        k: &mut KernelHandle<'_>,
+        source_path: &str,
+    ) -> bool {
+        self.clear_prepared_cache_error();
+
+        let mut candidate_ids: Vec<String> = Vec::new();
+
+        if let Some(book_id) = self.current_book_id() {
+            Self::push_prepared_cache_id(&mut candidate_ids, reader_state::book_id_hex8(&book_id));
+        }
+
+        Self::push_prepared_cache_id_for_path(&mut candidate_ids, source_path);
+
+        let stripped = source_path.trim_start_matches(|ch| ch == '/' || ch == '\\');
+        if stripped != source_path {
+            Self::push_prepared_cache_id_for_path(&mut candidate_ids, stripped);
+        }
+
+        let basename = Self::prepared_cache_basename(source_path);
+        if basename != source_path && basename != stripped {
+            Self::push_prepared_cache_id_for_path(&mut candidate_ids, basename);
+        }
+
+        let source_variants = [source_path, stripped, basename];
+
+        for cache_book_id in candidate_ids {
+            for candidate_source in source_variants {
+                if candidate_source.is_empty() {
+                    continue;
+                }
+
+                match self
+                    .prepared_txt
+                    .try_open(k, cache_book_id.as_str(), candidate_source)
+                {
+                    Ok(()) => {
+                        self.clear_prepared_cache_error();
+                        self.restore_offset = None;
+                        self.pg.page = self.pg.page.min(self.prepared_txt.page_count() - 1);
+                        self.pg.total_pages = self.prepared_txt.page_count();
+                        self.pg.fully_indexed = true;
+                        self.pg.buf_len = 0;
+                        self.pg.line_count = 0;
+                        self.pg.prefetch_page = NO_PREFETCH;
+                        self.pg.prefetch_len = 0;
+
+                        for i in 0..self.pg.total_pages.min(MAX_PAGES) {
+                            self.pg.offsets[i] = i as u32;
+                        }
+
+                        self.epub.bg_cache = BgCacheState::Idle;
+                        self.epub.chapters_cached = false;
+                        self.goto_last_page = false;
+
+                        log::info!(
+                            "reader: prepared cache opened cache_id={} source={} pages={}",
+                            cache_book_id.as_str(),
+                            candidate_source,
+                            self.pg.total_pages
+                        );
+
+                        return true;
+                    }
+                    Err(err) => {
+                        self.record_prepared_cache_error(cache_book_id.as_str(), err);
+                        log::info!(
+                            "reader: prepared cache miss cache_id={} source={} err={:?}",
+                            cache_book_id.as_str(),
+                            candidate_source,
+                            err
+                        );
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    fn push_prepared_cache_id_for_path(candidates: &mut Vec<String>, source_path: &str) {
+        let id = reader_state::book_id_hex8(&BookId::from_path(source_path));
+        Self::push_prepared_cache_id(candidates, id);
+    }
+
+    fn push_prepared_cache_id(candidates: &mut Vec<String>, id: String) {
+        if !candidates
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(id.as_str()))
+        {
+            candidates.push(id);
+        }
+    }
+
+    fn prepared_cache_basename(source_path: &str) -> &str {
+        source_path
+            .rsplit(|ch| ch == '/' || ch == '\\')
+            .next()
+            .unwrap_or(source_path)
     }
 
     fn apply_font_metrics(&mut self) {
@@ -1719,6 +1860,30 @@ impl ReaderApp {
     }
 
     fn write_reader_status_label<const N: usize>(&self, out: &mut StackFmt<N>) {
+        if self.prepared_txt.is_active() {
+            let _ = write!(out, "Prep ");
+            self.write_position_label(out, true);
+            return;
+        }
+
+        if let Some(id) = self.prepared_cache_debug_id {
+            let id_str = core::str::from_utf8(&id).unwrap_or("????????");
+            if let Some(err) = self.prepared_cache_debug_err {
+                let _ = write!(out, "Read cache:{} err:{} ", id_str, err);
+            } else {
+                let _ = write!(out, "Read cache:{} err:OPEN ", id_str);
+            }
+            self.write_position_label(out, true);
+            return;
+        }
+
+        if let Some(book_id) = self.current_book_id() {
+            let id = reader_state::book_id_hex8(&book_id);
+            let _ = write!(out, "Read cache:{} err:OPEN ", id);
+            self.write_position_label(out, true);
+            return;
+        }
+
         let _ = write!(out, "{}", READER_STATUS_PREFIX);
         self.write_position_label(out, true);
     }
@@ -1836,6 +2001,7 @@ impl App<AppId> for ReaderApp {
         self.rebuild_quick_actions();
         self.apply_theme_layout();
         self.reset_paging();
+        self.prepared_txt.clear();
         self.epub.ch_cache = Vec::new();
         self.file_size = 0;
         self.bookmarks.clear();
@@ -1880,6 +2046,7 @@ impl App<AppId> for ReaderApp {
         self.pg.prefetch_len = 0;
         self.restore_offset = None;
         self.show_position = false;
+        self.prepared_txt.clear();
         self.epub.ch_cache = Vec::new();
         self.page_img = None;
 
@@ -1966,7 +2133,13 @@ impl App<AppId> for ReaderApp {
                     self.ensure_bookmarks_loaded(k);
                     self.ensure_bookmark_stub(k);
 
-                    if self.is_epub {
+                    let (nb, nl) = self.name_copy();
+                    let source_path = core::str::from_utf8(&nb[..nl]).unwrap_or("");
+
+                    if self.try_open_prepared_book_cache(k, source_path) {
+                        self.state = State::NeedPage;
+                        ctx.set_loading(LOADING_REGION, "Loading prepared", 70);
+                    } else if self.is_epub {
                         self.epub.zip.clear();
                         self.epub.meta = EpubMeta::new();
                         self.epub.spine = EpubSpine::new();
@@ -2141,6 +2314,39 @@ impl App<AppId> for ReaderApp {
                 }
 
                 State::NeedPage => {
+                    if self.prepared_txt.is_active() {
+                        match self.prepared_txt.load_page(k, self.pg.page) {
+                            Ok(()) => {
+                                self.defer_image_decode = false;
+                                self.state = State::Ready;
+                                ctx.clear_loading();
+                                ctx.mark_dirty(PAGE_REGION);
+                            }
+                            Err(_) => {
+                                self.prepared_cache_debug_err = Some("PAGE");
+                                self.prepared_txt.clear();
+                                self.pg.page = 0;
+                                self.pg.offsets[0] = 0;
+                                self.pg.total_pages = 1;
+                                self.pg.fully_indexed = false;
+                                self.pg.buf_len = 0;
+                                self.pg.line_count = 0;
+                                self.pg.prefetch_page = NO_PREFETCH;
+                                self.pg.prefetch_len = 0;
+                                self.restore_offset = None;
+                                match self.load_and_prefetch(k) {
+                                    Ok(()) => {
+                                        self.defer_image_decode = false;
+                                        self.state = State::Ready;
+                                        ctx.clear_loading();
+                                        ctx.mark_dirty(PAGE_REGION);
+                                    }
+                                    Err(e) => self.enter_error(ctx, e),
+                                }
+                            }
+                        }
+                        break;
+                    }
                     if let Some(target_off) = self.restore_offset.take() {
                         self.pg.page = 0;
                         loop {
@@ -2529,6 +2735,8 @@ impl App<AppId> for ReaderApp {
                 book_font: self.book_font_size_idx,
                 reading_theme: self.reading_theme_idx,
                 show_progress: self.show_progress_chrome,
+                prepared_font_profile: self.prepared_font_profile,
+                prepared_fallback_policy: self.prepared_fallback_policy,
             },
         ))
     }
@@ -2751,7 +2959,10 @@ impl App<AppId> for ReaderApp {
             return;
         }
 
-        if let Some(ref fs) = self.fonts {
+        if self.prepared_txt.is_active() {
+            self.prepared_txt
+                .draw(strip, self.text_margin as i32, self.text_y as i32);
+        } else if let Some(ref fs) = self.fonts {
             let line_h = self.font_line_h as i32;
             let ascent = self.font_ascent as i32;
 

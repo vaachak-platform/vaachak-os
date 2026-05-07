@@ -1,5 +1,0 @@
-scripts/apply_sleep_settings_ui_cycle_bold.sh
-scripts/audit_sleep_settings_ui_cycle_bold.sh
-docs/sleep-settings-ui-cycle-bold.md
-README-APPLY.txt
-MANIFEST.txt

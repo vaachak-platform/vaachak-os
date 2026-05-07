@@ -406,6 +406,199 @@ pub fn list_root_files(sd: &SdStorage, buf: &mut [DirEntry]) -> crate::error::Re
     })
 }
 
+pub fn list_root_entries(sd: &SdStorage, buf: &mut [DirEntry]) -> crate::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        let mut count = 0usize;
+        let mut total = 0usize;
+
+        inner
+            .mgr
+            .iterate_dir(inner.root, |entry| {
+                if entry.attributes.is_volume() {
+                    return ControlFlow::Continue(());
+                }
+
+                let mut name_buf = [0u8; 13];
+                let name_len = sfn_to_bytes(&entry.name, &mut name_buf);
+                let sfn = &name_buf[..name_len as usize];
+
+                if sfn.is_empty() || sfn[0] == b'.' {
+                    return ControlFlow::Continue(());
+                }
+
+                total += 1;
+
+                if count < buf.len() {
+                    buf[count] = DirEntry {
+                        name: name_buf,
+                        name_len,
+                        is_dir: entry.attributes.is_directory(),
+                        size: entry.size,
+                        title: [0u8; TITLE_CAP],
+                        title_len: 0,
+                    };
+                    count += 1;
+                }
+
+                ControlFlow::Continue(())
+            })
+            .await
+            .map_err(|_| Error::new(ErrorKind::ReadFailed, "list_root_entries"))?;
+
+        if total > count {
+            log::warn!(
+                "sd-manager: {} entries on SD, only {} fit in buffer",
+                total,
+                count
+            );
+        }
+
+        Ok(count)
+    })
+}
+
+pub fn list_dir_entries(
+    sd: &SdStorage,
+    dir_name: &str,
+    buf: &mut [DirEntry],
+) -> crate::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        let dir = match inner.mgr.open_dir(inner.root, dir_name).await {
+            Ok(d) => d,
+            Err(_) => return Err(Error::new(ErrorKind::OpenDir, "list_dir_entries")),
+        };
+
+        let mut count = 0usize;
+        let mut total = 0usize;
+
+        let result = inner
+            .mgr
+            .iterate_dir(dir, |entry| {
+                if entry.attributes.is_volume() {
+                    return ControlFlow::Continue(());
+                }
+
+                let mut name_buf = [0u8; 13];
+                let name_len = sfn_to_bytes(&entry.name, &mut name_buf);
+                let sfn = &name_buf[..name_len as usize];
+
+                if sfn.is_empty() || sfn[0] == b'.' {
+                    return ControlFlow::Continue(());
+                }
+
+                total += 1;
+
+                if count < buf.len() {
+                    buf[count] = DirEntry {
+                        name: name_buf,
+                        name_len,
+                        is_dir: entry.attributes.is_directory(),
+                        size: entry.size,
+                        title: [0u8; TITLE_CAP],
+                        title_len: 0,
+                    };
+                    count += 1;
+                }
+
+                ControlFlow::Continue(())
+            })
+            .await
+            .map_err(|_| Error::new(ErrorKind::ReadFailed, "list_dir_entries"))
+            .map(|_| count);
+
+        let _ = inner.mgr.close_dir(dir);
+
+        if result.is_ok() && total > count {
+            log::warn!(
+                "sd-manager: {} entries in {}, only {} fit in buffer",
+                total,
+                dir_name,
+                count
+            );
+        }
+
+        result
+    })
+}
+
+pub fn delete_file_in_dir(sd: &SdStorage, dir: &str, name: &str) -> crate::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_dir!(inner, dir, |dir_h| op_delete!(inner, dir_h, name))
+    })
+}
+
+pub fn list_subdir_entries(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    buf: &mut [DirEntry],
+) -> crate::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        in_subdir!(inner, dir, subdir, |dir_h| {
+            let mut count = 0usize;
+            let mut total = 0usize;
+
+            let result = inner
+                .mgr
+                .iterate_dir(dir_h, |entry| {
+                    if entry.attributes.is_volume() {
+                        return ControlFlow::Continue(());
+                    }
+
+                    let mut name_buf = [0u8; 13];
+                    let name_len = sfn_to_bytes(&entry.name, &mut name_buf);
+                    let sfn = &name_buf[..name_len as usize];
+
+                    if sfn.is_empty() || sfn[0] == b'.' {
+                        return ControlFlow::Continue(());
+                    }
+
+                    total += 1;
+
+                    if count < buf.len() {
+                        buf[count] = DirEntry {
+                            name: name_buf,
+                            name_len,
+                            is_dir: entry.attributes.is_directory(),
+                            size: entry.size,
+                            title: [0u8; TITLE_CAP],
+                            title_len: 0,
+                        };
+                        count += 1;
+                    }
+
+                    ControlFlow::Continue(())
+                })
+                .await
+                .map_err(|_| Error::new(ErrorKind::ReadFailed, "list_subdir_entries"))
+                .map(|_| count);
+
+            if result.is_ok() && total > count {
+                log::warn!(
+                    "sd-manager: {} entries in {}/{}, only {} fit in buffer",
+                    total,
+                    dir,
+                    subdir,
+                    count
+                );
+            }
+
+            result
+        })
+    })
+}
+
 // directory management
 
 pub fn ensure_dir(sd: &SdStorage, name: &str) -> crate::error::Result<()> {
@@ -463,6 +656,29 @@ pub fn append_file_in_dir(
         let mut guard = borrow(sd)?;
         let inner = &mut *guard;
         in_dir!(inner, dir, |dir_h| op_append!(inner, dir_h, name, data))
+    })
+}
+
+pub fn file_size_in_dir(sd: &SdStorage, dir: &str, name: &str) -> crate::error::Result<u32> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_dir!(inner, dir, |dir_h| op_file_size!(inner, dir_h, name))
+    })
+}
+
+pub fn file_size_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+) -> crate::error::Result<u32> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_file_size!(
+            inner, dir_h, name
+        ))
     })
 }
 
@@ -525,6 +741,124 @@ pub fn read_file_start_in_subdir(
         in_subdir!(inner, dir, subdir, |dir_h| op_read_start!(
             inner, dir_h, name, buf
         ))
+    })
+}
+
+pub fn ensure_dir_in_dir(sd: &SdStorage, dir: &str, name: &str) -> crate::error::Result<()> {
+    let exists = poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        in_dir!(inner, dir, |dir_h| {
+            match inner.mgr.open_dir(dir_h, name).await {
+                Ok(child) => {
+                    let _ = inner.mgr.close_dir(child);
+                    Ok::<_, Error>(true)
+                }
+                Err(_) => Ok(false),
+            }
+        })
+    })?;
+
+    if exists {
+        return Ok(());
+    }
+
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        in_dir!(inner, dir, |dir_h| {
+            match inner.mgr.make_dir_in_dir(dir_h, name).await {
+                Ok(()) => Ok(()),
+                Err(embedded_sdmmc::Error::DirAlreadyExists) => Ok(()),
+                Err(_) => Err(Error::new(ErrorKind::WriteFailed, "ensure_dir_in_dir")),
+            }
+        })
+    })
+}
+
+pub fn ensure_dir_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+) -> crate::error::Result<()> {
+    let exists = poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        in_subdir!(inner, dir, subdir, |dir_h| {
+            match inner.mgr.open_dir(dir_h, name).await {
+                Ok(child) => {
+                    let _ = inner.mgr.close_dir(child);
+                    Ok::<_, Error>(true)
+                }
+                Err(_) => Ok(false),
+            }
+        })
+    })?;
+
+    if exists {
+        return Ok(());
+    }
+
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        in_subdir!(inner, dir, subdir, |dir_h| {
+            match inner.mgr.make_dir_in_dir(dir_h, name).await {
+                Ok(()) => Ok(()),
+                Err(embedded_sdmmc::Error::DirAlreadyExists) => Ok(()),
+                Err(_) => Err(Error::new(ErrorKind::WriteFailed, "ensure_dir_in_subdir")),
+            }
+        })
+    })
+}
+
+pub fn write_file_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+    data: &[u8],
+) -> crate::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_write!(
+            inner, dir_h, name, data
+        ))
+    })
+}
+
+pub fn append_file_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+    data: &[u8],
+) -> crate::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_append!(
+            inner, dir_h, name, data
+        ))
+    })
+}
+
+pub fn delete_file_in_subdir(
+    sd: &SdStorage,
+    dir: &str,
+    subdir: &str,
+    name: &str,
+) -> crate::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        in_subdir!(inner, dir, subdir, |dir_h| op_delete!(inner, dir_h, name))
     })
 }
 

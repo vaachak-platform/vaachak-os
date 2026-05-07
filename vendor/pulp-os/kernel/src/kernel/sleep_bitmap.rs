@@ -120,7 +120,11 @@ pub fn read_sleep_image_mode(sd: &SdStorage) -> SleepImageMode {
 }
 
 pub fn resolve_sleep_bitmap(sd: &SdStorage) -> Option<SleepBitmapInfo> {
-    if let Some(info) = resolve_daily_mantra_sleep_bitmap(sd) {
+    resolve_sleep_bitmap_at_uptime(sd, 0)
+}
+
+pub fn resolve_sleep_bitmap_at_uptime(sd: &SdStorage, uptime_secs: u32) -> Option<SleepBitmapInfo> {
+    if let Some(info) = resolve_daily_mantra_sleep_bitmap_at_uptime(sd, uptime_secs) {
         return Some(info);
     }
 
@@ -135,9 +139,17 @@ pub fn resolve_sleep_bitmap_for_mode(
     sd: &SdStorage,
     mode: SleepImageMode,
 ) -> Option<SleepBitmapInfo> {
+    resolve_sleep_bitmap_for_mode_at_uptime(sd, mode, 0)
+}
+
+pub fn resolve_sleep_bitmap_for_mode_at_uptime(
+    sd: &SdStorage,
+    mode: SleepImageMode,
+    uptime_secs: u32,
+) -> Option<SleepBitmapInfo> {
     match mode {
         SleepImageMode::DailyMantra | SleepImageMode::FastDaily | SleepImageMode::Cached => {
-            resolve_daily_mantra_sleep_bitmap(sd)
+            resolve_daily_mantra_sleep_bitmap_at_uptime(sd, uptime_secs)
         }
         SleepImageMode::StaticBitmap => probe_sleep_bitmap(sd, ROOT_SLEEP_BITMAP),
         SleepImageMode::TextFallback | SleepImageMode::NoRedraw => None,
@@ -147,15 +159,30 @@ pub fn resolve_sleep_bitmap_for_mode(
 pub fn resolve_sleep_bitmap_for_mode_timed(
     sd: &SdStorage,
     mode: SleepImageMode,
+    uptime_secs: u32,
     bmp_decode_ms: &Cell<u64>,
 ) -> Option<SleepBitmapInfo> {
     let start = embassy_time::Instant::now();
-    let resolved = resolve_sleep_bitmap_for_mode(sd, mode);
+    let resolved = resolve_sleep_bitmap_for_mode_at_uptime(sd, mode, uptime_secs);
     bmp_decode_ms.set(bmp_decode_ms.get() + start.elapsed().as_millis());
     resolved
 }
 
 pub fn resolve_daily_mantra_sleep_bitmap(sd: &SdStorage) -> Option<SleepBitmapInfo> {
+    resolve_daily_mantra_sleep_bitmap_at_uptime(sd, 0)
+}
+
+pub fn resolve_daily_mantra_sleep_bitmap_at_uptime(
+    sd: &SdStorage,
+    uptime_secs: u32,
+) -> Option<SleepBitmapInfo> {
+    if let Some(candidate) = daily_mantra_candidate_from_time_file(sd, uptime_secs) {
+        if let Some(info) = probe_sleep_bitmap(sd, candidate) {
+            return Some(info);
+        }
+        log::warn!("sleep image: date-selected daily bitmap missing or invalid");
+    }
+
     if let Some(candidate) = daily_mantra_candidate_from_today_file(sd) {
         if let Some(info) = probe_sleep_bitmap(sd, candidate) {
             return Some(info);
@@ -170,11 +197,23 @@ pub fn daily_mantra_candidate_from_today_file(sd: &SdStorage) -> Option<SleepBit
     let mut buf = [0u8; 32];
     let (_size, n) = read_start(sd, DAILY_MANTRA_TODAY_FILE, &mut buf).ok()?;
     let key = parse_weekday_key(&buf[..n])?;
-    Some(SleepBitmapCandidate::nested(
-        "sleep",
-        "daily",
-        weekday_bitmap_name(key),
-    ))
+    Some(daily_mantra_candidate_for_key(key))
+}
+
+pub fn daily_mantra_candidate_from_time_file(
+    sd: &SdStorage,
+    uptime_secs: u32,
+) -> Option<SleepBitmapCandidate> {
+    let mut buf = [0u8; 256];
+    let (_size, n) =
+        storage::read_file_start_in_dir(sd, storage::X4_DIR, "TIME.TXT", &mut buf).ok()?;
+    let unix = parse_daily_mantra_time_unix(&buf[..n], uptime_secs)?;
+    let key = weekday_key_from_display_unix(unix);
+    Some(daily_mantra_candidate_for_key(key))
+}
+
+fn daily_mantra_candidate_for_key(key: WeekdayKey) -> SleepBitmapCandidate {
+    SleepBitmapCandidate::nested("sleep", "daily", weekday_bitmap_name(key))
 }
 
 pub fn probe_sleep_bitmap(
@@ -568,6 +607,95 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     haystack
         .windows(needle.len())
         .any(|window| window == needle)
+}
+
+fn parse_daily_mantra_time_unix(data: &[u8], uptime_secs: u32) -> Option<u64> {
+    let text = core::str::from_utf8(data).ok()?;
+    let mut last_sync_unix = None;
+    let mut last_sync_uptime_secs = None;
+    let mut last_sync_ok = false;
+    let mut display_offset_minutes = -300i16;
+
+    for line in text.lines() {
+        let Some((raw_key, raw_value)) = line.split_once('=') else {
+            continue;
+        };
+
+        let key = raw_key.trim();
+        let value = raw_value.trim();
+
+        match key {
+            "last_sync_unix" => last_sync_unix = parse_u64(value),
+            "last_sync_monotonic_ms" => {
+                last_sync_uptime_secs =
+                    parse_u64(value).map(|ms| (ms / 1000).min(u64::from(u32::MAX)) as u32);
+            }
+            "last_sync_ok" => last_sync_ok = value == "1",
+            "display_offset_minutes" => {
+                if let Some(offset) = parse_i16(value) {
+                    display_offset_minutes = offset;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !last_sync_ok {
+        return None;
+    }
+
+    let base = last_sync_unix?;
+    let live_unix = match last_sync_uptime_secs {
+        Some(synced_at) if uptime_secs >= synced_at => {
+            base.saturating_add(u64::from(uptime_secs - synced_at))
+        }
+        _ => base,
+    };
+
+    Some(apply_offset_minutes(live_unix, display_offset_minutes))
+}
+
+fn apply_offset_minutes(unix: u64, offset_minutes: i16) -> u64 {
+    if offset_minutes < 0 {
+        unix.saturating_sub((-offset_minutes) as u64 * 60)
+    } else {
+        unix.saturating_add(offset_minutes as u64 * 60)
+    }
+}
+
+fn weekday_key_from_display_unix(display_unix: u64) -> WeekdayKey {
+    let days = (display_unix / 86_400) as i64;
+
+    match ((days + 4).rem_euclid(7)) as u8 {
+        0 => WeekdayKey::Sunday,
+        1 => WeekdayKey::Monday,
+        2 => WeekdayKey::Tuesday,
+        3 => WeekdayKey::Wednesday,
+        4 => WeekdayKey::Thursday,
+        5 => WeekdayKey::Friday,
+        _ => WeekdayKey::Saturday,
+    }
+}
+
+fn parse_u64(input: &str) -> Option<u64> {
+    if input.is_empty() {
+        return None;
+    }
+
+    let mut value = 0u64;
+    for b in input.bytes() {
+        if !b.is_ascii_digit() {
+            return None;
+        }
+
+        value = value.checked_mul(10)?.checked_add(u64::from(b - b'0'))?;
+    }
+
+    Some(value)
+}
+
+fn parse_i16(input: &str) -> Option<i16> {
+    input.parse().ok()
 }
 
 #[cfg(test)]

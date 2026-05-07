@@ -5,9 +5,11 @@
 pub mod files;
 pub mod home;
 pub mod manager;
+pub mod network_time;
 pub mod reader;
 pub mod reader_state;
 pub mod settings;
+pub mod time_status;
 pub mod upload;
 pub mod widgets;
 
@@ -22,6 +24,9 @@ pub enum AppId {
     // upload bypasses the App trait; AppManager::needs_special_mode
     // returns true for this variant and run_special_mode handles it
     Upload,
+    // time sync also runs as an isolated Wi-Fi special mode so the
+    // Home input loop never blocks while the radio/network stack is active.
+    TimeSync,
 }
 
 impl AppIdType for AppId {

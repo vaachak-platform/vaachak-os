@@ -45,6 +45,7 @@ embassy-futures.workspace = true
 embedded-graphics-core.workspace = true
 embedded-graphics.workspace = true
 static_cell.workspace = true
+nb.workspace = true
 log.workspace = true
 esp-alloc.workspace = true
 smol-epub.workspace = true
@@ -63,6 +64,7 @@ esp-radio = { version = "0.17", default-features = false, features = [
 ] }
 embassy-net = { version = "0.8", features = [
     "dhcpv4",
+    "dns",
     "medium-ethernet",
     "tcp",
     "udp",

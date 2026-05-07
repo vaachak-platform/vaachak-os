@@ -1710,6 +1710,7 @@ dependencies = [
  "embedded-sdmmc",
  "esp-alloc",
  "esp-hal",
+ "esp-println",
  "log",
  "nb 1.1.0",
  "static_cell",

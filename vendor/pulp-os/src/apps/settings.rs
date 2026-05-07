@@ -36,7 +36,7 @@ const VALUE_W: u16 = 156;
 const VALUE_X: u16 = SCREEN_W - LARGE_MARGIN - VALUE_W;
 const LABEL_W: u16 = FULL_CONTENT_W - VALUE_W - 8;
 
-const NUM_ROWS: usize = 23;
+const NUM_ROWS: usize = 25;
 
 const SLEEP_IMAGE_MODE_FILE: &str = "SLPMODE.TXT";
 const SLEEP_IMAGE_MODE_COUNT: u8 = 6;
@@ -62,6 +62,8 @@ enum SettingsRowKind {
     Section(&'static str),
     ReaderFont,
     ReaderTheme,
+    ReaderPreparedProfile,
+    ReaderFallbackPolicy,
     ReaderProgress,
     DisplayRefresh,
     DisplayInvert,
@@ -98,6 +100,14 @@ const ROWS: [SettingsRow; NUM_ROWS] = [
     SettingsRow {
         label: "Reading theme",
         kind: SettingsRowKind::ReaderTheme,
+    },
+    SettingsRow {
+        label: "Prepared profile",
+        kind: SettingsRowKind::ReaderPreparedProfile,
+    },
+    SettingsRow {
+        label: "Fallback",
+        kind: SettingsRowKind::ReaderFallbackPolicy,
     },
     SettingsRow {
         label: "Show progress",
@@ -199,6 +209,8 @@ pub struct SettingsApp {
 
     reader_font: u8,
     reader_theme: u8,
+    reader_prepared_profile: u8,
+    reader_fallback_policy: u8,
     reader_show_progress: bool,
     display_refresh: u8,
     display_invert: bool,
@@ -221,6 +233,8 @@ impl SettingsApp {
             rows_top: TITLE_Y + uf.heading.line_height + HEADER_LIST_GAP,
             reader_font: config::DEFAULT_FONT_SIZE_IDX,
             reader_theme: config::DEFAULT_READING_THEME,
+            reader_prepared_profile: config::DEFAULT_PREPARED_FONT_PROFILE,
+            reader_fallback_policy: config::DEFAULT_PREPARED_FALLBACK_POLICY,
             reader_show_progress: true,
             display_refresh: 1,
             display_invert: false,
@@ -308,6 +322,14 @@ impl SettingsApp {
             .settings
             .reading_theme
             .min(reader_theme_count().saturating_sub(1));
+        self.reader_prepared_profile = self
+            .settings
+            .prepared_font_profile
+            .min(config::PREPARED_FONT_PROFILE_COUNT - 1);
+        self.reader_fallback_policy = self
+            .settings
+            .prepared_fallback_policy
+            .min(config::PREPARED_FALLBACK_POLICY_COUNT - 1);
         self.reader_show_progress = self.settings.reader_show_progress;
         self.display_refresh = self.settings.display_refresh_mode.min(2);
         self.display_invert = self.settings.display_invert_colors;
@@ -327,6 +349,12 @@ impl SettingsApp {
                 .reader_theme
                 .min(reader_theme_count().saturating_sub(1)),
             show_progress: self.reader_show_progress,
+            prepared_font_profile: self
+                .reader_prepared_profile
+                .min(config::PREPARED_FONT_PROFILE_COUNT - 1),
+            prepared_fallback_policy: self
+                .reader_fallback_policy
+                .min(config::PREPARED_FALLBACK_POLICY_COUNT - 1),
         });
         self.settings.display_refresh_mode = self.display_refresh.min(2);
         self.settings.display_invert_colors = self.display_invert;
@@ -443,6 +471,22 @@ impl SettingsApp {
                 self.reader_theme = cycle_index(self.reader_theme, reader_theme_count(), delta);
                 true
             }
+            SettingsRowKind::ReaderPreparedProfile => {
+                self.reader_prepared_profile = cycle_index(
+                    self.reader_prepared_profile,
+                    config::PREPARED_FONT_PROFILE_COUNT,
+                    delta,
+                );
+                true
+            }
+            SettingsRowKind::ReaderFallbackPolicy => {
+                self.reader_fallback_policy = cycle_index(
+                    self.reader_fallback_policy,
+                    config::PREPARED_FALLBACK_POLICY_COUNT,
+                    delta,
+                );
+                true
+            }
             SettingsRowKind::ReaderProgress => {
                 self.reader_show_progress = !self.reader_show_progress;
                 true
@@ -489,6 +533,19 @@ impl SettingsApp {
             }
             SettingsRowKind::ReaderTheme => {
                 let _ = write!(buf, "{}", reader_theme_name(self.reader_theme));
+            }
+            SettingsRowKind::ReaderPreparedProfile => {
+                let idx =
+                    self.reader_prepared_profile
+                        .min(config::PREPARED_FONT_PROFILE_COUNT - 1) as usize;
+                let _ = write!(buf, "{}", config::PREPARED_FONT_PROFILE_LABELS[idx]);
+            }
+            SettingsRowKind::ReaderFallbackPolicy => {
+                let idx = self
+                    .reader_fallback_policy
+                    .min(config::PREPARED_FALLBACK_POLICY_COUNT - 1)
+                    as usize;
+                let _ = write!(buf, "{}", config::PREPARED_FALLBACK_POLICY_LABELS[idx]);
             }
             SettingsRowKind::ReaderProgress => {
                 let _ = write!(buf, "{}", on_off(self.reader_show_progress));

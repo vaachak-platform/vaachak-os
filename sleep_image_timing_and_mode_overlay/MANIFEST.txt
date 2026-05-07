@@ -1,7 +1,0 @@
-files/scripts/write_sleep_image_mode.sh
-files/scripts/verify_sleep_image_mode.sh
-scripts/apply_sleep_image_timing_and_mode.sh
-scripts/audit_sleep_image_timing_and_mode.sh
-docs/sleep-image-timing-and-mode.md
-README-APPLY.txt
-MANIFEST.txt

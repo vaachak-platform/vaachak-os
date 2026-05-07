@@ -1,0 +1,542 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>X4 Wi-Fi Transfer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f0;color:#222;max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:24px;margin:0 0 4px}
+h2{font-size:18px;margin:0 0 12px}
+.small{color:#555;font-size:13px}
+.tabs{display:flex;gap:8px;margin:16px 0}
+.tabbtn{border:1px solid #aaa;background:#fff;border-radius:8px;padding:10px 14px;cursor:pointer}
+.tabbtn.active{background:#222;color:#fff;border-color:#222}
+.tab{display:none}
+.tab.active{display:block}
+.card{border:1px solid #bbb;border-radius:10px;padding:14px;margin:14px 0;background:#fff}
+label{display:block;font-weight:600;margin-top:10px}
+input,button{font:inherit;padding:8px;margin-top:6px}
+input[type=text],input[type=number]{width:100%}
+button{cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+progress{width:100%;height:20px}
+pre{background:#f6f6f6;border:1px solid #ddd;border-radius:8px;padding:10px;white-space:pre-wrap;max-height:320px;overflow:auto}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1}
+#drop{border:2px dashed #bbb;border-radius:8px;padding:24px 16px;text-align:center;cursor:pointer;background:#fff;transition:border-color .2s,background .2s;margin-bottom:12px}
+#drop.over{border-color:#333;background:#eef6ee}
+#fin{display:none}
+#bar{height:6px;border-radius:3px;background:#ddd;margin-bottom:4px;overflow:hidden}
+#bar>div{height:100%;width:0;background:#3a3;border-radius:3px;transition:width .15s}
+.status{font-size:.85em;color:#666;min-height:1.2em;margin-bottom:12px;word-break:break-all}
+.status.err{color:#c33}
+.status.ok{color:#2a2}
+table{width:100%;border-collapse:collapse;font-size:.9em}
+th{text-align:left;border-bottom:1px solid #ccc;padding:6px 4px;color:#777;font-weight:500}
+td{padding:6px 4px;border-bottom:1px solid #e5e5e5}
+.sz{text-align:right;white-space:nowrap;color:#888}
+.action{background:none;border:1px solid #ccc;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:.85em;margin-left:4px}
+.action.del{color:#c33}
+.action.del:hover{background:#c33;color:#fff}
+.namebtn{background:none;border:0;padding:0;margin:0;color:#0645ad;text-align:left;cursor:pointer}
+#empty{color:#999;padding:24px 0;text-align:center}
+</style>
+</head>
+<body>
+<h1>X4 Wi-Fi Transfer</h1>
+<div class="small">Use Original Transfer for small files and SD browsing. Use Chunked Resume for large prepared cache folders.</div>
+
+<div class="tabs">
+  <button class="tabbtn active" data-tab="original">Original Transfer</button>
+  <button class="tabbtn" data-tab="chunked">Chunked Resume</button>
+</div>
+
+<section id="tab-original" class="tab active">
+  <div class="card">
+    <h2>Original Transfer</h2>
+    <div class="small">Browse SD directories, create directories, delete files, and delete empty directories. Classic upload still uploads root-level files.</div>
+
+    <label>Current directory</label>
+    <input id="origPath" type="text" value="/" readonly>
+
+    <div class="row">
+      <button id="origUp">Up</button>
+      <button id="origRefresh">Refresh</button>
+    </div>
+
+    <label>New directory name</label>
+    <input id="origNewDir" type="text" value="" placeholder="Example: FCACHE or 15D1296A">
+    <button id="origMkdir">Create Directory Here</button>
+
+    <div id="drop" onclick="fin.click()">
+      <p>Drop files here or tap to browse</p>
+      <p class="small">Classic upload writes root-level files. Use Chunked Resume for folders.</p>
+    </div>
+    <input type="file" id="fin" multiple onchange="uploadOriginal(this.files)">
+    <div id="bar"><div id="fill"></div></div>
+    <div id="status" class="status"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th class="sz">Size</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="list"></tbody>
+    </table>
+    <div id="empty"></div>
+  </div>
+</section>
+
+<section id="tab-chunked" class="tab">
+  <div class="card">
+    <h2>Chunked Resume</h2>
+    <div class="small">Stable Wi-Fi Transfer v2. Version: wifi2-tabbed-dirbrowse-256-r20.</div>
+
+    <label>Target folder on SD</label>
+    <input id="target" type="text" value="/FCACHE/15D1296A">
+
+    <label>Chunk size</label>
+    <input id="chunkSize" type="number" min="128" max="1536" value="256">
+
+    <label>Delay between chunks, ms</label>
+    <input id="delayMs" type="number" min="0" max="2000" value="250">
+
+    <label>Delay between files, ms</label>
+    <input id="fileDelayMs" type="number" min="0" max="3000" value="600">
+
+    <label>Folder/files</label>
+    <input id="files" type="file" webkitdirectory directory multiple>
+
+    <div class="row">
+      <button id="start">Upload / Resume</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+
+    <p id="summary">No files selected.</p>
+    <progress id="progress" value="0" max="1"></progress>
+  </div>
+
+  <div class="card">
+    <h3>Status</h3>
+    <pre id="log"></pre>
+  </div>
+</section>
+
+<script>
+Array.from(document.querySelectorAll(".tabbtn")).forEach(function(btn){
+  btn.addEventListener("click", function(){
+    Array.from(document.querySelectorAll(".tabbtn")).forEach(function(b){ b.classList.remove("active"); });
+    Array.from(document.querySelectorAll(".tab")).forEach(function(t){ t.classList.remove("active"); });
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "original") loadOriginal();
+  });
+});
+
+/* Original Transfer directory browser */
+var D = document,
+    drop = D.getElementById("drop"),
+    list = D.getElementById("list"),
+    fill = D.getElementById("fill"),
+    st = D.getElementById("status"),
+    empty = D.getElementById("empty"),
+    queue = [],
+    busy = 0,
+    origPath = "/";
+
+function s(msg, cls) {
+  st.textContent = msg;
+  st.className = "status " + (cls || "");
+}
+
+function fmt(b) {
+  if (b < 1024) return b + " B";
+  if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+  return (b / 1048576).toFixed(1) + " MB";
+}
+
+function cleanOrigPath(path) {
+  path = (path || "/").trim().replaceAll("\\", "/");
+  if (!path.startsWith("/")) path = "/" + path;
+  path = path.replace(/\/+/g, "/");
+  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+  return path || "/";
+}
+
+function joinOrigPath(base, name) {
+  base = cleanOrigPath(base);
+  return base === "/" ? "/" + name : base + "/" + name;
+}
+
+function parentOrigPath(path) {
+  path = cleanOrigPath(path);
+  if (path === "/") return "/";
+  const parts = path.split("/").filter(Boolean);
+  parts.pop();
+  return parts.length ? "/" + parts.join("/") : "/";
+}
+
+async function originalJson(url, options) {
+  const res = await fetch(url, options || {});
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || ("HTTP " + res.status));
+  try { return JSON.parse(text); } catch (_) { return {}; }
+}
+
+async function loadOriginal() {
+  D.getElementById("origPath").value = origPath;
+  list.innerHTML = "";
+  empty.textContent = "Loading...";
+  try {
+    const data = await originalJson("/browse?p=" + encodeURIComponent(origPath));
+    const entries = data.entries || [];
+    list.innerHTML = "";
+    if (!entries.length) {
+      empty.textContent = "Directory is empty";
+      return;
+    }
+    empty.textContent = "";
+
+    entries.sort(function(a, b) {
+      if (!!a.dir !== !!b.dir) return a.dir ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    entries.forEach(function(e) {
+      const tr = D.createElement("tr");
+      const td1 = D.createElement("td");
+      const td2 = D.createElement("td");
+      const td3 = D.createElement("td");
+      const td4 = D.createElement("td");
+
+      if (e.dir) {
+        const btn = D.createElement("button");
+        btn.className = "namebtn";
+        btn.textContent = "📁 " + e.name;
+        btn.onclick = function() {
+          origPath = joinOrigPath(origPath, e.name);
+          loadOriginal();
+        };
+        td1.appendChild(btn);
+      } else {
+        td1.textContent = e.name;
+      }
+
+      td2.textContent = e.dir ? "Directory" : "File";
+      td3.textContent = e.dir ? "" : fmt(e.size || 0);
+      td3.className = "sz";
+
+      const del = D.createElement("button");
+      del.className = "action del";
+      del.textContent = e.dir ? "Delete Dir" : "Delete";
+      del.onclick = function() {
+        deleteOriginalPath(joinOrigPath(origPath, e.name), !!e.dir);
+      };
+      td4.appendChild(del);
+
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tr.appendChild(td3);
+      tr.appendChild(td4);
+      list.appendChild(tr);
+    });
+  } catch (err) {
+    empty.textContent = "Browse failed";
+    s("Browse failed: " + err.message, "err");
+  }
+}
+
+async function createOriginalDir() {
+  const name = (D.getElementById("origNewDir").value || "").trim();
+  if (!name) {
+    s("Enter a directory name", "err");
+    return;
+  }
+
+  const path = joinOrigPath(origPath, name);
+  try {
+    await originalJson("/mkdir_path?p=" + encodeURIComponent(path), { method: "POST" });
+    D.getElementById("origNewDir").value = "";
+    s("Created " + path, "ok");
+    loadOriginal();
+  } catch (err) {
+    s("Create directory failed: " + err.message, "err");
+  }
+}
+
+async function deleteOriginalPath(path, isDir) {
+  if (!confirm("Delete " + path + (isDir ? "?\n\nDirectory must be empty." : "?"))) return;
+  try {
+    await originalJson("/delete_path?p=" + encodeURIComponent(path) + "&d=" + (isDir ? "1" : "0"), {
+      method: "POST"
+    });
+    s("Deleted " + path, "ok");
+    loadOriginal();
+  } catch (err) {
+    s("Delete failed: " + err.message, "err");
+  }
+}
+
+function uploadOriginal(files) {
+  for (var i = 0; i < files.length; i++) queue.push(files[i]);
+  fin.value = "";
+  pumpOriginal();
+}
+
+function pumpOriginal() {
+  if (busy || !queue.length) return;
+  busy = 1;
+  var f = queue.shift(),
+      rest = queue.length,
+      fd = new FormData();
+  fd.append("file", f);
+  var x = new XMLHttpRequest();
+  x.open("POST", "/upload");
+  x.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round((100 * e.loaded) / e.total);
+      fill.style.width = pct + "%";
+      s("Uploading root file " + f.name + "... " + pct + "%" + (rest ? " (" + rest + " queued)" : ""));
+    }
+  };
+  x.onload = function() {
+    busy = 0;
+    if (x.status === 200) {
+      fill.style.width = "100%";
+      s(f.name + " uploaded to root" + (rest ? " — " + rest + " remaining" : ""), "ok");
+      setTimeout(function() { loadOriginal(); }, 300);
+    } else {
+      s("Upload failed: " + (x.responseText || "server error"), "err");
+    }
+    setTimeout(function() { fill.style.width = "0"; }, 800);
+    pumpOriginal();
+  };
+  x.onerror = function() {
+    busy = 0;
+    fill.style.width = "0";
+    s("Upload failed: network error", "err");
+    pumpOriginal();
+  };
+  x.send(fd);
+}
+
+drop.ondragover = drop.ondragenter = function(e) {
+  e.preventDefault();
+  drop.classList.add("over");
+};
+drop.ondragleave = function(e) {
+  e.preventDefault();
+  drop.classList.remove("over");
+};
+drop.ondrop = function(e) {
+  e.preventDefault();
+  drop.classList.remove("over");
+  if (e.dataTransfer.files.length) uploadOriginal(e.dataTransfer.files);
+};
+
+D.getElementById("origRefresh").onclick = loadOriginal;
+D.getElementById("origUp").onclick = function() {
+  origPath = parentOrigPath(origPath);
+  loadOriginal();
+};
+D.getElementById("origMkdir").onclick = createOriginalDir;
+
+/* Chunked Resume */
+const $ = (id) => document.getElementById(id);
+let stopRequested = false;
+
+function log(line) {
+  const el = $("log");
+  el.textContent += line + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function cleanTarget(path) {
+  path = (path || "").trim().replaceAll("\\", "/");
+  if (!path.startsWith("/")) path = "/" + path;
+  path = path.replace(/\/+/g, "/");
+  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+  return path;
+}
+
+function stripRootFolder(file) {
+  const rel = file.webkitRelativePath || file.name;
+  const parts = rel.split("/").filter(Boolean);
+  if (parts.length > 1) parts.shift();
+  return parts.join("/") || file.name;
+}
+
+function targetPathFor(file) {
+  return cleanTarget($("target").value) + "/" + stripRootFolder(file);
+}
+
+async function apiJson(url, options) {
+  const res = await fetch(url, options || {});
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || ("HTTP " + res.status));
+  try { return JSON.parse(text); } catch (_) { return {}; }
+}
+
+async function mkdir(path) {
+  return await apiJson("/v2/mkdir?p=" + encodeURIComponent(path), { method: "POST" });
+}
+
+async function stat(path) {
+  return await apiJson("/v2/stat?p=" + encodeURIComponent(path));
+}
+
+async function sendChunk(path, offset, blob) {
+  const url = "/v2/chunk?p=" + encodeURIComponent(path) + "&o=" + offset;
+  return await apiJson(url, { method: "POST", body: blob });
+}
+
+async function sendChunkWithRetry(path, offset, blob, nextOffset) {
+  for (let attempt = 1; attempt <= 20; attempt++) {
+    try {
+      return await sendChunk(path, offset, blob);
+    } catch (err) {
+      await sleepMs(300);
+
+      const st = await stat(path).catch(() => ({ exists:false, size:0 }));
+      if (st.exists && st.size >= nextOffset) {
+        log("  recovered by stat after network error: size=" + st.size);
+        return st;
+      }
+
+      if (st.exists && st.size > offset && st.size < nextOffset) {
+        log("  partial chunk write detected: size=" + st.size);
+        throw new Error("partial chunk write; click Upload / Resume again");
+      }
+
+      if (attempt === 20) throw err;
+
+      const wait = Math.min(10000, 500 + attempt * 500);
+      log("  retry " + attempt + "/20 after error: " + err.message + " wait=" + wait + "ms");
+      await sleepMs(wait);
+    }
+  }
+}
+
+async function uploadChunkedFile(file, index, total, state) {
+  const path = targetPathFor(file);
+  const chunkSize = Math.max(128, Math.min(1536, parseInt($("chunkSize").value || "256", 10)));
+  const delayMs = Math.max(0, Math.min(2000, parseInt($("delayMs").value || "250", 10)));
+  const fileDelayMs = Math.max(0, Math.min(3000, parseInt($("fileDelayMs").value || "600", 10)));
+
+  const existing = await stat(path).catch(() => ({ exists:false, size:0 }));
+  if (existing.exists && existing.size === file.size) {
+    log("skip complete [" + index + "/" + total + "] " + path);
+    state.done += file.size;
+    $("progress").value = state.done;
+    return;
+  }
+
+  let offset = existing.exists && existing.size < file.size ? existing.size : 0;
+  if (offset > 0) log("resume [" + index + "/" + total + "] " + path + " from " + offset);
+  else log("upload [" + index + "/" + total + "] " + path + " (" + file.size + " bytes)");
+
+  while (offset < file.size) {
+    if (stopRequested) throw new Error("stopped by user");
+
+    const next = Math.min(offset + chunkSize, file.size);
+    const blob = file.slice(offset, next);
+    await sendChunkWithRetry(path, offset, blob, next);
+
+    const wrote = next - offset;
+    offset = next;
+    state.done += wrote;
+    $("progress").value = state.done;
+    $("summary").textContent = path + " " + offset + "/" + file.size;
+
+    if (delayMs > 0) await sleepMs(delayMs);
+  }
+
+  if (fileDelayMs > 0) await sleepMs(fileDelayMs);
+}
+
+async function startUpload() {
+  stopRequested = false;
+  $("start").disabled = true;
+  $("stop").disabled = false;
+  $("log").textContent = "";
+
+  const files = Array.from($("files").files || []).sort((a, b) => {
+    const ap = a.webkitRelativePath || a.name;
+    const bp = b.webkitRelativePath || b.name;
+    return ap.localeCompare(bp);
+  });
+
+  if (!files.length) {
+    log("No files selected.");
+    $("start").disabled = false;
+    $("stop").disabled = true;
+    return;
+  }
+
+  const target = cleanTarget($("target").value);
+  $("target").value = target;
+
+  const dirs = [];
+  const parts = target.split("/").filter(Boolean);
+  if (parts.length >= 1) dirs.push("/" + parts[0]);
+  if (parts.length >= 2) dirs.push("/" + parts[0] + "/" + parts[1]);
+
+  try {
+    for (const dir of dirs) {
+      log("mkdir " + dir);
+      await mkdir(dir).catch((err) => log("  mkdir warning: " + err.message));
+      await sleepMs(500);
+    }
+
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    const state = { done: 0 };
+    $("progress").max = totalBytes || 1;
+    $("progress").value = 0;
+
+    log("files=" + files.length + " bytes=" + totalBytes);
+    log("stable mode: chunk=" + $("chunkSize").value + " delay=" + $("delayMs").value + "ms retries=20");
+
+    for (let i = 0; i < files.length; i++) {
+      await uploadChunkedFile(files[i], i + 1, files.length, state);
+    }
+
+    $("summary").textContent = "Upload complete.";
+    log("complete");
+  } catch (err) {
+    $("summary").textContent = "Upload stopped/failed: " + err.message;
+    log("ERROR: " + err.message);
+    log("Press Upload / Resume again. Already-complete files will be skipped.");
+  } finally {
+    $("start").disabled = false;
+    $("stop").disabled = true;
+  }
+}
+
+$("start").addEventListener("click", startUpload);
+$("stop").addEventListener("click", () => {
+  stopRequested = true;
+  $("stop").disabled = true;
+});
+$("files").addEventListener("change", () => {
+  const files = Array.from($("files").files || []);
+  const bytes = files.reduce((sum, f) => sum + f.size, 0);
+  $("summary").textContent = files.length + " files selected, " + bytes + " bytes.";
+});
+
+window.onload = function() {
+  loadOriginal();
+};
+</script>
+</body>
+</html>

@@ -1656,3 +1656,1324 @@ SINGLE_FOOTER_CONFIRMED=1
 NO_INPUT_WRITE_GEOMETRY_REGRESSION=1
 NO_CRASH_REBOOT=1
 ```
+
+## Vaachak OS Network UI and Wi-Fi Transfer Guardrails
+
+These guardrails apply to Home/category dashboard, Network screens, Wi-Fi configuration, and Wi-Fi transfer work.
+
+### Naming and generated artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, or similar strings in source, docs, scripts, logs, symbols, comments, or filenames.
+- Do not add boot marker strings or log marker strings for this work.
+- Do not leave temporary overlay directories, generated archives, or apply/audit helper scripts in the repository.
+- Existing repository validation must continue to pass, including `./scripts/check_no_milestone_artifacts.sh .`.
+
+### Home and category dashboard rules
+
+- The category dashboard is the main Vaachak OS Home page.
+- Do not restore the older tile-based homepage.
+- Home categories must remain:
+  - Network
+  - Productivity
+  - Games
+  - Reader
+  - System
+  - Tools
+- Preserve existing working routes:
+  - Productivity > Daily Mantra opens the existing Daily Mantra screen.
+  - Reader > Continue Reading preserves existing reader continue behavior.
+  - Reader > Library opens the existing file/library flow.
+  - Reader > Bookmarks opens the existing bookmarks screen.
+  - System > Settings opens the existing Settings app.
+  - Tools > File Browser opens the existing file/library flow.
+
+### Network category rules
+
+Network items should be:
+
+- Wi-Fi Connect
+- Wi-Fi Transfer
+- Network Status
+
+Expected behavior:
+
+- Wi-Fi Connect shows saved Wi-Fi configuration status and must not display the password.
+- Network Status shows current network/device status.
+- Wi-Fi Transfer is the user-facing transfer-server entry point.
+- Wi-Fi Transfer must not remain a placeholder once transfer integration is implemented.
+
+### Wi-Fi credential rules
+
+- Use the existing settings path and settings parser.
+- Expected keys:
+  - `wifi_ssid`
+  - `wifi_pass`
+- Never show the saved password on screen.
+- Never log the saved password.
+- Screens may show password status as Saved or Missing.
+- Missing credentials must produce a clear user-facing error and wait for Back.
+
+### Wi-Fi radio and transfer-server rules
+
+- Do not start the Wi-Fi radio while drawing Home or Network category screens.
+- Start Wi-Fi only after explicit user action on Wi-Fi Transfer.
+- Prefer the existing isolated special-mode path if `AppId::Upload` and `run_upload_mode` already exist.
+- It is acceptable to keep internal `AppId::Upload` naming when it avoids risky refactoring, but the user-facing title should be Wi-Fi Transfer.
+- Active transfer mode should:
+  - connect as Wi-Fi client,
+  - wait for DHCP,
+  - show `http://x4.local/`,
+  - show the numeric IP address when available,
+  - serve the existing HTTP transfer page on port 80,
+  - exit on Back.
+- If mDNS is implemented, ensure the encoded hostname matches `x4.local`.
+
+### Safety and preservation rules
+
+- Keep SD helper scripts unchanged unless the user explicitly asks to update them.
+- Keep power-release guard behavior unchanged.
+- Keep reader state, bookmarks, library, settings, and sleep-image behavior unchanged.
+- Avoid broad rewrites of `home.rs`; patch the current route and screen behavior as narrowly as possible.
+- Prefer existing abstractions and existing upload/server code over duplicating network code.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+
+Report all command results and any physical-device testing still required.
+
+## Vaachak OS Font Asset and Script Run Guardrails
+
+These guardrails apply to custom font foundations, script detection, glyph asset contracts, prepared glyph run contracts, and future Indic text rendering work.
+
+### Scope boundaries
+
+- Keep custom font infrastructure as a shared Vaachak OS text service, not a reader-only feature.
+- Shared text modules belong under:
+  - `target-xteink-x4/src/vaachak_x4/text/`
+- The first font-asset work must remain contract-oriented:
+  - define font asset formats,
+  - define prepared run formats,
+  - split Unicode text into script runs,
+  - define cache lookup contracts,
+  - keep rendering placeholders explicit.
+- Do not wire reader rendering to new custom font contracts until a separate renderer task is requested.
+- Do not implement full Indic shaping in the contract task.
+- Do not attempt arbitrary TTF loading on the X4 in the contract task.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, or filenames.
+- Do not add boot marker strings for font work.
+- Do not leave temporary overlay directories, generated archives, local patch scripts, or apply/audit helper scripts in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Font asset contract rules
+
+Vaachak compact font assets use the `.vfnt` concept.
+
+The `.vfnt` contract should describe:
+
+- asset magic and version,
+- script/family metadata,
+- pixel size,
+- line metrics,
+- glyph metrics table,
+- bitmap index table,
+- bitmap data region,
+- bitmap format such as 1bpp, 2bpp, or 4bpp.
+
+Rules:
+
+- Prefer 1bpp as the initial e-paper-friendly bitmap format.
+- Keep structs simple and no_std/alloc-friendly.
+- Do not use unsafe binary parsing.
+- Do not implement SD-card font loading until requested.
+- Do not claim a font asset is renderable until an actual glyph bitmap renderer exists.
+- Missing or unsupported fonts must have explicit fallback/missing statuses.
+
+### Prepared run contract rules
+
+Vaachak prepared text runs use the `.vrun` concept.
+
+The `.vrun` contract should describe:
+
+- asset magic and version,
+- run count,
+- glyph count,
+- cluster count,
+- positioned glyph records,
+- source text cluster mapping.
+
+Rules:
+
+- `.vrun` represents a future host/mobile/server-prepared shaped run format.
+- Do not implement shaping in the contract task.
+- Do not reorder, normalize, or substitute Unicode text in the script run splitter.
+- Keep cluster metadata explicit so future shaping can preserve source mapping.
+
+### Script detection and run splitting rules
+
+Script detection must support at least:
+
+- Latin
+- Devanagari
+- Gujarati
+- Unknown
+
+Run splitting must:
+
+- return every meaningful contiguous script run,
+- preserve slices from the original input where possible,
+- avoid excessive one-character punctuation runs,
+- keep whitespace and punctuation attached to nearby strong script runs using a deterministic policy,
+- return no runs for an empty string,
+- avoid Unicode normalization,
+- avoid shaping,
+- avoid character reordering.
+
+Required mixed-script examples:
+
+- `नमस्ते दुनिया`
+- `धर्मक्षेत्रे कुरुक्षेत्रे`
+- `નમસ્તે દુનિયા`
+- `Vaachak नमस्ते નમસ્તે`
+- `ॐ नमः शिवाय - Om Namah Shivaya`
+
+### Glyph cache contract rules
+
+The glyph cache module must remain contract-only until a renderer task is requested.
+
+Allowed:
+
+- cache key structs,
+- glyph bitmap reference structs,
+- lookup trait,
+- empty lookup implementation,
+- explicit missing/unsupported status values.
+
+Not allowed yet:
+
+- SD-card cache storage,
+- actual bitmap loading,
+- actual glyph rendering,
+- reader integration,
+- sleep screen rendering integration,
+- claims of Indic rendering correctness.
+
+### Indic text rules
+
+Hindi, Sanskrit, and Gujarati require shaping for correct rendering.
+
+Until a shaping pipeline exists:
+
+- Do not claim Hindi/Sanskrit/Gujarati are fully supported.
+- Do not present raw codepoint drawing as correct Indic rendering.
+- Keep language around Indic support precise:
+  - script detection is supported,
+  - font asset contracts are supported,
+  - shaping is planned,
+  - correct Indic rendering is not complete yet.
+
+### Safety and preservation rules
+
+- Do not change Wi-Fi Transfer behavior.
+- Do not change Network dashboard behavior.
+- Do not change reader state files, bookmarks, library flow, settings behavior, sleep image behavior, or daily mantra behavior unless explicitly requested.
+- Do not touch Wi-Fi credentials or transfer-server code for font work.
+- Keep changes narrowly focused on text/font contracts and guard-script correctness.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run any crate-specific text/font tests if the workspace command set does not execute them automatically.
+
+Report all command results and clearly state what is intentionally not implemented.
+
+## Vaachak OS VFNT Parser Guardrails
+
+These guardrails apply to compact font asset parsing and glyph lookup work.
+
+### Scope boundaries
+
+The VFNT parser task is a foundation task only.
+
+Allowed:
+
+- parse `.vfnt` assets from byte slices,
+- validate headers,
+- validate table offsets and lengths,
+- validate bitmap ranges,
+- expose glyph metrics lookup,
+- expose bitmap slice lookup,
+- add parser error types,
+- add unit tests for valid and malformed assets,
+- update font asset documentation.
+
+Not allowed in this task:
+
+- reader renderer integration,
+- Daily Mantra renderer integration,
+- sleep screen renderer integration,
+- SD-card font discovery,
+- Wi-Fi Transfer changes,
+- arbitrary TTF loading,
+- Indic shaping,
+- Unicode reordering,
+- glyph bitmap drawing,
+- EPUB CSS font-family support.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, or filenames.
+- Do not add boot marker strings for font work.
+- Do not leave temporary generated archives, helper scripts, or local test artifacts in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Parser safety rules
+
+The parser must be safe and deterministic.
+
+Required:
+
+- parse from `&[u8]`,
+- use explicit little-endian reads,
+- avoid `unsafe`,
+- avoid `transmute`,
+- avoid direct struct casting from bytes,
+- use checked arithmetic for offset and length calculations,
+- validate before slicing,
+- reject malformed assets early,
+- return clear typed errors,
+- keep lookup allocation-free.
+
+The parser must validate:
+
+- magic,
+- version,
+- header length,
+- bitmap format,
+- glyph count,
+- metrics table bounds,
+- bitmap index table bounds,
+- bitmap data bounds,
+- every bitmap record range before returning a bitmap slice.
+
+### VFNT lookup rules
+
+Glyph lookup should support:
+
+- metrics lookup by glyph id,
+- bitmap index lookup by glyph id,
+- combined glyph lookup returning metrics, bitmap record, and bitmap byte slice.
+
+Rules:
+
+- Linear lookup is acceptable initially.
+- Do not require sorted glyph ids unless the contract explicitly defines a sorted table.
+- Missing glyphs must return an explicit missing-glyph error.
+- Returned bitmap slices must always be bounded by the original asset byte slice.
+- Unsupported bitmap formats must be rejected or surfaced explicitly.
+- Do not claim a glyph is renderable until a renderer task exists.
+
+### Documentation language
+
+Documentation must be precise:
+
+- `.vfnt` parser support is available.
+- Bounds-safe glyph lookup is available.
+- Rendering is not implemented in this task.
+- SD-card discovery is not implemented in this task.
+- Indic shaping is not implemented in this task.
+- Correct Hindi/Sanskrit/Gujarati rendering still requires a future shaping and rendering pipeline.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- Network Status behavior,
+- category dashboard behavior,
+- reader state files,
+- library flow,
+- bookmarks,
+- settings,
+- sleep image,
+- daily mantra behavior.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run any direct text-module test harness if normal host tests cannot execute target text tests due to ESP host-incompatible dependencies.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+
+## Vaachak OS VFNT Asset Reader and Font Catalog Binding Guardrails
+
+These guardrails apply to connecting parsed VFNT assets to the shared text font catalog.
+
+### Scope boundaries
+
+This task is still a foundation task.
+
+Allowed:
+
+- define read-only VFNT asset references,
+- parse in-memory font bytes through the existing VFNT parser,
+- define loaded font face structs,
+- bind loaded VFNT faces to semantic font/catalog selection,
+- select preferred fonts by ScriptClass,
+- implement fallback policy for Latin, Devanagari, Gujarati, and Unknown,
+- add unit tests using synthetic in-memory VFNT data,
+- update documentation.
+
+Not allowed in this task:
+
+- reader renderer integration,
+- Daily Mantra renderer integration,
+- sleep screen renderer integration,
+- Home or Settings UI integration,
+- SD-card font scanning,
+- Wi-Fi Transfer changes,
+- arbitrary TTF loading,
+- Indic shaping,
+- Unicode reordering,
+- glyph bitmap drawing,
+- EPUB CSS font-family support,
+- committing font binaries or generated font assets.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, or filenames.
+- Do not add boot marker strings for font work.
+- Do not leave temporary generated archives, helper scripts, or local test artifacts in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Asset reader rules
+
+The asset reader must be read-only and byte-slice based.
+
+Required:
+
+- accept `&[u8]` font asset bytes,
+- parse through the existing `VfntFont` parser,
+- borrow original asset bytes,
+- avoid copying font data,
+- avoid file IO,
+- avoid SD-card scanning,
+- avoid unsafe code,
+- keep logic deterministic and bounded.
+
+The asset reader may expose semantic types such as:
+
+- `FontAssetRef`
+- `LoadedFontFace`
+- `LoadedFontSet`
+- `FontAssetReadError`
+- `FontAssetReader`
+
+### Font catalog binding rules
+
+Font catalog binding should map loaded font faces to scripts.
+
+Supported script classes:
+
+- Latin
+- Devanagari
+- Gujarati
+- Unknown
+
+Fallback policy:
+
+- exact script match wins,
+- Unknown prefers Latin when available,
+- Devanagari falls back to Latin when Devanagari is missing,
+- Gujarati falls back to Latin when Gujarati is missing,
+- if Latin is missing but another loaded font exists, fallback may return the first loaded font,
+- if no fonts are loaded, return no selected font or a clear missing-font error.
+
+Important wording:
+
+- Font fallback does not mean correct Indic rendering.
+- Correct Hindi/Sanskrit/Gujarati rendering still requires shaping and glyph rendering.
+- This task only chooses a loaded font face.
+
+### Test rules
+
+Tests should use small synthetic VFNT byte arrays.
+
+Tests must not require:
+
+- real font files,
+- Noto font binaries,
+- SD-card files,
+- generated font assets,
+- Wi-Fi or hardware.
+
+Recommended coverage:
+
+- load Latin VFNT face,
+- load Devanagari VFNT face,
+- load Gujarati VFNT face,
+- reject invalid VFNT asset,
+- select exact script font,
+- fallback to Latin for Unknown,
+- fallback to Latin when Devanagari is missing,
+- fallback to first available when Latin is missing,
+- no font selected when no assets exist,
+- loaded face borrows original bytes.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- Network Status behavior,
+- category dashboard behavior,
+- reader state files,
+- library flow,
+- bookmarks,
+- settings,
+- sleep image,
+- daily mantra behavior.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run any direct text-module test harness if normal host tests cannot execute target text tests due to ESP host-incompatible dependencies.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+
+## Vaachak OS Glyph Bitmap Renderer Guardrails
+
+These guardrails apply to low-level VFNT glyph bitmap rendering work.
+
+### Scope boundaries
+
+This task is still a foundation task.
+
+Allowed:
+
+- define glyph bitmap renderer contracts,
+- define an in-memory monochrome render target,
+- render 1bpp VFNT glyph bitmaps into a borrowed in-memory target,
+- support safe clipping,
+- support row stride,
+- support transparent and optionally opaque blits,
+- add unit tests using synthetic glyph data,
+- update documentation.
+
+Not allowed in this task:
+
+- e-paper display integration,
+- reader renderer integration,
+- Daily Mantra renderer integration,
+- sleep screen renderer integration,
+- Home or Settings UI integration,
+- SD-card font scanning,
+- Wi-Fi Transfer changes,
+- arbitrary TTF loading,
+- Indic shaping,
+- Unicode reordering,
+- text layout,
+- baseline layout,
+- EPUB CSS font-family support,
+- committing font binaries or generated font assets.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, or filenames.
+- Do not add boot marker strings for font work.
+- Do not leave temporary generated archives, helper scripts, or local test artifacts in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Renderer safety rules
+
+The renderer must be safe and deterministic.
+
+Required:
+
+- no unsafe code,
+- no direct hardware access,
+- no file IO,
+- no SD-card access,
+- no heap allocation in production renderer code,
+- validate target buffer bounds before pixel access,
+- validate glyph bitmap length before reading,
+- validate glyph row stride before reading,
+- clip pixels outside target bounds,
+- never panic on negative origins or oversized glyphs.
+
+### Bitmap rules
+
+Initial renderer support is limited to 1bpp VFNT glyph bitmaps.
+
+Recommended bit order:
+
+- most-significant bit first within each byte,
+- bit 7 is the leftmost pixel,
+- bit 0 is the rightmost pixel.
+
+Rules:
+
+- use `VfntGlyph.bitmap.row_stride` for source row stepping,
+- reject row stride too small for glyph width,
+- reject bitmap data too short for declared height and row stride,
+- ignore unused trailing bits when glyph width is not divisible by 8,
+- return an explicit unsupported-format error for non-1bpp glyphs.
+
+### Target rules
+
+The in-memory target should be borrowed and bounded.
+
+Allowed target forms:
+
+- borrowed byte slice with explicit width, height, and row stride,
+- borrowed bool slice if that better matches current test style.
+
+Rules:
+
+- target constructor must validate buffer capacity,
+- `set_pixel` and `pixel` must remain bounds-safe,
+- out-of-bounds pixel access should be ignored or return a clear error depending on API style,
+- tests must cover set/get round trips.
+
+### Blit mode rules
+
+Transparent mode:
+
+- glyph 1 bits set target pixels,
+- glyph 0 bits leave target unchanged.
+
+Opaque mode, if implemented:
+
+- glyph 1 bits set target pixels,
+- glyph 0 bits clear target pixels within glyph bounds.
+
+If Opaque mode is deferred, document that only Transparent mode is implemented.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- Network Status behavior,
+- category dashboard behavior,
+- reader state files,
+- library flow,
+- bookmarks,
+- settings,
+- sleep image,
+- daily mantra behavior.
+
+### Language around Indic support
+
+Do not claim Hindi, Sanskrit, or Gujarati rendering correctness from this task.
+
+This task only renders glyph bitmaps that are already present. Correct Indic text still requires:
+
+- script run splitting,
+- font fallback,
+- shaping,
+- positioned glyph runs,
+- app-level layout,
+- renderer integration.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run any direct text-module test harness if normal host tests cannot execute target text tests due to ESP host-incompatible dependencies.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+
+## Vaachak OS Glyph Run Renderer Guardrails
+
+These guardrails apply to prepared glyph run rendering work.
+
+### Scope boundaries
+
+This task remains a foundation task.
+
+Allowed:
+
+- define glyph run renderer contracts,
+- render multiple positioned glyph records into an in-memory target,
+- reuse the existing VFNT parser,
+- reuse the existing glyph bitmap renderer,
+- define prepared-font lookup traits or structs,
+- support single-font and optionally slice-backed multi-font lookup,
+- add unit tests using synthetic in-memory font data,
+- update documentation.
+
+Not allowed in this task:
+
+- e-paper display integration,
+- Reader renderer integration,
+- Daily Mantra renderer integration,
+- Sleep Screen renderer integration,
+- Home or Settings UI integration,
+- SD-card font scanning,
+- Wi-Fi Transfer changes,
+- arbitrary TTF loading,
+- Indic shaping,
+- Unicode reordering,
+- full text layout,
+- baseline layout,
+- EPUB CSS font-family support,
+- committing font binaries or generated font assets.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, or filenames.
+- Do not add boot marker strings for font work.
+- Do not leave temporary generated archives, helper scripts, or local test artifacts in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Renderer safety rules
+
+The glyph run renderer must be safe and deterministic.
+
+Required:
+
+- no unsafe code,
+- no direct hardware access,
+- no file IO,
+- no SD-card access,
+- no heap allocation in production renderer code,
+- validate font lookup results,
+- map missing fonts to explicit errors,
+- map missing glyphs to explicit errors,
+- delegate clipping to the glyph bitmap renderer,
+- never panic on empty runs or malformed records.
+
+### Prepared glyph rules
+
+Prepared glyph records represent already-positioned glyphs.
+
+Rules:
+
+- render glyph records in order,
+- use prepared x/y positions directly,
+- do not shape Unicode,
+- do not reorder glyphs,
+- do not apply OpenType features,
+- do not do line breaking,
+- do not do baseline layout unless the existing record contract already defines it clearly,
+- preserve cluster/source metadata if present but do not rely on it for rendering yet.
+
+### Font lookup rules
+
+Allowed lookup forms:
+
+- single-font lookup for simple smoke tests,
+- borrowed slice-backed multi-font lookup for prepared runs with font ids.
+
+Rules:
+
+- lookup must be allocation-free,
+- missing font id returns a clear error,
+- missing glyph id returns a clear error,
+- unsupported bitmap format returns a clear error,
+- do not load fonts from disk,
+- do not scan SD card.
+
+### Language around Indic support
+
+Do not claim Hindi, Sanskrit, or Gujarati rendering correctness from this task.
+
+This task can render positioned glyphs that already exist. Correct Indic text still requires:
+
+- script run splitting,
+- font fallback,
+- shaping,
+- prepared positioned glyph generation,
+- app-level layout,
+- renderer integration.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- Network Status behavior,
+- category dashboard behavior,
+- reader state files,
+- library flow,
+- bookmarks,
+- settings,
+- sleep image,
+- daily mantra behavior.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run any direct text-module test harness if normal host tests cannot execute target text tests due to ESP host-incompatible dependencies.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+
+## Vaachak OS Prepared TXT Cache Guardrails
+
+These guardrails apply to prepared TXT book rendering and prepared font/run cache integration.
+
+### Scope boundaries
+
+Prepared TXT work is the first Reader-visible custom-font smoke path.
+
+Allowed:
+
+- support TXT-only prepared cache detection,
+- add an offline prepared-cache generator,
+- generate tiny synthetic VFNT and VRN-style cache files,
+- detect prepared cache by existing book id,
+- render prepared page glyph records on the X4,
+- preserve existing TXT Reader fallback when cache is missing,
+- add parser/cache tests,
+- document generator and SD layout.
+
+Not allowed in this task:
+
+- EPUB support,
+- on-device Indic shaping,
+- arbitrary TTF loading,
+- general SD-card font discovery,
+- Reader-wide custom font settings,
+- Daily Mantra renderer integration,
+- Sleep Screen renderer integration,
+- Home or Settings UI font integration,
+- Wi-Fi Transfer changes,
+- committing large font binaries,
+- committing generated cache output unless it is tiny and required as a fixture.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, filenames, or runtime logs.
+- Do not add boot marker strings for font or prepared text work.
+- Do not leave temporary generated cache directories in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Cache layout rules
+
+Use an 8.3-friendly cache layout for embedded SD compatibility.
+
+Recommended layout:
+
+- `/FCACHE/<BOOKID>/META.TXT`
+- `/FCACHE/<BOOKID>/FONTS.IDX`
+- `/FCACHE/<BOOKID>/LAT18.VFN`
+- `/FCACHE/<BOOKID>/DEV22.VFN`
+- `/FCACHE/<BOOKID>/PAGES.IDX`
+- `/FCACHE/<BOOKID>/P000.VRN`
+
+Rules:
+
+- `<BOOKID>` must use the existing deterministic book id/path id policy.
+- `.VFN` files contain VFNT-magic data.
+- `.VRN` files contain VRUN-magic or prepared-run data.
+- Metadata must be simple enough to parse on X4.
+- The cache must not introduce a second incompatible book id policy.
+
+### Reader behavior rules
+
+When opening a TXT file:
+
+- compute the existing book id,
+- check for a matching prepared cache,
+- validate metadata and required files,
+- render prepared pages if cache is valid,
+- fall back to existing TXT Reader behavior if cache is missing,
+- show a safe message or fallback if cache is invalid,
+- preserve Back behavior.
+
+Do not break:
+
+- existing TXT reading,
+- existing EPUB reading,
+- progress files,
+- bookmark files,
+- library navigation.
+
+### Renderer rules
+
+Prepared TXT rendering may use the shared text renderer if the active Reader can import it safely.
+
+If crate ownership prevents importing target text modules:
+
+- do not create dependency cycles,
+- prefer a small temporary active-reader bridge,
+- keep binary contracts aligned with VFNT/VRUN docs,
+- document the bridge and future consolidation path.
+
+Renderer must:
+
+- parse VFNT/VRN data bounds-safely,
+- avoid unsafe code,
+- avoid on-device shaping,
+- render prepared glyph positions as-is,
+- use existing display/page drawing paths,
+- avoid changing SSD1677 low-level behavior.
+
+### Offline generator rules
+
+The generator should:
+
+- live under a semantic tools directory,
+- use no network access,
+- not require Noto fonts for the first smoke,
+- generate a tiny sample cache from a mixed English + Devanagari TXT,
+- write output to a user-provided directory,
+- not commit generated output by default,
+- print copy-to-SD instructions.
+
+The generator may use synthetic VFNT glyphs for the smoke proof. It must not claim full Hindi/Sanskrit correctness.
+
+### Language around Indic support
+
+Do not claim general Hindi/Sanskrit rendering support from this task.
+
+Allowed wording:
+
+- prepared TXT cache can render pre-positioned glyphs,
+- mixed English + Devanagari smoke path works when a prepared cache exists,
+- on-device shaping is not implemented,
+- arbitrary Hindi/Sanskrit TXT without cache is not fully supported yet.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- Network Status behavior,
+- category dashboard behavior,
+- settings,
+- sleep image,
+- daily mantra,
+- bookmarks,
+- normal library flow.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run:
+
+- prepared TXT smoke generator into a temporary output directory,
+- list the generated cache files,
+- remove temporary generated output,
+- any direct text-module harness if normal host tests are blocked.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+## Vaachak OS Real VFNT Generator and Prepared TXT Devanagari Guardrails
+
+These guardrails apply to host-side real font generation for prepared TXT cache rendering.
+
+### Scope boundaries
+
+This task is a TXT-only prepared-rendering improvement.
+
+Allowed:
+
+- add a host-side generator for real VFNT assets,
+- use user-provided NotoSans-Regular.ttf and NotoSansDevanagari-Regular.ttf,
+- use rustybuzz/HarfBuzz host-side shaping,
+- rasterize used glyphs into compact VFNT files,
+- generate VRN positioned glyph records,
+- generate FCACHE output compatible with the active Reader prepared TXT bridge,
+- update docs and tests.
+
+Not allowed in this task:
+
+- EPUB support,
+- on-device Indic shaping,
+- Reader-wide font settings,
+- general SD-card font discovery,
+- arbitrary TTF loading on X4,
+- Daily Mantra renderer integration,
+- Sleep Screen renderer integration,
+- Home or Settings UI font integration,
+- Wi-Fi Transfer changes,
+- committing large font binaries,
+- committing generated cache output by default.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered delivery labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, filenames, or runtime logs.
+- Do not add boot marker strings for font or prepared text work.
+- Do not leave temporary generated cache directories in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Host tool dependency rules
+
+Host-side shaping and rasterization dependencies must not enter firmware crates.
+
+Allowed in the host tool:
+
+- rustybuzz or HarfBuzz-equivalent shaping crate,
+- fontdue or another host-side rasterizer,
+- ttf-parser if needed,
+- normal host `std` APIs.
+
+Rules:
+
+- keep host tool under a tools directory,
+- avoid making host dependencies part of the ESP32 firmware build,
+- do not break workspace target builds,
+- do not require network access,
+- do not automatically download fonts,
+- do not commit Noto font files unless explicitly approved.
+
+### Font input rules
+
+The generator must accept user-provided font paths:
+
+- `NotoSans-Regular.ttf`
+- `NotoSansDevanagari-Regular.ttf`
+
+Rules:
+
+- fail clearly if either font path is missing,
+- fail clearly if font parsing fails,
+- do not display massive binary dumps,
+- do not copy font files into the repository,
+- do not copy font files onto SD for this task.
+
+### Shaping rules
+
+Devanagari text must be shaped host-side.
+
+Required:
+
+- use rustybuzz/HarfBuzz host-side shaping for Devanagari,
+- use shaped glyph ids and positions,
+- do not use raw Unicode codepoint-to-glyph mapping for Devanagari,
+- preserve shaped glyph ids as VFNT glyph ids or maintain an explicit mapping,
+- generate VRN glyph records referencing glyph ids available in the generated VFNT.
+
+Allowed:
+
+- shape Latin with the same shaping engine.
+- simple LTR layout only for this smoke.
+
+Not required:
+
+- BiDi,
+- full paragraph layout,
+- EPUB/CSS layout,
+- hyphenation,
+- justification.
+
+### VFNT generation rules
+
+Generated VFNT assets must:
+
+- use the existing VFNT magic/version,
+- use 1bpp bitmap glyphs,
+- use MSB-first bit order,
+- include only glyphs needed by the prepared TXT pages,
+- include valid glyph metrics and bitmap records,
+- use row stride consistently,
+- produce non-empty bitmaps for visible glyphs,
+- be accepted by the existing Reader prepared TXT bridge.
+
+Rules:
+
+- do not commit large generated VFN files,
+- use temporary output or SD output only,
+- keep any test fixture tiny if one is necessary.
+
+### VRN generation rules
+
+Generated VRN pages must:
+
+- use the existing prepared page/VRN contract consumed by Reader,
+- include positioned glyph records,
+- reference the correct font slot or font id,
+- reference glyph ids that exist in the corresponding VFN,
+- keep coordinates inside the Reader page region for the smoke case.
+
+### Reader behavior rules
+
+Prefer no Reader changes if generated assets fit the existing bridge.
+
+Reader changes are allowed only to fix correctness for real generated assets, such as:
+
+- larger glyph ids,
+- realistic row strides,
+- non-zero bitmap offsets,
+- simple bearing/position interpretation,
+- safe handling of invalid cache.
+
+Do not break:
+
+- normal TXT fallback,
+- EPUB behavior,
+- Back behavior,
+- progress files,
+- bookmark files,
+- Library navigation.
+
+### Language around Indic support
+
+Allowed wording:
+
+- the prepared TXT smoke can render a host-shaped English + Devanagari TXT with real glyphs,
+- Devanagari shaping happens offline on the host,
+- X4 renders prepared glyph runs,
+- general on-device Hindi/Sanskrit rendering is not implemented.
+
+Do not claim:
+
+- arbitrary Hindi/Sanskrit TXT support without prepared cache,
+- EPUB Indic support,
+- on-device Indic shaping,
+- complete typography/layout support.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Also run:
+
+- host tool unit tests,
+- host tool build,
+- host tool generation into a temporary directory if fonts are available,
+- list generated temporary output,
+- remove generated temporary output if possible.
+
+Report all command results and clearly state what remains intentionally unimplemented.
+## Vaachak OS Network Time and Clock Screen Guardrails
+
+These guardrails apply to NTP time sync, Date & Time screen, Home time/date display, and Network Status time sync integration.
+
+### Scope boundaries
+
+This task adds a network time foundation only.
+
+Allowed:
+
+- add System > Date & Time screen,
+- sync time with NTP over existing Wi-Fi credentials,
+- cache last successful time sync on SD,
+- show cached time, day, date, timezone, sync status, and last sync result,
+- add Time Sync status to Network Status,
+- update Home/category dashboard to show time/date and battery instead of category/app count,
+- add docs and pure helper tests.
+
+Not allowed in this task:
+
+- Calendar app,
+- Hindu calendar,
+- timezone Settings UI,
+- automatic boot sync,
+- browser SD card manager,
+- Wi-Fi Transfer behavior changes,
+- Reader behavior changes,
+- Daily Mantra behavior changes,
+- Sleep Image behavior changes,
+- custom font work.
+
+### Naming and artifact rules
+
+- Use semantic names only.
+- Do not add generated-delivery names, numbered milestone labels, temporary marker labels, marker logs, or similar strings in source, docs, scripts, comments, tests, symbols, filenames, or runtime logs.
+- Do not add boot marker strings for time work.
+- Do not create zip archives or overlay helper scripts.
+- Do not leave temporary generated files in the repository.
+- Existing repository validation must continue to pass, including:
+  - `./scripts/check_no_milestone_artifacts.sh .`
+
+### Wi-Fi and NTP rules
+
+- Do not start Wi-Fi from Home rendering.
+- Do not start Wi-Fi automatically at boot.
+- Do not start the HTTP transfer server for time sync.
+- NTP sync must happen only after explicit user action on Date & Time or another explicit sync control.
+- Reuse existing Wi-Fi credential handling.
+- Never display or log the Wi-Fi password.
+- Missing credentials must show a clear error.
+- NTP timeout, DNS failure, invalid packet, network failure, and cache write failure must show clear status.
+- Keep sync bounded with timeouts.
+
+### Time cache rules
+
+Use a simple, robust, line-based SD cache.
+
+Recommended path:
+
+- `/_x4/TIME.TXT`
+
+Recommended fields:
+
+- `timezone=America/New_York`
+- `last_sync_unix=<unix-seconds>`
+- `last_sync_monotonic_ms=<device-ms-if-available>`
+- `last_sync_ok=1`
+- `last_sync_source=ntp`
+- `last_sync_error=<short-error>`
+- `display_offset_minutes=<offset>`
+
+Rules:
+
+- missing cache means unsynced,
+- corrupt cache means unsynced or safe fallback,
+- old cached time should remain available after sync failure,
+- do not claim unsynced or stale time as authoritative,
+- keep timezone handling centralized so Settings can configure it later.
+
+### Timezone rules
+
+- Use `America/New_York` for this deliverable.
+- Centralize it as a constant/config object.
+- Document DST behavior.
+- If full DST rules are not implemented, state the fixed-offset limitation clearly.
+- Future work may add a Settings timezone picker.
+
+### UI rules
+
+Date & Time screen:
+
+- shows current cached/estimated time,
+- shows day and date,
+- shows timezone,
+- shows sync status,
+- shows last sync result,
+- Select starts sync,
+- Back returns to System category.
+
+Network Status:
+
+- adds a Time Sync line,
+- does not perform sync automatically.
+
+Home:
+
+- shows time/date and battery status,
+- replaces category/app count text,
+- does not trigger Wi-Fi,
+- handles missing time cache safely,
+- handles missing battery status safely.
+
+### Preservation rules
+
+Do not change:
+
+- Wi-Fi Transfer behavior,
+- Wi-Fi Connect behavior,
+- normal Network Status behavior beyond the added Time Sync line,
+- category dashboard navigation,
+- Reader state files,
+- library flow,
+- bookmarks,
+- settings,
+- sleep image,
+- daily mantra behavior.
+
+### Required validation
+
+Run these before reporting completion:
+
+- `cargo fmt --all --check`
+- `cargo check --workspace --target riscv32imc-unknown-none-elf`
+- `cargo clippy --workspace --target riscv32imc-unknown-none-elf -- -D warnings`
+- `cargo test -p vaachak-core --all-targets`
+- `cargo test -p hal-xteink-x4 --all-targets`
+- `cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf`
+- `./scripts/check_no_milestone_artifacts.sh .`
+- `git diff --check`
+
+Report all command results and clearly state what remains intentionally unimplemented.

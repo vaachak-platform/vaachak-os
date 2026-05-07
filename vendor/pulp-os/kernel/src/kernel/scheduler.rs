@@ -573,9 +573,12 @@ impl super::Kernel {
 
         let bmp_decode_ms = Cell::new(0u64);
         let resolve_start = Instant::now();
-        let Some(info) =
-            sleep_bitmap::resolve_sleep_bitmap_for_mode_timed(&self.sd, mode, &bmp_decode_ms)
-        else {
+        let Some(info) = sleep_bitmap::resolve_sleep_bitmap_for_mode_timed(
+            &self.sd,
+            mode,
+            super::uptime_secs(),
+            &bmp_decode_ms,
+        ) else {
             esp_println::println!(
                 "sleep image: no valid bitmap found mode={} resolve_ms={} bmp_decode_ms={} total_ms={}",
                 mode.name(),

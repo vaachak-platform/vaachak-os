@@ -272,6 +272,7 @@ impl ReaderApp {
         }
 
         if self.is_epub
+            && true
             && self.pg.fully_indexed
             && (self.epub.chapter as usize + 1) < self.epub.spine.len()
         {
@@ -295,7 +296,7 @@ impl ReaderApp {
             return true;
         }
 
-        if self.is_epub && self.epub.chapter > 0 {
+        if self.is_epub && true && self.epub.chapter > 0 {
             self.epub.chapter -= 1;
             self.goto_last_page = true;
             self.state = State::NeedIndex;
@@ -310,7 +311,7 @@ impl ReaderApp {
         if self.state != State::Ready {
             return false;
         }
-        if self.is_epub {
+        if self.is_epub && true {
             if (self.epub.chapter as usize + 1) < self.epub.spine.len() {
                 self.epub.chapter += 1;
                 self.goto_last_page = false;
@@ -338,7 +339,7 @@ impl ReaderApp {
         if self.state != State::Ready {
             return false;
         }
-        if self.is_epub {
+        if self.is_epub && true {
             if self.epub.chapter > 0 {
                 self.epub.chapter -= 1;
                 self.goto_last_page = false;

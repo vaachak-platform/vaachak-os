@@ -47,8 +47,8 @@ macro_rules! with_app {
                 let $app = &mut *$mgr.settings;
                 $body
             }
-            AppId::Upload => {
-                unreachable!("Upload mode is handled outside the app dispatch loop");
+            AppId::Upload | AppId::TimeSync => {
+                unreachable!("special modes are handled outside the app dispatch loop");
             }
         }
     };
@@ -74,8 +74,8 @@ macro_rules! with_app_ref {
                 let $app = &*$mgr.settings;
                 $body
             }
-            AppId::Upload => {
-                unreachable!("Upload mode is handled outside the app dispatch loop");
+            AppId::Upload | AppId::TimeSync => {
+                unreachable!("special modes are handled outside the app dispatch loop");
             }
         }
     };
@@ -210,7 +210,7 @@ impl AppManager {
             AppId::Files => AppScreen::Browser,
             AppId::Reader => AppScreen::Reader,
             AppId::Settings => AppScreen::Settings,
-            AppId::Upload => self.app_shell.screen(),
+            AppId::Upload | AppId::TimeSync => self.app_shell.screen(),
         };
         self.app_shell.set_screen(next);
     }
@@ -552,7 +552,7 @@ impl AppManager {
         if let Some(nav) = self.launcher.apply(transition) {
             log::info!("app: {:?} -> {:?}", nav.from, nav.to);
 
-            if nav.from != AppId::Upload {
+            if !matches!(nav.from, AppId::Upload | AppId::TimeSync) {
                 if nav.from == AppId::Reader {
                     self.reader.persist_progress_records(k);
                 }
@@ -578,7 +578,7 @@ impl AppManager {
                 }
             }
 
-            if nav.to != AppId::Upload {
+            if !matches!(nav.to, AppId::Upload | AppId::TimeSync) {
                 if nav.resume {
                     with_app!(nav.to, self, |app| {
                         app.on_resume(&mut self.launcher.ctx, k)
@@ -666,14 +666,12 @@ impl AppManager {
         let book_idx = ss.book_font_size_idx;
         let theme_idx = ss.reading_theme;
         let show_progress = ss.reader_show_progress;
-
         self.home.set_ui_font_size(ui_idx);
         self.files.set_ui_font_size(ui_idx);
         self.settings.set_ui_font_size(ui_idx);
         self.reader.set_book_font_size(book_idx);
         self.reader.set_reading_theme(theme_idx);
         self.reader.set_show_progress_chrome(show_progress);
-
         let chrome = fonts::chrome_font();
         self.reader.set_chrome_font(chrome);
         self.quick_menu.set_chrome_font(chrome);
@@ -830,7 +828,7 @@ impl AppLayer for AppManager {
     }
 
     fn needs_special_mode(&self) -> bool {
-        self.launcher.active() == AppId::Upload
+        matches!(self.launcher.active(), AppId::Upload | AppId::TimeSync)
     }
 
     async fn run_special_mode(
@@ -840,23 +838,43 @@ impl AppLayer for AppManager {
         delay: &mut Delay,
         sd: &SdStorage,
     ) {
-        // Safety: WIFI is not owned by any other driver.  Upload mode
-        // runs in isolation (the scheduler exits the main dispatch loop
-        // first) and tears down the radio stack before returning.  The
-        // peripheral is not accessed again until the next upload session.
-        let wifi = unsafe { esp_hal::peripherals::WIFI::steal() };
+        match self.launcher.active() {
+            AppId::Upload => {
+                // Safety: WIFI is not owned by any other driver. Network special
+                // modes run in isolation and tear down before returning.
+                let wifi = unsafe { esp_hal::peripherals::WIFI::steal() };
 
-        crate::apps::upload::run_upload_mode(
-            wifi,
-            epd,
-            strip,
-            delay,
-            sd,
-            self.settings.system_settings().ui_font_size_idx,
-            &*self.bumps,
-            self.settings.wifi_config(),
-        )
-        .await;
+                crate::apps::upload::run_upload_mode(
+                    wifi,
+                    epd,
+                    strip,
+                    delay,
+                    sd,
+                    self.settings.system_settings().ui_font_size_idx,
+                    &*self.bumps,
+                    self.settings.wifi_config(),
+                )
+                .await;
+            }
+            AppId::TimeSync => {
+                // Safety: WIFI is not owned by any other driver. Network special
+                // modes run in isolation and tear down before returning.
+                let wifi = unsafe { esp_hal::peripherals::WIFI::steal() };
+
+                crate::apps::network_time::run_time_sync_mode(
+                    wifi,
+                    epd,
+                    strip,
+                    delay,
+                    sd,
+                    self.settings.system_settings().ui_font_size_idx,
+                    &*self.bumps,
+                    self.settings.wifi_config(),
+                )
+                .await;
+            }
+            _ => {}
+        }
     }
 
     fn suppress_deferred_input(&self) -> bool {

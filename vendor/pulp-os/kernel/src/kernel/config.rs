@@ -43,6 +43,16 @@ pub const NUM_READING_THEMES: u8 = 4;
 pub const DEFAULT_READING_THEME: u8 = 1;
 
 pub const DEFAULT_READER_SHOW_PROGRESS: bool = true;
+
+pub const PREPARED_FONT_PROFILE_COUNT: u8 = 3;
+pub const DEFAULT_PREPARED_FONT_PROFILE: u8 = 1;
+pub const PREPARED_FONT_PROFILE_LABELS: [&str; PREPARED_FONT_PROFILE_COUNT as usize] =
+    ["Compact", "Balanced", "Large"];
+
+pub const PREPARED_FALLBACK_POLICY_COUNT: u8 = 3;
+pub const DEFAULT_PREPARED_FALLBACK_POLICY: u8 = 0;
+pub const PREPARED_FALLBACK_POLICY_LABELS: [&str; PREPARED_FALLBACK_POLICY_COUNT as usize] =
+    ["Visible", "Latin", "Reject"];
 pub const DEFAULT_DISPLAY_REFRESH_MODE: u8 = 1;
 pub const DEFAULT_DISPLAY_INVERT_COLORS: bool = false;
 pub const DEFAULT_DISPLAY_CONTRAST_HIGH: bool = false;
@@ -101,6 +111,8 @@ pub struct SystemSettings {
     // reading settings
     pub reading_theme: u8, // index into READING_THEMES
     pub reader_show_progress: bool,
+    pub prepared_font_profile: u8,
+    pub prepared_fallback_policy: u8,
 
     // display preference preview settings; persisted, not applied to hardware
     pub display_refresh_mode: u8, // 0 = Full, 1 = Balanced, 2 = Fast
@@ -116,6 +128,8 @@ pub struct ReaderPreferences {
     pub book_font: u8,
     pub reading_theme: u8,
     pub show_progress: bool,
+    pub prepared_font_profile: u8,
+    pub prepared_fallback_policy: u8,
 }
 
 impl Default for SystemSettings {
@@ -133,6 +147,8 @@ impl SystemSettings {
             ui_font_size_idx: DEFAULT_FONT_SIZE_IDX,
             reading_theme: DEFAULT_READING_THEME,
             reader_show_progress: DEFAULT_READER_SHOW_PROGRESS,
+            prepared_font_profile: DEFAULT_PREPARED_FONT_PROFILE,
+            prepared_fallback_policy: DEFAULT_PREPARED_FALLBACK_POLICY,
             display_refresh_mode: DEFAULT_DISPLAY_REFRESH_MODE,
             display_invert_colors: DEFAULT_DISPLAY_INVERT_COLORS,
             display_contrast_high: DEFAULT_DISPLAY_CONTRAST_HIGH,
@@ -152,6 +168,12 @@ impl SystemSettings {
         self.book_font_size_idx = self.book_font_size_idx.min(max_font);
         self.ui_font_size_idx = self.ui_font_size_idx.min(max_font);
         self.reading_theme = self.reading_theme.min(NUM_READING_THEMES - 1);
+        self.prepared_font_profile = self
+            .prepared_font_profile
+            .min(PREPARED_FONT_PROFILE_COUNT - 1);
+        self.prepared_fallback_policy = self
+            .prepared_fallback_policy
+            .min(PREPARED_FALLBACK_POLICY_COUNT - 1);
         self.display_refresh_mode = self.display_refresh_mode.min(2);
     }
 
@@ -160,6 +182,8 @@ impl SystemSettings {
             book_font: self.book_font_size_idx,
             reading_theme: self.reading_theme,
             show_progress: self.reader_show_progress,
+            prepared_font_profile: self.prepared_font_profile,
+            prepared_fallback_policy: self.prepared_fallback_policy,
         }
     }
 
@@ -167,6 +191,12 @@ impl SystemSettings {
         self.book_font_size_idx = prefs.book_font.min(Self::DEFAULT_MAX_FONT_IDX);
         self.reading_theme = prefs.reading_theme.min(NUM_READING_THEMES - 1);
         self.reader_show_progress = prefs.show_progress;
+        self.prepared_font_profile = prefs
+            .prepared_font_profile
+            .min(PREPARED_FONT_PROFILE_COUNT - 1);
+        self.prepared_fallback_policy = prefs
+            .prepared_fallback_policy
+            .min(PREPARED_FALLBACK_POLICY_COUNT - 1);
     }
 
     // reasonable default - override via sanitize_with_max_font
@@ -282,6 +312,16 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
         b"reader_show_progress" => {
             if let Some(v) = parse_bool(val) {
                 s.reader_show_progress = v;
+            }
+        }
+        b"prepared_font_profile" => {
+            if let Some(v) = parse_u16(val) {
+                s.prepared_font_profile = v as u8;
+            }
+        }
+        b"prepared_fallback_policy" => {
+            if let Some(v) = parse_u16(val) {
+                s.prepared_fallback_policy = v as u8;
             }
         }
         b"show_progress" => {
@@ -421,6 +461,11 @@ pub fn write_settings_txt(s: &SystemSettings, w: &WifiConfig, buf: &mut [u8]) ->
 
     wr.put(b"\n# reader preferences\n");
     wr.kv_num(b"show_progress", if s.reader_show_progress { 1 } else { 0 });
+    wr.kv_num(b"prepared_font_profile", s.prepared_font_profile as u16);
+    wr.kv_num(
+        b"prepared_fallback_policy",
+        s.prepared_fallback_policy as u16,
+    );
 
     wr.put(b"\n# display preferences (persisted only)\n");
     wr.kv_num(b"display_refresh_mode", s.display_refresh_mode as u16);

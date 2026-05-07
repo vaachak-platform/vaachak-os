@@ -76,6 +76,18 @@ impl<'k> KernelHandle<'k> {
     }
 
     #[inline]
+    pub fn read_subdir_chunk(
+        &mut self,
+        dir: &str,
+        subdir: &str,
+        name: &str,
+        offset: u32,
+        buf: &mut [u8],
+    ) -> Result<usize> {
+        storage::read_file_chunk_in_subdir(&self.kernel.sd, dir, subdir, name, offset, buf)
+    }
+
+    #[inline]
     pub fn read_file_start(&mut self, name: &str, buf: &mut [u8]) -> Result<(u32, usize)> {
         storage::read_file_start(&self.kernel.sd, name, buf)
     }
