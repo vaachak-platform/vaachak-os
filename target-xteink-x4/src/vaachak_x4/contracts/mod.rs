@@ -7,6 +7,7 @@ pub mod input;
 pub mod input_contract_smoke;
 pub mod input_semantics;
 pub mod spi_bus_runtime_contract_smoke;
+pub mod spi_bus_runtime_ownership_smoke;
 pub mod storage;
 pub mod storage_path_helpers;
 pub mod storage_probe_mount_contract_smoke;
