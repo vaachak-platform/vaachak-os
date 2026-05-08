@@ -35,3 +35,11 @@ This slice does not change reader behavior, file browser behavior, settings beha
 ## Readiness status
 
 The next hardware-adjacent migration should not start until this contract gate remains green after a flash and on-device smoke pass.
+
+## Storage read-only adapter facade
+
+The storage read-only adapter facade is now defined in `target-xteink-x4/src/vaachak_x4/io/storage_readonly_adapter.rs`.
+
+It adds Vaachak-owned contracts for file existence, start-of-file reads, offset chunk reads, directory metadata listing, and resolving the current storage path map.
+
+The active implementation remains Pulp-backed. SD mount/probe, SD driver behavior, FAT/filesystem behavior, SPI arbitration, display behavior, and reader behavior still live in `vendor/pulp-os`.
