@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use super::display_backend_native_refresh_shell::VaachakDisplayBackendNativeRefreshShell;
 use super::hardware_executor_pulp_backend::VaachakHardwareExecutorBackend;
 use super::hardware_runtime_backend::{
     VaachakDisplayBackendOperation, VaachakDisplayExecutor, VaachakDisplayRequest,
@@ -142,19 +143,39 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn execute_display_full_refresh_handoff() -> VaachakHardwareBackendHandoffResult {
-        Self::backend().execute_display(VaachakDisplayRequest {
-            operation: VaachakDisplayBackendOperation::FullRefresh,
-            spi_handoff_required: true,
-            display_draw_algorithm_rewrite_allowed: false,
-        })
+        let native_refresh =
+            VaachakDisplayBackendNativeRefreshShell::execute_full_refresh_handoff();
+        if !native_refresh.ok() {
+            return Self::backend().execute_display(VaachakDisplayRequest {
+                operation: VaachakDisplayBackendOperation::FullRefresh,
+                spi_handoff_required: true,
+                display_draw_algorithm_rewrite_allowed: false,
+            });
+        }
+
+        Self::backend().execute_display(
+            VaachakDisplayBackendNativeRefreshShell::display_request_for(
+                super::display_backend_native_refresh_shell::VaachakDisplayRefreshCommand::FullRefresh,
+            ),
+        )
     }
 
     pub fn execute_display_partial_refresh_handoff() -> VaachakHardwareBackendHandoffResult {
-        Self::backend().execute_display(VaachakDisplayRequest {
-            operation: VaachakDisplayBackendOperation::PartialRefresh,
-            spi_handoff_required: true,
-            display_draw_algorithm_rewrite_allowed: false,
-        })
+        let native_refresh =
+            VaachakDisplayBackendNativeRefreshShell::execute_partial_refresh_handoff();
+        if !native_refresh.ok() {
+            return Self::backend().execute_display(VaachakDisplayRequest {
+                operation: VaachakDisplayBackendOperation::PartialRefresh,
+                spi_handoff_required: true,
+                display_draw_algorithm_rewrite_allowed: false,
+            });
+        }
+
+        Self::backend().execute_display(
+            VaachakDisplayBackendNativeRefreshShell::display_request_for(
+                super::display_backend_native_refresh_shell::VaachakDisplayRefreshCommand::PartialRefresh,
+            ),
+        )
     }
 
     pub fn execute_input_scan_handoff() -> VaachakHardwareBackendHandoffResult {
@@ -192,7 +213,10 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn backend_interface_calls_ok() -> bool {
-        Self::execute_spi_display_transaction_handoff().ok()
+        let display_native_refresh_ready =
+            VaachakDisplayBackendNativeRefreshShell::native_refresh_shell_ok();
+        display_native_refresh_ready
+            && Self::execute_spi_display_transaction_handoff().ok()
             && Self::execute_spi_storage_transaction_handoff().ok()
             && Self::execute_storage_probe_mount_handoff().ok()
             && Self::execute_storage_directory_listing_handoff().ok()

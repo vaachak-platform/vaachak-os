@@ -12,6 +12,7 @@ pub mod storage_probe_mount_pulp_backend;
 pub mod storage_probe_mount_runtime_executor_bridge;
 pub mod storage_probe_mount_runtime_owner;
 
+pub mod display_backend_native_refresh_shell;
 pub mod display_executor_bridge;
 pub mod display_pulp_backend;
 pub mod display_runtime_owner;
