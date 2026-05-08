@@ -2,6 +2,8 @@
 
 This document is the canonical checkpoint for the accepted Vaachak-native hardware behavior migrations.
 
+Cleanup checkpoint: `hardware_native_behavior_consolidation_cleanup=ok`
+
 ## Consolidated native behavior now owned by Vaachak
 
 | Area | Vaachak-owned behavior | Still Pulp-compatible |
@@ -13,6 +15,7 @@ This document is the canonical checkpoint for the accepted Vaachak-native hardwa
 ## Active stack
 
 - Consolidation marker: `hardware_native_behavior_consolidation=ok`
+- Cleanup marker: `hardware_native_behavior_consolidation_cleanup=ok`
 - Behavior owner: `target-xteink-x4 Vaachak layer`
 - Active native behavior stack: `InputEventPipeline+DisplayRefreshCommandExecutor+StorageSdMmcFatExecutor`
 - Low-level fallback: `PulpCompatibility`
@@ -42,4 +45,13 @@ This document consolidates these accepted checkpoints:
 - `storage-backend-native-sd-mmc-fat-executor.md`
 - `storage-backend-native-sd-mmc-fat-executor-cleanup.md`
 
-Next lower-level migrations should be treated as separate physical-driver work and should not be mixed with this behavior consolidation checkpoint.
+## Cleanup checkpoint
+
+The cleanup checkpoint adds:
+
+- `hardware_native_behavior_consolidation_cleanup=ok`
+- `hardware-native-behavior-consolidation-cleanup.md`
+- `validate_hardware_native_behavior_consolidation_cleanup.sh`
+- `cleanup_hardware_native_behavior_consolidation_artifacts.sh`
+
+The cleanup checkpoint does not add any lower-level driver migration. Next lower-level migrations should be treated as separate physical-driver work and should not be mixed with this behavior consolidation checkpoint.
