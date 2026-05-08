@@ -3,6 +3,7 @@
 use super::hardware_executor_pulp_backend::{
     VaachakHardwareExecutorBackend, VaachakHardwareExecutorPulpBackend,
 };
+use super::hardware_runtime_backend_takeover::VaachakHardwareRuntimeBackendTakeover;
 use super::hardware_runtime_executor_acceptance::VaachakHardwareRuntimeExecutorAcceptance;
 use super::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
 
@@ -151,6 +152,10 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
             && VaachakHardwareExecutorPulpBackend::backend_ok()
     }
 
+    pub fn backend_takeover_preflight_ok() -> bool {
+        VaachakHardwareRuntimeBackendTakeover::takeover_ok()
+    }
+
     pub const fn record_for(
         site: VaachakHardwareRuntimeLiveHandoffSite,
     ) -> VaachakHardwareRuntimeLiveHandoffRecord {
@@ -257,7 +262,9 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
     }
 
     pub fn active_boot_preflight() -> bool {
-        VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
+        Self::backend_takeover_preflight_ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_spi_display_transaction_handoff().ok()
+            && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_boot_executor_preflight()
             && Self::record_ok(Self::record_for(
                 VaachakHardwareRuntimeLiveHandoffSite::BootPreflight,
@@ -269,7 +276,10 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
     }
 
     pub fn adopt_imported_pulp_reader_runtime_boundary() -> bool {
-        VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
+        Self::backend_takeover_preflight_ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_storage_file_open_handoff().ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_storage_file_read_handoff().ok()
+            && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_reader_file_open_handoff()
             && Self::record_ok(Self::record_for(
                 VaachakHardwareRuntimeLiveHandoffSite::ImportedPulpReaderRuntimeBoundary,
@@ -277,7 +287,12 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
     }
 
     pub fn adopt_storage_availability_handoff() -> bool {
-        VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
+        Self::backend_takeover_preflight_ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_spi_storage_transaction_handoff().ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_storage_probe_mount_handoff().ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_storage_directory_listing_handoff()
+                .ok()
+            && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_card_detect_handoff()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_mount_handoff()
             && Self::record_ok(Self::record_for(
@@ -286,7 +301,10 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
     }
 
     pub fn adopt_display_refresh_handoff() -> bool {
-        VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
+        Self::backend_takeover_preflight_ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_display_full_refresh_handoff().ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_display_partial_refresh_handoff().ok()
+            && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_display_refresh_handoff()
             && Self::record_ok(Self::record_for(
                 VaachakHardwareRuntimeLiveHandoffSite::DisplayRefreshHandoff,
@@ -294,7 +312,10 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
     }
 
     pub fn adopt_input_runtime_handoff() -> bool {
-        VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
+        Self::backend_takeover_preflight_ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_input_scan_handoff().ok()
+            && VaachakHardwareRuntimeBackendTakeover::execute_input_navigation_handoff().ok()
+            && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_input_driver_init_handoff()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_input_task_handoff()
             && Self::record_ok(Self::record_for(

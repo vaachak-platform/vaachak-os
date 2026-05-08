@@ -23,3 +23,7 @@ The low-level backend remains `PulpCompatibility` / Pulp-compatible. This checkp
 ```text
 hardware_runtime_executor_live_path_handoff=ok
 ```
+
+## Backend takeover bridge
+
+Live handoff now references `VaachakHardwareRuntimeBackendTakeover` so selected runtime handoffs call Vaachak-owned backend traits before remaining on the `PulpCompatibility` low-level executor. This preserves reader/file-browser UX, app navigation, SSD1677 draw algorithms, SD/MMC/FAT algorithms, and input debounce/navigation behavior.
