@@ -21,6 +21,7 @@ pub mod storage_readonly_boundary_smoke;
 pub mod storage_readonly_pulp_bridge_smoke;
 pub mod storage_state_contract;
 
+pub mod hardware_runtime_executor_observability_smoke;
 pub mod hardware_runtime_executor_smoke;
 pub mod hardware_runtime_executor_wiring_smoke;
 pub mod hardware_runtime_ownership_smoke;
