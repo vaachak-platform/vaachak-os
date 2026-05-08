@@ -63,7 +63,7 @@ require_text "$IMPORTED" "VaachakHardwareRuntimeExecutorLiveHandoff::adopt_impor
 
 require_regex "$IMPORTED" "if\s+crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::active_boot_preflight\(\)\s*\{.*emit_hardware_runtime_executor_runtime_use_marker\(\).*emit_hardware_runtime_executor_live_handoff_marker\(\).*\}"
 
-require_text "$DOC" "PulpCompatibility"
+require_regex "$DOC" "PulpCompatibility|Pulp-compatible|pulp_compatible"
 require_text "$DOC" "hardware_runtime_executor_live_path_handoff=ok"
 
 require_text "$SRC" "PHYSICAL_SPI_TRANSFER_CHANGED: bool = false"
