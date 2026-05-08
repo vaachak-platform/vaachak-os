@@ -6,6 +6,7 @@ use super::hardware_executor_pulp_backend::{
 use super::hardware_runtime_backend_takeover::VaachakHardwareRuntimeBackendTakeover;
 use super::hardware_runtime_executor_acceptance::VaachakHardwareRuntimeExecutorAcceptance;
 use super::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
+use super::storage_backend_native_sd_mmc_fat_executor::VaachakStorageBackendNativeSdMmcFatExecutor;
 
 /// Live runtime handoff surface for the Vaachak hardware executor path.
 ///
@@ -295,6 +296,8 @@ impl VaachakHardwareRuntimeExecutorLiveHandoff {
             && VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_card_detect_handoff()
             && VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_mount_handoff()
+            && VaachakStorageBackendNativeSdMmcFatExecutor::adopt_storage_availability_handoff()
+            && VaachakStorageBackendNativeSdMmcFatExecutor::adopt_storage_fat_access_handoff()
             && Self::record_ok(Self::record_for(
                 VaachakHardwareRuntimeLiveHandoffSite::StorageAvailabilityHandoff,
             ))

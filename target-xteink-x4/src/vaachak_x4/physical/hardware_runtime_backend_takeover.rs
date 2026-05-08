@@ -18,6 +18,7 @@ use super::hardware_runtime_executor_acceptance::VaachakHardwareRuntimeExecutorA
 use super::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
 use super::input_backend_native_event_pipeline::VaachakInputBackendNativeEventPipeline;
 use super::input_backend_native_executor::VaachakInputBackendNativeExecutor;
+use super::storage_backend_native_sd_mmc_fat_executor::VaachakStorageBackendNativeSdMmcFatExecutor;
 
 /// Vaachak-owned backend takeover bridge.
 ///
@@ -220,6 +221,11 @@ impl VaachakHardwareRuntimeBackendTakeover {
         VaachakDisplayBackendNativeRefreshCommandExecutor::command_executor_ok()
     }
 
+    pub fn execute_storage_native_sd_mmc_fat_handoff() -> VaachakHardwareBackendHandoffResult {
+        VaachakStorageBackendNativeSdMmcFatExecutor::execute_directory_listing_handoff()
+            .pulp_handoff_result
+    }
+
     pub fn backend_interface_calls_ok() -> bool {
         let input_native_event_pipeline_ready =
             VaachakInputBackendNativeEventPipeline::event_pipeline_ok();
@@ -234,6 +240,8 @@ impl VaachakHardwareRuntimeBackendTakeover {
             && Self::execute_storage_file_open_handoff().ok()
             && Self::execute_storage_file_read_handoff().ok()
             && Self::execute_storage_path_resolution_handoff().ok()
+            && Self::execute_storage_native_sd_mmc_fat_handoff().ok()
+            && VaachakStorageBackendNativeSdMmcFatExecutor::native_sd_mmc_fat_executor_ok()
             && Self::execute_display_full_refresh_handoff().ok()
             && Self::execute_display_partial_refresh_handoff().ok()
             && Self::execute_input_scan_handoff().ok()
