@@ -14,6 +14,7 @@ use super::hardware_runtime_backend::{
 use super::hardware_runtime_backend_pulp::VaachakHardwareRuntimePulpCompatibilityBackend;
 use super::hardware_runtime_executor_acceptance::VaachakHardwareRuntimeExecutorAcceptance;
 use super::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
+use super::input_backend_native_executor::VaachakInputBackendNativeExecutor;
 
 /// Vaachak-owned backend takeover bridge.
 ///
@@ -157,6 +158,15 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn execute_input_scan_handoff() -> VaachakHardwareBackendHandoffResult {
+        let native_scan = VaachakInputBackendNativeExecutor::execute_scan_handoff();
+        if !native_scan.ok() {
+            return Self::backend().execute_input(VaachakInputRequest {
+                operation: VaachakInputBackendOperation::ButtonScan,
+                adc_ladder_owner_required: true,
+                input_debounce_navigation_rewrite_allowed: false,
+            });
+        }
+
         Self::backend().execute_input(VaachakInputRequest {
             operation: VaachakInputBackendOperation::ButtonScan,
             adc_ladder_owner_required: true,
@@ -165,6 +175,15 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn execute_input_navigation_handoff() -> VaachakHardwareBackendHandoffResult {
+        let native_navigation = VaachakInputBackendNativeExecutor::execute_navigation_handoff();
+        if !native_navigation.ok() {
+            return Self::backend().execute_input(VaachakInputRequest {
+                operation: VaachakInputBackendOperation::NavigationHandoff,
+                adc_ladder_owner_required: true,
+                input_debounce_navigation_rewrite_allowed: false,
+            });
+        }
+
         Self::backend().execute_input(VaachakInputRequest {
             operation: VaachakInputBackendOperation::NavigationHandoff,
             adc_ladder_owner_required: true,
