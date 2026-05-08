@@ -2,6 +2,8 @@
 
 `input_backend_native_event_pipeline` is the first Vaachak OS hardware backend slice that moves actual input event behavior out of the imported Pulp runtime while keeping physical sampling Pulp-compatible.
 
+Cleanup checkpoint: [`input-backend-native-event-pipeline-cleanup.md`](input-backend-native-event-pipeline-cleanup.md)
+
 ## Ownership moved to Vaachak
 
 Vaachak now owns the input event pipeline in `target-xteink-x4`:
@@ -46,7 +48,7 @@ This deliverable intentionally does not change:
 
 ## Runtime integration
 
-The backend takeover/live handoff path now routes input scan and navigation handoffs through:
+The backend takeover/live handoff path routes input scan and navigation handoffs through:
 
 ```text
 VaachakInputBackendNativeEventPipeline::execute_scan_pipeline()
@@ -55,8 +57,11 @@ VaachakInputBackendNativeEventPipeline::execute_navigation_pipeline()
 
 The handoff then continues to the Pulp-compatible backend for physical sampling and low-level execution.
 
-## Acceptance marker
+The cleanup checkpoint verifies that the takeover-fix integration is folded into the main accepted input pipeline state.
+
+## Acceptance markers
 
 ```text
 input_backend_native_event_pipeline=ok
+input_backend_native_event_pipeline_cleanup=ok
 ```
