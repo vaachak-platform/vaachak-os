@@ -92,3 +92,14 @@ It also depends on the existing storage/read-only and storage probe/mount bounda
 ```text
 spi_bus_runtime_ownership_bridge=ok
 ```
+
+## Next runtime behavior slice
+
+The SPI bus ownership bridge is followed by the canonical arbitration runtime owner:
+
+```text
+docs/architecture/spi-bus-arbitration-runtime-ownership.md
+spi_bus_arbitration_runtime_owner=ok
+```
+
+That layer moves Vaachak-owned logical arbitration request/grant metadata while keeping physical SPI transfer and chip-select execution in the Pulp compatibility backend.

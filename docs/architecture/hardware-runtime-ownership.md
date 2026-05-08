@@ -102,3 +102,25 @@ storage_probe_mount_executor_bridge
 ```
 
 That future step would still avoid changing reader/file-browser behavior and should retain the Pulp compatibility backend until hardware smoke is clean.
+
+## SPI arbitration runtime owner
+
+The first behavior-migration slice after this ownership consolidation is documented here:
+
+```text
+docs/architecture/spi-bus-arbitration-runtime-ownership.md
+spi_bus_arbitration_runtime_owner=ok
+```
+
+It moves logical SPI arbitration request/grant metadata into Vaachak while keeping physical SPI transfer, chip-select, SD/FAT, display, input, reader, and file-browser executor behavior unchanged.
+
+## Hardware runtime executor extraction
+
+The broad executor extraction layer is documented here:
+
+```text
+docs/architecture/hardware-runtime-executor-extraction.md
+hardware_runtime_executor_extraction=ok
+```
+
+That layer moves consolidated Vaachak-owned executor entrypoints for SPI, SD lifecycle, FAT/storage, display, and input while keeping active low-level execution Pulp-compatible.

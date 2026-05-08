@@ -168,3 +168,20 @@ display refresh looks unchanged
 no SD mount/probe regression
 no input freeze/regression
 ```
+
+## Hardware runtime executor wiring
+
+Selected runtime paths now route through the consolidated Vaachak executor layer:
+
+```text
+docs/architecture/hardware-runtime-executor-wiring.md
+hardware_runtime_executor_wiring=ok
+```
+
+The wiring layer covers boot storage availability, library directory listing,
+reader file-open/chunk intent, display refresh handoff, input handoff, and
+shared SPI handoff while keeping the active low-level backend Pulp-compatible.
+## Acceptance cleanup
+
+Final GitHub-readiness cleanup for this stack is documented in `hardware-runtime-executor-acceptance.md`.
+

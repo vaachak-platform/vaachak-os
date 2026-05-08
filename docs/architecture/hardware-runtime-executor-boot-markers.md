@@ -84,3 +84,7 @@ After flashing, check the serial monitor for the marker set above, then confirm:
 - display refresh looks unchanged
 - no SD mount/probe regression
 - no input freeze/regression
+## Acceptance cleanup
+
+Final GitHub-readiness cleanup for this stack is documented in `hardware-runtime-executor-acceptance.md`.
+

@@ -51,3 +51,12 @@ The storage read-only Pulp bridge is now defined in `target-xteink-x4/src/vaacha
 It implements the Vaachak-owned read-only facade through a narrow `PulpReadonlyStorageBackend` interface and an embedded `X4PulpReadonlyStorageBackend` that delegates to existing Pulp read/list/size helpers.
 
 The bridge is read-only. It does not add write, delete, rename, create, truncate, append, mkdir, mount, unmount, format, SD probe, SPI arbitration, display, reader, or file-browser behavior. Those active behaviors remain in `vendor/pulp-os`.
+
+
+## Storage read-only boundary consolidation
+
+The canonical storage read-only boundary is now defined in `target-xteink-x4/src/vaachak_x4/io/storage_readonly_boundary.rs` and documented in `docs/architecture/storage-readonly-boundary.md`.
+
+It consolidates the Vaachak-owned read-only facade and the Pulp-backed bridge into one boundary entrypoint. The public contract remains `VaachakReadonlyStorage`, and the active implementation path remains `PulpReadonlyStorageBridge` backed by existing Pulp read/list/size helpers.
+
+This consolidation does not add write, delete, rename, create, truncate, append, mkdir, mount, unmount, format, SD probe, SPI arbitration, display, reader, or file-browser behavior. Those active behaviors remain in `vendor/pulp-os`.

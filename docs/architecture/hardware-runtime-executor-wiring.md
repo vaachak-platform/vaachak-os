@@ -117,3 +117,10 @@ display refresh looks unchanged
 no SD mount/probe regression
 no input freeze/regression
 ```
+## Next layer
+
+Hardware runtime executor observability is documented in `hardware-runtime-executor-observability.md`.
+## Acceptance cleanup
+
+Final GitHub-readiness cleanup for this stack is documented in `hardware-runtime-executor-acceptance.md`.
+
