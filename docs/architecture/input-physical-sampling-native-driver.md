@@ -1,57 +1,33 @@
 # Input Physical Sampling Native Driver
 
-## Marker
+Marker: `input_physical_sampling_native_driver=ok`
 
-`input_physical_sampling_native_driver=ok`
+Canonical cleanup checkpoint: `docs/architecture/input-physical-sampling-native-driver-cleanup.md`
 
-## Purpose
+This deliverable moved the first lower-level input physical behavior into Vaachak while keeping physical hardware reads Pulp-compatible.
 
-This deliverable performs the first lower-level physical driver migration below the accepted native behavior consolidation. Vaachak now owns the Xteink X4 input physical sampling interpretation layer while keeping actual ADC/GPIO peripheral reads available through the Pulp-compatible fallback.
+## Vaachak-owned behavior
 
-## What moved into Vaachak
+- X4 ADC ladder sample interpretation
+- 4-sample oversample reduction
+- GPIO3 power-button low-active interpretation
+- handoff to the Vaachak native input event pipeline
 
-- ADC ladder sample interpretation for Xteink X4 buttons.
-- Oversample reduction for the four-sample ADC window.
-- GPIO3 power-button low-active level interpretation.
-- Conversion from physical sample results into the accepted Vaachak native input event pipeline.
-- Validation of the existing X4 ladder centers:
-  - GPIO1 row: Right, Left, Confirm, Back.
-  - GPIO2 row: VolDown, VolUp.
-  - GPIO3: Power button handoff.
+## Pulp-compatible fallback retained
 
-## What remains Pulp-compatible
+- actual ADC peripheral reads
+- actual GPIO polling
+- physical hardware access timing
+- final app navigation dispatch
 
-- Actual ADC peripheral reads.
-- Actual GPIO polling.
-- Hardware access timing around the existing input task.
-- Final app navigation dispatch.
-- Display, storage, and SPI behavior.
+Active driver: `VaachakPhysicalSamplingWithPulpAdcGpioReadFallback`
 
-## Active backend
+Fallback backend: `PulpCompatibility`
 
-`VaachakPhysicalSamplingWithPulpAdcGpioReadFallback`
+## Cleanup status
 
-The active low-level fallback remains `PulpCompatibility` until the next slice explicitly migrates ADC/GPIO peripheral read execution.
+The cleanup checkpoint is accepted when:
 
-## Safety guardrails
-
-This deliverable must not change:
-
-- reader/file-browser UX;
-- app navigation screens;
-- display refresh behavior;
-- storage/FAT behavior;
-- SPI transfer or chip-select behavior.
-
-## Hardware smoke
-
-After flashing, validate:
-
-- all buttons respond;
-- direction mapping is unchanged;
-- Back still works;
-- no missed or double presses;
-- file browser opens;
-- SD files list;
-- TXT/EPUB open;
-- display refresh remains unchanged.
+```text
+input_physical_sampling_native_driver_cleanup=ok
+```

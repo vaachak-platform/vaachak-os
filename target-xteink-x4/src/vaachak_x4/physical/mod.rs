@@ -44,6 +44,7 @@ pub mod input_backend_native_executor;
 pub mod input_backend_native_executor_cleanup;
 pub mod input_executor_bridge;
 pub mod input_physical_sampling_native_driver;
+pub mod input_physical_sampling_native_driver_cleanup;
 pub mod input_pulp_backend;
 pub mod input_runtime_owner;
 pub mod physical_driver_migration_plan;
