@@ -19,6 +19,7 @@ pub mod hardware_executor_pulp_backend;
 pub mod hardware_runtime_executor;
 pub mod hardware_runtime_executor_acceptance;
 pub mod hardware_runtime_executor_boot_markers;
+pub mod hardware_runtime_executor_live_handoff;
 pub mod hardware_runtime_executor_observability;
 pub mod hardware_runtime_executor_runtime_use;
 pub mod hardware_runtime_executor_runtime_use_cleanup;

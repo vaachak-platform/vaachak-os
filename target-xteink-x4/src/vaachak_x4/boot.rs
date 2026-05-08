@@ -12,6 +12,11 @@ impl VaachakBoot {
         VaachakHardwareRuntimeExecutorRuntimeUse::emit_runtime_use_marker();
     }
 
+    pub fn emit_hardware_runtime_executor_live_handoff_marker() {
+        use crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff;
+        VaachakHardwareRuntimeExecutorLiveHandoff::emit_live_handoff_marker();
+    }
+
     #[cfg(target_arch = "riscv32")]
     pub fn emit_runtime_ready_marker() {
         esp_println::println!("{}", Self::RUNTIME_READY_MARKER);

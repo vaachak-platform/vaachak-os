@@ -23,6 +23,7 @@ pub mod storage_state_contract;
 
 pub mod hardware_runtime_executor_acceptance_smoke;
 pub mod hardware_runtime_executor_boot_markers_smoke;
+pub mod hardware_runtime_executor_live_handoff_smoke;
 pub mod hardware_runtime_executor_observability_smoke;
 pub mod hardware_runtime_executor_runtime_use_cleanup_smoke;
 pub mod hardware_runtime_executor_runtime_use_smoke;

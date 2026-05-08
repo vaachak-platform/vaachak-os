@@ -53,9 +53,13 @@ static SETTINGS: StaticCell<SettingsApp> = StaticCell::new();
 async fn main(spawner: embassy_executor::Spawner) -> ! {
     crate::vaachak_x4::boot::VaachakBoot::emit_runtime_ready_marker();
     crate::vaachak_x4::boot::VaachakBoot::emit_hardware_runtime_executor_boot_markers();
-    crate::vaachak_x4::boot::VaachakBoot::emit_hardware_runtime_executor_runtime_use_marker();
+    if crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::active_boot_preflight() {
+        crate::vaachak_x4::boot::VaachakBoot::emit_hardware_runtime_executor_runtime_use_marker();
+        crate::vaachak_x4::boot::VaachakBoot::emit_hardware_runtime_executor_live_handoff_marker();
+    }
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::active_runtime_preflight();
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_boot_executor_preflight();
+    let _ = crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::adopt_boot_preflight();
     let _ = crate::vaachak_x4::contracts::storage_path_helpers::VaachakStoragePathHelpers::active_runtime_adoption_probe();
     let _ = crate::vaachak_x4::contracts::input_semantics::VaachakInputSemantics::active_runtime_adoption_probe();
     let _ = crate::vaachak_x4::input::input_semantics_runtime::VaachakInputSemanticsRuntimeBridge::active_runtime_preflight();
@@ -121,6 +125,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     console.push("spi: 400kHz -> 20MHz");
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_card_detect_handoff();
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_mount_handoff();
+    let _ = crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::adopt_storage_availability_handoff();
 
     let sd = match board.storage.sd_card {
         Some(card) => {
@@ -138,6 +143,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         console.push("sd: fat32 mounted");
         let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_storage_directory_listing_handoff();
         let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_reader_file_open_handoff();
+        let _ = crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::adopt_imported_pulp_reader_runtime_boundary();
         if let Err(e) = storage::ensure_x4_dir_async(&sd).await {
             console.push("sd: x4 dir failed");
             log::warn!("ensure_X4_DIR: {:?}", e);
@@ -180,6 +186,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 
     kernel.show_boot_console(&console).await;
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_display_refresh_handoff();
+    let _ = crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::adopt_display_refresh_handoff();
     drop(console); // reclaim ~3 KB of heap
 
     kernel.boot(&mut app_mgr).await;
@@ -205,6 +212,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         .spawn(tasks::input_task(input))
         .expect("spawn input_task");
     let _ = crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse::adopt_input_task_handoff();
+    let _ = crate::vaachak_x4::physical::hardware_runtime_executor_live_handoff::VaachakHardwareRuntimeExecutorLiveHandoff::adopt_input_runtime_handoff();
     spawner
         .spawn(tasks::housekeeping_task())
         .expect("spawn housekeeping_task");
