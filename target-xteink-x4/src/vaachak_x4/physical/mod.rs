@@ -20,6 +20,7 @@ pub mod display_executor_bridge;
 pub mod display_pulp_backend;
 pub mod display_runtime_owner;
 pub mod hardware_executor_pulp_backend;
+pub mod hardware_native_behavior_consolidation;
 pub mod hardware_runtime_backend;
 pub mod hardware_runtime_backend_pulp;
 pub mod hardware_runtime_backend_takeover;
