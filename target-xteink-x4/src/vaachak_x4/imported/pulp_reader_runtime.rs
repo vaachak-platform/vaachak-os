@@ -52,6 +52,7 @@ static SETTINGS: StaticCell<SettingsApp> = StaticCell::new();
 #[esp_rtos::main]
 async fn main(spawner: embassy_executor::Spawner) -> ! {
     crate::vaachak_x4::boot::VaachakBoot::emit_runtime_ready_marker();
+    crate::vaachak_x4::boot::VaachakBoot::emit_hardware_runtime_executor_boot_markers();
     let _ = crate::vaachak_x4::contracts::storage_path_helpers::VaachakStoragePathHelpers::active_runtime_adoption_probe();
     let _ = crate::vaachak_x4::contracts::input_semantics::VaachakInputSemantics::active_runtime_adoption_probe();
     let _ = crate::vaachak_x4::input::input_semantics_runtime::VaachakInputSemanticsRuntimeBridge::active_runtime_preflight();

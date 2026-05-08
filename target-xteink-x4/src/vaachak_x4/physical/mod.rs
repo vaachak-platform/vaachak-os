@@ -17,6 +17,7 @@ pub mod display_pulp_backend;
 pub mod display_runtime_owner;
 pub mod hardware_executor_pulp_backend;
 pub mod hardware_runtime_executor;
+pub mod hardware_runtime_executor_boot_markers;
 pub mod hardware_runtime_executor_observability;
 pub mod hardware_runtime_executor_wiring;
 pub mod hardware_runtime_observability_pulp_backend;

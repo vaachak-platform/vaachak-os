@@ -76,3 +76,7 @@ Expected marker:
 ```text
 hardware_runtime_executor_observability=ok
 ```
+## Runtime boot marker surface
+
+Runtime-visible boot markers are documented in `hardware-runtime-executor-boot-markers.md`.
+
