@@ -9,5 +9,6 @@ pub mod input_semantics;
 pub mod storage;
 pub mod storage_path_helpers;
 pub mod storage_readonly_adapter_facade_smoke;
+pub mod storage_readonly_boundary_smoke;
 pub mod storage_readonly_pulp_bridge_smoke;
 pub mod storage_state_contract;
