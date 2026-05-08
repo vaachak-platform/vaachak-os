@@ -22,5 +22,6 @@ pub mod storage_readonly_pulp_bridge_smoke;
 pub mod storage_state_contract;
 
 pub mod hardware_runtime_executor_smoke;
+pub mod hardware_runtime_executor_wiring_smoke;
 pub mod hardware_runtime_ownership_smoke;
 pub mod sd_fat_runtime_readonly_ownership_smoke;
