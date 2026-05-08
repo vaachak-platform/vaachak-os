@@ -47,5 +47,6 @@ pub mod input_physical_sampling_native_driver_cleanup_smoke;
 pub mod input_physical_sampling_native_driver_smoke;
 pub mod physical_driver_migration_plan_smoke;
 pub mod sd_fat_runtime_readonly_ownership_smoke;
+pub mod spi_physical_native_driver_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_cleanup_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_smoke;

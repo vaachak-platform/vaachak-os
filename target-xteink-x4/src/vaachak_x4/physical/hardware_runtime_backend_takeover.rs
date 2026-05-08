@@ -291,3 +291,13 @@ mod tests {
         assert!(VaachakHardwareRuntimeBackendTakeover::backend_interface_calls_ok());
     }
 }
+
+/// Full SPI physical-driver migration selection hook.
+///
+/// This hook documents that the backend takeover layer now selects the
+/// Vaachak-owned SPI physical native driver instead of imported Pulp SPI
+/// ownership for transaction lifecycle, chip-select policy, and display/SD
+/// routing. Low-level byte clocking remains a target HAL boundary.
+pub fn vaachak_spi_physical_native_driver_full_migration_selected() -> bool {
+    super::spi_physical_native_driver::VaachakSpiPhysicalNativeDriver::full_migration_ok()
+}
