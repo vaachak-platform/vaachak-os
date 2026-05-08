@@ -47,4 +47,5 @@ pub mod sd_fat_readonly_pulp_backend;
 pub mod sd_fat_runtime_readonly_owner;
 pub mod spi_executor_bridge;
 pub mod storage_backend_native_sd_mmc_fat_executor;
+pub mod storage_backend_native_sd_mmc_fat_executor_cleanup;
 pub mod storage_executor_bridge;
