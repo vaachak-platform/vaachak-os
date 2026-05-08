@@ -2,6 +2,8 @@
 
 `input_backend_native_executor` is the first native backend migration after the hardware runtime backend takeover bridge.
 
+Cleanup checkpoint: [`input-backend-native-executor-cleanup.md`](input-backend-native-executor-cleanup.md)
+
 ## What moved into Vaachak
 
 Vaachak now owns the native input backend executor shell for:
@@ -47,6 +49,10 @@ Vaachak live handoff
     -> VaachakInputNativeWithPulpSampling
       -> PulpCompatibility physical sampling fallback
 ```
+
+## Cleanup checkpoint
+
+`input_backend_native_executor_cleanup=ok` is the final acceptance checkpoint for the input-native backend executor. It verifies that event normalization and intent mapping remain Vaachak-owned while physical sampling, debounce/repeat execution, navigation dispatch, display, storage, SPI, reader/file-browser UX, and app navigation behavior remain unchanged.
 
 ## Acceptance marker
 

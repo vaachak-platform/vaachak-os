@@ -33,6 +33,7 @@ pub mod hardware_runtime_observability_pulp_backend;
 pub mod hardware_runtime_ownership;
 pub mod hardware_runtime_wiring_pulp_backend;
 pub mod input_backend_native_executor;
+pub mod input_backend_native_executor_cleanup;
 pub mod input_executor_bridge;
 pub mod input_pulp_backend;
 pub mod input_runtime_owner;
