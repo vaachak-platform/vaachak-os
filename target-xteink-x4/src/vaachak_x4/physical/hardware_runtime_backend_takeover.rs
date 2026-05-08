@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use super::display_backend_native_refresh_command_executor::VaachakDisplayBackendNativeRefreshCommandExecutor;
 use super::display_backend_native_refresh_shell::VaachakDisplayBackendNativeRefreshShell;
 use super::hardware_executor_pulp_backend::VaachakHardwareExecutorBackend;
 use super::hardware_runtime_backend::{
@@ -213,6 +214,10 @@ impl VaachakHardwareRuntimeBackendTakeover {
             adc_ladder_owner_required: true,
             input_debounce_navigation_rewrite_allowed: false,
         })
+    }
+
+    pub fn display_native_refresh_command_executor_ready() -> bool {
+        VaachakDisplayBackendNativeRefreshCommandExecutor::command_executor_ok()
     }
 
     pub fn backend_interface_calls_ok() -> bool {

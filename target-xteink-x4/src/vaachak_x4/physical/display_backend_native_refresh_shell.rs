@@ -1,5 +1,5 @@
-#![allow(dead_code)]
-
+use super::display_backend_native_refresh_command_executor::VaachakDisplayBackendNativeRefreshCommandExecutor;
+#[allow(dead_code)]
 use super::display_executor_bridge::{VaachakDisplayExecutorBridge, VaachakDisplayExecutorIntent};
 use super::display_runtime_owner::VaachakDisplayRuntimeOwner;
 use super::hardware_executor_pulp_backend::VaachakHardwareExecutorBackend;
@@ -287,22 +287,32 @@ impl VaachakDisplayBackendNativeRefreshShell {
     }
 
     pub fn execute_full_refresh_handoff() -> VaachakDisplayNativeRefreshShellReport {
+        let _command_execution =
+            VaachakDisplayBackendNativeRefreshCommandExecutor::execute_full_refresh_command();
         Self::report(VaachakDisplayRefreshShellOperation::FullRefreshHandoff)
     }
 
     pub fn execute_partial_refresh_handoff() -> VaachakDisplayNativeRefreshShellReport {
+        let _command_execution =
+            VaachakDisplayBackendNativeRefreshCommandExecutor::execute_partial_refresh_command();
         Self::report(VaachakDisplayRefreshShellOperation::PartialRefreshHandoff)
     }
 
     pub fn execute_clear_handoff() -> VaachakDisplayNativeRefreshShellReport {
+        let _command_execution =
+            VaachakDisplayBackendNativeRefreshCommandExecutor::execute_clear_command();
         Self::report(VaachakDisplayRefreshShellOperation::ClearFrameHandoff)
     }
 
     pub fn execute_sleep_handoff() -> VaachakDisplayNativeRefreshShellReport {
+        let _command_execution =
+            VaachakDisplayBackendNativeRefreshCommandExecutor::execute_sleep_command();
         Self::report(VaachakDisplayRefreshShellOperation::SleepFrameHandoff)
     }
 
     pub fn execute_render_metadata_handoff() -> VaachakDisplayNativeRefreshShellReport {
+        let _command_execution =
+            VaachakDisplayBackendNativeRefreshCommandExecutor::execute_render_metadata_command();
         Self::report(VaachakDisplayRefreshShellOperation::RenderFrameMetadataHandoff)
     }
 
@@ -333,12 +343,17 @@ impl VaachakDisplayBackendNativeRefreshShell {
             && Self::route_command(VaachakDisplayRefreshCommand::RenderFrameMetadata).ok()
     }
 
+    pub fn display_native_refresh_command_executor_ready() -> bool {
+        VaachakDisplayBackendNativeRefreshCommandExecutor::command_executor_ok()
+    }
+
     pub fn native_refresh_shell_ok() -> bool {
         VaachakDisplayRuntimeOwner::ownership_ok()
             && VaachakDisplayExecutorBridge::bridge_ok()
             && VaachakHardwareRuntimePulpCompatibilityBackend::backend_ok()
             && Self::native_refresh_mappings_ok()
             && Self::route_safety_ok()
+            && Self::display_native_refresh_command_executor_ready()
             && Self::execute_full_refresh_handoff().ok()
             && Self::execute_partial_refresh_handoff().ok()
             && Self::execute_clear_handoff().ok()

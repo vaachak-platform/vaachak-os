@@ -1,6 +1,7 @@
 pub mod boundary_contract;
 pub mod boundary_contract_smoke;
 pub mod display;
+pub mod display_backend_native_refresh_command_executor_smoke;
 pub mod display_backend_native_refresh_shell_cleanup_smoke;
 pub mod display_backend_native_refresh_shell_smoke;
 pub mod display_contract_smoke;
