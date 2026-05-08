@@ -123,4 +123,7 @@ Hardware runtime executor observability is documented in `hardware-runtime-execu
 ## Acceptance cleanup
 
 Final GitHub-readiness cleanup for this stack is documented in `hardware-runtime-executor-acceptance.md`.
+## Runtime use adoption
+
+Selected boot/runtime hardware intent call sites are now routed through `hardware-runtime-executor-runtime-use.md` while Pulp-compatible low-level execution remains active.
 

@@ -87,4 +87,7 @@ After flashing, check the serial monitor for the marker set above, then confirm:
 ## Acceptance cleanup
 
 Final GitHub-readiness cleanup for this stack is documented in `hardware-runtime-executor-acceptance.md`.
+## Runtime use adoption
+
+Selected boot/runtime hardware intent call sites are now routed through `hardware-runtime-executor-runtime-use.md` while Pulp-compatible low-level execution remains active.
 

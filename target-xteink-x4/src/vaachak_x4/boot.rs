@@ -7,6 +7,11 @@ impl VaachakBoot {
         VaachakHardwareRuntimeExecutorBootMarkers::emit_boot_markers();
     }
 
+    pub fn emit_hardware_runtime_executor_runtime_use_marker() {
+        use crate::vaachak_x4::physical::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
+        VaachakHardwareRuntimeExecutorRuntimeUse::emit_runtime_use_marker();
+    }
+
     #[cfg(target_arch = "riscv32")]
     pub fn emit_runtime_ready_marker() {
         esp_println::println!("{}", Self::RUNTIME_READY_MARKER);

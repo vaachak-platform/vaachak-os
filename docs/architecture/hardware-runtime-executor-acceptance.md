@@ -94,3 +94,7 @@ Confirm:
 - no SD mount/probe regression
 - no input freeze/regression
 ```
+## Runtime use adoption
+
+Selected boot/runtime hardware intent call sites are now routed through `hardware-runtime-executor-runtime-use.md` while Pulp-compatible low-level execution remains active.
+
