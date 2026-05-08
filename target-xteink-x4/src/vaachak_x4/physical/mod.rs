@@ -45,6 +45,7 @@ pub mod input_backend_native_executor_cleanup;
 pub mod input_executor_bridge;
 pub mod input_pulp_backend;
 pub mod input_runtime_owner;
+pub mod physical_driver_migration_plan;
 pub mod sd_fat_readonly_pulp_backend;
 pub mod sd_fat_runtime_readonly_owner;
 pub mod spi_executor_bridge;

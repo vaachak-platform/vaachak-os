@@ -43,6 +43,7 @@ pub mod input_backend_native_event_pipeline_cleanup_smoke;
 pub mod input_backend_native_event_pipeline_smoke;
 pub mod input_backend_native_executor_cleanup_smoke;
 pub mod input_backend_native_executor_smoke;
+pub mod physical_driver_migration_plan_smoke;
 pub mod sd_fat_runtime_readonly_ownership_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_cleanup_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_smoke;
