@@ -15,6 +15,7 @@ use super::hardware_runtime_backend::{
 use super::hardware_runtime_backend_pulp::VaachakHardwareRuntimePulpCompatibilityBackend;
 use super::hardware_runtime_executor_acceptance::VaachakHardwareRuntimeExecutorAcceptance;
 use super::hardware_runtime_executor_runtime_use::VaachakHardwareRuntimeExecutorRuntimeUse;
+use super::input_backend_native_event_pipeline::VaachakInputBackendNativeEventPipeline;
 use super::input_backend_native_executor::VaachakInputBackendNativeExecutor;
 
 /// Vaachak-owned backend takeover bridge.
@@ -179,8 +180,9 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn execute_input_scan_handoff() -> VaachakHardwareBackendHandoffResult {
+        let native_pipeline = VaachakInputBackendNativeEventPipeline::execute_scan_pipeline();
         let native_scan = VaachakInputBackendNativeExecutor::execute_scan_handoff();
-        if !native_scan.ok() {
+        if !native_pipeline.ok() || !native_scan.ok() {
             return Self::backend().execute_input(VaachakInputRequest {
                 operation: VaachakInputBackendOperation::ButtonScan,
                 adc_ladder_owner_required: true,
@@ -196,8 +198,9 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn execute_input_navigation_handoff() -> VaachakHardwareBackendHandoffResult {
+        let native_pipeline = VaachakInputBackendNativeEventPipeline::execute_navigation_pipeline();
         let native_navigation = VaachakInputBackendNativeExecutor::execute_navigation_handoff();
-        if !native_navigation.ok() {
+        if !native_pipeline.ok() || !native_navigation.ok() {
             return Self::backend().execute_input(VaachakInputRequest {
                 operation: VaachakInputBackendOperation::NavigationHandoff,
                 adc_ladder_owner_required: true,
@@ -213,9 +216,12 @@ impl VaachakHardwareRuntimeBackendTakeover {
     }
 
     pub fn backend_interface_calls_ok() -> bool {
+        let input_native_event_pipeline_ready =
+            VaachakInputBackendNativeEventPipeline::event_pipeline_ok();
         let display_native_refresh_ready =
             VaachakDisplayBackendNativeRefreshShell::native_refresh_shell_ok();
         display_native_refresh_ready
+            && input_native_event_pipeline_ready
             && Self::execute_spi_display_transaction_handoff().ok()
             && Self::execute_spi_storage_transaction_handoff().ok()
             && Self::execute_storage_probe_mount_handoff().ok()

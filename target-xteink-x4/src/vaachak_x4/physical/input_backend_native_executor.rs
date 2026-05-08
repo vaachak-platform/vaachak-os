@@ -2,6 +2,7 @@
 
 use super::hardware_executor_pulp_backend::VaachakHardwareExecutorBackend;
 use super::hardware_runtime_backend_pulp::VaachakHardwareRuntimePulpCompatibilityBackend;
+use super::input_backend_native_event_pipeline::VaachakInputBackendNativeEventPipeline;
 use super::input_runtime_owner::{VaachakInputRuntimeOwner, VaachakRuntimeInputButton};
 
 /// Vaachak-native input backend executor shell.
@@ -214,10 +215,20 @@ impl VaachakInputBackendNativeExecutor {
     }
 
     pub fn execute_scan_handoff() -> VaachakInputNativeExecutorReport {
+        let native_pipeline = VaachakInputBackendNativeEventPipeline::execute_scan_pipeline();
+        if !native_pipeline.ok() {
+            return Self::report(VaachakInputNativeOperation::ScanHandoff);
+        }
+
         Self::report(VaachakInputNativeOperation::ScanHandoff)
     }
 
     pub fn execute_navigation_handoff() -> VaachakInputNativeExecutorReport {
+        let native_pipeline = VaachakInputBackendNativeEventPipeline::execute_navigation_pipeline();
+        if !native_pipeline.ok() {
+            return Self::report(VaachakInputNativeOperation::NavigationHandoff);
+        }
+
         Self::report(VaachakInputNativeOperation::NavigationHandoff)
     }
 
@@ -260,6 +271,7 @@ impl VaachakInputBackendNativeExecutor {
         VaachakInputRuntimeOwner::ownership_ok()
             && VaachakHardwareRuntimePulpCompatibilityBackend::backend_ok()
             && Self::native_mappings_ok()
+            && VaachakInputBackendNativeEventPipeline::event_pipeline_ok()
             && Self::route_safety_ok()
             && Self::execute_scan_handoff().ok()
             && Self::execute_navigation_handoff().ok()

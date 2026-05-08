@@ -1,61 +1,41 @@
 # Input Backend Native Executor
 
-`input_backend_native_executor` is the first native backend migration after the hardware runtime backend takeover bridge.
+This checkpoint introduced the Vaachak-native input backend shell for button event normalization and input intent mapping while keeping Pulp-compatible physical sampling available.
 
-Cleanup checkpoint: [`input-backend-native-executor-cleanup.md`](input-backend-native-executor-cleanup.md)
+The accepted cleanup checkpoint remains:
 
-## What moved into Vaachak
+```text
+docs/architecture/input-backend-native-executor-cleanup.md
+```
 
-Vaachak now owns the native input backend executor shell for:
+The next accepted behavior move is documented in:
 
-- button event normalization
-- input intent mapping
-- scan handoff pre-routing
-- navigation handoff pre-routing
+```text
+docs/architecture/input-backend-native-event-pipeline.md
+```
 
-The selected native input backend is:
+## Current native input layers
+
+- `input_backend_native_executor`: Vaachak-owned native input executor shell.
+- `input_backend_native_executor_cleanup`: cleanup checkpoint for the native executor shell.
+- `input_backend_native_event_pipeline`: actual Vaachak-owned input event behavior for normalization, stable state tracking, press/release/repeat classification, and navigation intent mapping.
+
+## Active selection
 
 ```text
 VaachakInputNativeWithPulpSampling
-```
-
-## What remains Pulp-compatible
-
-The current low-level input executor remains active underneath:
-
-```text
 PulpCompatibility
 ```
 
-The following behavior is intentionally not moved in this deliverable:
+## Still Pulp-compatible
+
+The following remain Pulp-compatible:
 
 - physical ADC ladder sampling
 - GPIO polling
-- button debounce/repeat execution
-- navigation dispatch behavior
-- app navigation behavior
+- physical hardware access
+- final app navigation dispatch
 
-## Behavior preservation
+## Behavior guardrails
 
-This deliverable does not change display behavior, storage behavior, SPI transfer or chip-select behavior, reader/file-browser UX, or app navigation behavior.
-
-## Backend takeover relationship
-
-The accepted backend takeover bridge remains the callable hardware backend boundary. This deliverable adds a Vaachak-owned input-native pre-handoff before existing input scan/navigation handoffs continue through the Pulp-compatible backend.
-
-```text
-Vaachak live handoff
-  -> Vaachak hardware backend takeover
-    -> VaachakInputNativeWithPulpSampling
-      -> PulpCompatibility physical sampling fallback
-```
-
-## Cleanup checkpoint
-
-`input_backend_native_executor_cleanup=ok` is the final acceptance checkpoint for the input-native backend executor. It verifies that event normalization and intent mapping remain Vaachak-owned while physical sampling, debounce/repeat execution, navigation dispatch, display, storage, SPI, reader/file-browser UX, and app navigation behavior remain unchanged.
-
-## Acceptance marker
-
-```text
-input_backend_native_executor=ok
-```
+This stack must not change display, storage, SPI, reader/file-browser UX, or app navigation screens.
