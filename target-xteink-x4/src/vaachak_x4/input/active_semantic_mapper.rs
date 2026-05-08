@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-//! Phase 36A active input semantic mapping adapter.
+//! Active input semantic mapping adapter.
 //!
 //! This module is the first active input-semantic takeover step. It does not
 //! sample ADC pins, debounce buttons, poll input events, or edit vendored Pulp
@@ -47,7 +47,7 @@ impl VaachakActiveInputSemanticMapper {
     /// Construct the imported mapper behind a Vaachak-owned factory.
     ///
     /// `AppManager` still accepts the imported concrete `ButtonMapper` type.
-    /// Phase 36A makes construction and equivalence validation Vaachak-owned
+    /// This module makes construction and equivalence validation Vaachak-owned
     /// without changing ADC/debounce/input-task behavior.
     pub fn new_imported_button_mapper() -> ImportedButtonMapper {
         ImportedButtonMapper::new()

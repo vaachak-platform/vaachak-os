@@ -1,6 +1,6 @@
 //! Biscuit-inspired Home app placeholder descriptors.
 //!
-//! Phase 41F adds visual placeholders only. It does not implement app launching,
+//! The current implementation adds visual placeholders only. It does not implement app launching,
 //! settings, sync, new input mapping, or any reader/files behavior changes.
 
 #![allow(dead_code)]

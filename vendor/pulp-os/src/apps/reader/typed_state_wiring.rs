@@ -1,4 +1,4 @@
-//! Phase 39I — Active Reader Typed-State Save Callsite Wiring.
+//! Active Reader Typed-State Save Callsite Wiring.
 //!
 //! This module is intentionally Pulp-local because the active reader save
 //! callsites live inside the imported Pulp reader crate.
@@ -28,7 +28,7 @@ pub const ACTIVE_READER_SAVE_CALLSITE_WIRING_MARKER: &str =
     "x4-active-reader-save-callsite-wiring-bundle-ok";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Phase39iReaderStateWriteKind {
+pub enum ReaderStateWriteKind {
     Progress,
     Theme,
     Metadata,
@@ -39,7 +39,7 @@ pub enum Phase39iReaderStateWriteKind {
     NonStateSubdir,
 }
 
-impl Phase39iReaderStateWriteKind {
+impl ReaderStateWriteKind {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Progress => "progress",
@@ -62,13 +62,13 @@ impl Phase39iReaderStateWriteKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Phase39iReaderStateWriteReport {
-    pub kind: Phase39iReaderStateWriteKind,
+pub struct ReaderStateWriteReport {
+    pub kind: ReaderStateWriteKind,
     pub bytes: usize,
     pub ok: bool,
 }
 
-impl Phase39iReaderStateWriteReport {
+impl ReaderStateWriteReport {
     pub const fn accepted(self) -> bool {
         self.ok
     }
@@ -84,7 +84,7 @@ pub fn ensure_state_dir(k: &mut KernelHandle<'_>) -> Result<()> {
 
 /// Centralized active reader subdir write facade.
 ///
-/// Phase 39I patching rewrites active reader `k.write_app_subdir(...)` callsites
+/// This helper classifies active reader `k.write_app_subdir(...)` callsites
 /// to call this function. Behavior remains delegated to KernelHandle.
 pub fn write_app_subdir(
     k: &mut KernelHandle<'_>,
@@ -145,39 +145,39 @@ pub fn write_bookmark_index(k: &mut KernelHandle<'_>, data: &[u8]) -> Result<()>
     )
 }
 
-pub fn classify_write(dir: &str, name: &str) -> Phase39iReaderStateWriteKind {
+pub fn classify_write(dir: &str, name: &str) -> ReaderStateWriteKind {
     if dir != reader_state::STATE_DIR {
-        return Phase39iReaderStateWriteKind::NonStateSubdir;
+        return ReaderStateWriteKind::NonStateSubdir;
     }
 
     classify_state_file_name(name)
 }
 
-pub fn classify_state_file_name(name: &str) -> Phase39iReaderStateWriteKind {
+pub fn classify_state_file_name(name: &str) -> ReaderStateWriteKind {
     if name.eq_ignore_ascii_case(reader_state::BOOKMARKS_INDEX_FILE) {
-        return Phase39iReaderStateWriteKind::BookmarkIndex;
+        return ReaderStateWriteKind::BookmarkIndex;
     }
 
     if name.eq_ignore_ascii_case(reader_state::RECENT_RECORD_FILE) {
-        return Phase39iReaderStateWriteKind::Recent;
+        return ReaderStateWriteKind::Recent;
     }
 
     let bytes = name.as_bytes();
     if bytes.len() < 5 {
-        return Phase39iReaderStateWriteKind::UnknownStateFile;
+        return ReaderStateWriteKind::UnknownStateFile;
     }
 
     let ext = &bytes[bytes.len() - 4..];
     if ext.eq_ignore_ascii_case(reader_state::PROGRESS_RECORD_EXT.as_bytes()) {
-        Phase39iReaderStateWriteKind::Progress
+        ReaderStateWriteKind::Progress
     } else if ext.eq_ignore_ascii_case(reader_state::THEME_RECORD_EXT.as_bytes()) {
-        Phase39iReaderStateWriteKind::Theme
+        ReaderStateWriteKind::Theme
     } else if ext.eq_ignore_ascii_case(reader_state::META_RECORD_EXT.as_bytes()) {
-        Phase39iReaderStateWriteKind::Metadata
+        ReaderStateWriteKind::Metadata
     } else if ext.eq_ignore_ascii_case(b".BKM") {
-        Phase39iReaderStateWriteKind::Bookmark
+        ReaderStateWriteKind::Bookmark
     } else {
-        Phase39iReaderStateWriteKind::UnknownStateFile
+        ReaderStateWriteKind::UnknownStateFile
     }
 }
 

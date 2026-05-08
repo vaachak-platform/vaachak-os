@@ -1,4 +1,4 @@
-//! Phase 35D — Theme State I/O Adapter Overlay.
+//! Theme State I/O Adapter.
 //!
 //! This module is deliberately pure and hardware-free. It defines the narrow
 //! boundary between Vaachak reader theme/layout state and whichever storage
@@ -8,7 +8,7 @@
 //! - `state/<BOOKID>.THM` path convention
 //! - fixed theme record encode/decode
 //! - theme-state read/write adapter contract
-//! - phase marker
+//! - validation marker
 //!
 //! Not owned here:
 //! - SD-card access
@@ -21,7 +21,7 @@
 
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
-/// Phase marker emitted by validation / boot marker plumbing.
+/// Validation marker emitted by validation / boot marker plumbing.
 pub const THEME_STATE_IO_ADAPTER_MARKER: &str = "x4-theme-state-io-adapter-ok";
 
 pub const THEME_STATE_DIR: &str = "state";

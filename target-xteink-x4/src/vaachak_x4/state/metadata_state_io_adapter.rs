@@ -1,4 +1,4 @@
-//! Phase 35E — Metadata State I/O Adapter Overlay.
+//! Metadata State I/O Adapter.
 //!
 //! This module is deliberately pure and hardware-free. It defines the narrow
 //! boundary between Vaachak per-book metadata state and whichever storage
@@ -9,7 +9,7 @@
 //! - fixed metadata record encode/decode
 //! - display-name cache field for future file-browser/reader title use
 //! - metadata-state read/write adapter contract
-//! - phase marker
+//! - validation marker
 //!
 //! Not owned here:
 //! - SD-card access
@@ -23,7 +23,7 @@
 
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
-/// Phase marker emitted by validation / boot marker plumbing.
+/// Validation marker emitted by validation / boot marker plumbing.
 pub const METADATA_STATE_IO_ADAPTER_MARKER: &str = "x4-metadata-state-io-adapter-ok";
 
 pub const METADATA_STATE_DIR: &str = "state";
@@ -39,7 +39,7 @@ pub const METADATA_RECORD_LEN: usize =
 pub const METADATA_STATE_PATH_MAX_LEN: usize = "state/".len() + BOOK_ID_8_3_LEN + ".MTA".len();
 
 /// Persisted reader file kind. This is metadata only; it does not select live
-/// parser behavior in this phase.
+/// parser behavior in this implementation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum MetadataFileKind {

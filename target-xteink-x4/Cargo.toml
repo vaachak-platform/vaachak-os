@@ -6,10 +6,12 @@ license = { workspace = true }
 authors = { workspace = true }
 
 [dependencies]
+
+[target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
+log = "0.4.27"
 esp-rtos = { version = "0.2.0", features = ["embassy", "esp32c3", "esp-radio", "log-04"] }
 embassy-executor = "0.9"
 static_cell = "2.1.1"
-log = "0.4.27"
 esp-alloc = { version = "0.9.0", features = ["internal-heap-stats"] }
 vaachak-core = { path = "../core" }
 hal-xteink-x4 = { path = "../hal-xteink-x4" }
@@ -17,7 +19,6 @@ nb = "1"
 pulp-os = { package = "x4-os", path = "../vendor/pulp-os" }
 x4-kernel = { path = "../vendor/pulp-os/kernel" }
 smol-epub = { path = "../vendor/smol-epub" }
-[target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
 esp-hal = { workspace = true }
 esp-backtrace = { workspace = true }
 esp-println = { workspace = true }

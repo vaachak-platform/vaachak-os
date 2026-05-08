@@ -168,7 +168,6 @@ enum HomeState {
     ShowDailyMantra,
     ShowCalendar,
     ShowPanchangLite,
-    ShowUsbTransfer,
     ShowBookmarks,
     ShowNetworkStatus,
     ShowWifiConnect,
@@ -321,7 +320,6 @@ impl HomeApp {
             HomeState::ShowDateTime => 8,
             HomeState::ShowCalendar => 9,
             HomeState::ShowPanchangLite => 10,
-            HomeState::ShowUsbTransfer => 11,
         }
     }
 
@@ -359,7 +357,6 @@ impl HomeApp {
             8 => HomeState::ShowDateTime,
             9 => HomeState::ShowCalendar,
             10 => HomeState::ShowPanchangLite,
-            11 => HomeState::ShowUsbTransfer,
             _ => HomeState::Menu,
         };
         self.selected = selected.min(HOME_CARD_COUNT - 1);
@@ -1204,7 +1201,6 @@ impl App<AppId> for HomeApp {
             HomeState::ShowDailyMantra => self.on_event_daily_mantra(event, ctx),
             HomeState::ShowCalendar => self.on_event_calendar(event, ctx),
             HomeState::ShowPanchangLite => self.on_event_panchang_lite(event, ctx),
-            HomeState::ShowUsbTransfer => self.on_event_usb_transfer(event, ctx),
             HomeState::ShowBookmarks => self.on_event_bookmarks(event, ctx),
             HomeState::ShowNetworkStatus => self.on_event_network_status(event, ctx),
             HomeState::ShowWifiConnect => self.on_event_wifi_connect(event, ctx),
@@ -1221,7 +1217,6 @@ impl App<AppId> for HomeApp {
             HomeState::ShowDailyMantra => self.draw_daily_mantra(strip),
             HomeState::ShowCalendar => self.draw_calendar(strip),
             HomeState::ShowPanchangLite => self.draw_panchang_lite(strip),
-            HomeState::ShowUsbTransfer => self.draw_usb_transfer(strip),
             HomeState::ShowBookmarks => self.draw_bookmarks(strip),
             HomeState::ShowNetworkStatus => self.draw_network_status(strip),
             HomeState::ShowWifiConnect => self.draw_wifi_connect(strip),
@@ -1289,15 +1284,6 @@ impl HomeApp {
         self.needs_load_time_status = true;
         self.state = HomeState::ShowDailyMantra;
         ctx.request_full_redraw();
-    }
-
-    fn on_event_usb_transfer(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
-        match event {
-            ActionEvent::Press(Action::Back)
-            | ActionEvent::LongPress(Action::Back)
-            | ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
-            _ => Transition::None,
-        }
     }
 
     #[allow(dead_code)]
@@ -2206,69 +2192,6 @@ impl HomeApp {
         .unwrap();
     }
 
-    fn draw_usb_transfer(&self, strip: &mut StripBuffer) {
-        self.draw_screen_header(strip, "USB Transfer", "Tools");
-
-        let title_font = self.card_title_font();
-        let meta_font = self.card_meta_font();
-        let x = LARGE_MARGIN;
-        let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, title_font.line_height),
-            "USB bulk transfer scaffold",
-            title_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-
-        y += title_font.line_height + 14;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Host dry-run is ready; byte binding is next",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-
-        y += meta_font.line_height + 10;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Use for large /FCACHE/<BOOKID> transfers",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-
-        y += meta_font.line_height + 10;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Next: ESP32-C3 USB_SERIAL_JTAG binding",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-
-        y += meta_font.line_height + 18;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to Tools",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-    }
-
     fn draw_panchang_lite(&self, strip: &mut StripBuffer) {
         let status = if !self.time_status_loaded {
             "Loading"
@@ -2771,9 +2694,9 @@ impl HomeApp {
             pass_line,
             "Password: {}",
             if self.network_wifi_password_saved {
-                "saved"
+                "saved (hidden)"
             } else {
-                "not saved"
+                "not set"
             }
         );
         pass_line.draw(strip).unwrap();
@@ -2801,7 +2724,7 @@ impl HomeApp {
 
         BitmapLabel::new(
             Region::new(x, y, w, meta_font.line_height),
-            "Radio: starts from Wi-Fi Transfer",
+            "Radio: starts only in Wi-Fi Transfer",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)
@@ -3043,8 +2966,8 @@ impl HomeApp {
         y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
 
         let prompt = match self.time_cache.freshness(self.time_uptime_secs) {
-            time_status::ClockFreshness::Live => "Select resyncs    Back returns",
-            time_status::ClockFreshness::Cached => "Cached after reboot; Select resyncs",
+            time_status::ClockFreshness::Live => "Select safely resyncs    Back returns",
+            time_status::ClockFreshness::Cached => "Cached; Select safely retries",
             time_status::ClockFreshness::Unsynced => "Select syncs now    Back returns",
         };
         BitmapLabel::new(

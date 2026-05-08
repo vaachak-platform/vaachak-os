@@ -1,59 +1,71 @@
 # vaachak-os
 
-Bootstrap workspace for the future VaachakOS repository.
+Vaachak OS is currently an Xteink X4-first reader OS built on a proven Pulp-derived runtime. The repository keeps the working device firmware path intact while Vaachak-owned core, HAL, and runtime-contract crates mature around it.
 
-This repo is intentionally a **clean architecture skeleton plus first extracted X4 bootstrap slice**, not a migration of `x4-reader-os-rs`.
-The current `x4-reader-os-rs` repo remains the X4 proving-ground and hardware truth source.
+## Current firmware truth
 
-## Goals of this bootstrap
+The active firmware path for the physical Xteink X4 is:
 
-- establish the long-term crate boundaries
-- define the first HAL seams
-- extract the first real X4 slice for storage/display/input/power bootstrap
-- keep Kernel, AppManager, and reader behavior in `x4-reader-os-rs` until the slice compiles cleanly
-- keep sync, crypto, and advanced EPUB fidelity as deferred work
+```text
+vendor/pulp-os
+```
 
-## Initial crates
+That runtime currently owns:
 
-- `core/` — shared `no_std` logic and interfaces
-- `hal-xteink-x4/` — X4-specific HAL implementation placeholders and first extracted slice
-- `target-xteink-x4/` — X4 target entrypoint placeholder
-- `docs/` — architecture and migration notes
+- ESP32-C3 boot and scheduler integration
+- SSD1677 display behavior
+- button/input handling
+- SD/FAT file access
+- Reader, Home, Settings, Wi-Fi Transfer, Date & Time, and sleep-image behavior
 
-## What is extracted now
+The root workspace currently owns extracted and target-neutral architecture work:
 
-- X4 display geometry and bus topology constants
-- X4 input threshold model for the proven button ladders
-- X4 battery conversion/discharge mapping
-- X4 storage lifecycle shape: probe -> mount -> close
-- bootstrap sequencing for storage + display + power
+- `core/` — shared reader, storage, state, and text/domain models
+- `hal-xteink-x4/` — X4 HAL seams and smoke helpers
+- `target-xteink-x4/` — emerging X4 adapter and contract code
+- `tools/` — host-side cache/font/title-map utilities
+- `docs/` — current architecture, build, and operating notes
 
-## What is intentionally not extracted yet
+This means the repository is not pretending the root workspace is already the complete flashed firmware. The working product remains the Pulp-derived runtime until a path is deliberately extracted and validated on device.
 
-- real esp-hal board init
-- real SSD1677 driver code
-- real SD/FAT plumbing
-- real Reader rendering
-- Kernel / AppManager orchestration
-- Vaachak Sync implementation
-- Waveshare support
-- desktop simulator
+## Reader-first baseline
 
-## Intended next extraction order
+The active product baseline is:
 
-1. refine the X4 HAL types against real `x4-reader-os-rs` files
-2. extract display/input/power/storage bootstrap code cleanly
-3. make `target-xteink-x4` build for the embedded target
-4. only then start moving portable reader/cache state
+- Home dashboard with category navigation
+- Reader/library path for TXT and EPUB smoke usage
+- prepared cache support under `/FCACHE/<BOOKID>`
+- useful cache-open diagnostics only on failure
+- Wi-Fi Transfer with original transfer and chunked-resume upload paths
+- Settings persistence through `/_X4/SETTINGS.TXT`
+- Date & Time sync as an explicit isolated Wi-Fi mode
+- sleep-image mode selection and cached sleep image support
 
-## Current build stance
+Prepared TXT/EPUB caches are still important for mixed-script books that need host-generated glyph runs. When a prepared cache opens successfully, Reader shows the prepared-page status. If cache open fails, Reader keeps the compact diagnostic code so the loader step can be fixed.
 
-This workspace is still host-friendly and bootstrap-oriented.
-It establishes the seams and the first extracted slice, but it is not yet a full embedded runtime.
+## Repository policy
 
-## Prepared Reader Stabilization
+- Keep `vendor/pulp-os` behavior stable unless the change is a narrowly scoped bug fix or dead-code cleanup.
+- Do not add historical delivery labels, generated patch directories, generated zip files, or local backup folders to source control.
+- Keep old local output outside the repo or under ignored paths.
+- Prefer semantic names in code, docs, scripts, and logs.
+- Move one real behavior path at a time from the Pulp-derived runtime into Vaachak-owned crates.
 
-Prepared TXT/EPUB caches under `/FCACHE/<BOOKID>` are used for mixed-script books that need host-generated Noto glyph runs. When a cache opens successfully, Reader shows `Prep Pg ...`. If a cache fails, Reader shows `Read cache:<BOOKID> err:<CODE>` so the failing loader step can be diagnosed.
+## Build and flash
 
-For large cache folders, use Wi-Fi Transfer's `Chunked Resume` tab. See `docs/prepared_reader_stabilization_cleanup.md` for limits and validation.
+See:
 
+```text
+docs/development/build-and-flash.md
+```
+
+## Current architecture notes
+
+See:
+
+```text
+docs/architecture/current-runtime.md
+docs/architecture/ownership-map.md
+ROADMAP.md
+SCOPE.md
+```

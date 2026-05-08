@@ -51,6 +51,46 @@ fn is_text_title_name(name: &[u8]) -> bool {
         && name[name.len() - 2..].eq_ignore_ascii_case(b"MD")
 }
 
+fn trim_title_line_end(mut line: &[u8]) -> &[u8] {
+    while matches!(line.last(), Some(b'\n' | b'\r')) {
+        line = &line[..line.len() - 1];
+    }
+    line
+}
+
+fn trim_ascii_title_part(mut part: &[u8]) -> &[u8] {
+    while matches!(part.first(), Some(b' ' | b'\t')) {
+        part = &part[1..];
+    }
+    while matches!(part.last(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
+        part = &part[..part.len() - 1];
+    }
+    part
+}
+
+fn title_cache_title_is_usable(file_part: &[u8], title_part: &[u8]) -> bool {
+    if title_part.is_empty() || title_part.len() > crate::drivers::storage::TITLE_CAP {
+        return false;
+    }
+
+    let title_visible_bytes = title_part
+        .iter()
+        .filter(|&&b| b > b' ' && b != 0x7F)
+        .count();
+    if title_visible_bytes >= 3 {
+        return true;
+    }
+
+    // Ignore stale/corrupt mappings such as ALICES~1.EPU<TAB>A so the
+    // soft SFN fallback and EPUB scanner can recover the real long title.
+    let stem_letters = file_part
+        .iter()
+        .take_while(|&&b| b != b'.')
+        .filter(|&&b| b.is_ascii_alphanumeric())
+        .count();
+    title_visible_bytes > 0 && stem_letters <= 2
+}
+
 impl DirCache {
     pub const fn new() -> Self {
         Self {
@@ -127,13 +167,14 @@ impl DirCache {
     }
 
     fn apply_title_line(&mut self, line: &[u8]) {
+        let line = trim_title_line_end(line);
         let tab_pos = match line.iter().position(|&b| b == b'\t') {
             Some(p) => p,
             None => return,
         };
-        let file_part = &line[..tab_pos];
-        let title_part = &line[tab_pos + 1..];
-        if title_part.is_empty() {
+        let file_part = trim_ascii_title_part(&line[..tab_pos]);
+        let title_part = trim_ascii_title_part(&line[tab_pos + 1..]);
+        if !title_cache_title_is_usable(file_part, title_part) {
             return;
         }
 
@@ -189,7 +230,7 @@ impl DirCache {
                 return Some((i, e.name, e.name_len, TITLE_KIND_EPUB));
             }
 
-            // Phase 40G Repair 3:
+            // Title extraction repair:
             // TXT/MD body-title scanning is disabled. It was unsafe because
             // license/body lines can be cached as display titles. A future
             // FAT LFN/title-map lane should provide proper TXT display names.

@@ -1,6 +1,6 @@
 //! Biscuit-inspired Files/Library layout descriptors.
 //!
-//! Phase 41D changes only the Files/Library visual row style. It does not change
+//! The current implementation changes only the Files/Library visual row style. It does not change
 //! the title source, input mapping, write lane, display geometry, or reader handoff.
 
 #![allow(dead_code)]

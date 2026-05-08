@@ -2,9 +2,9 @@
 
 /// Vaachak-owned display boundary metadata for the Adafruit Xteink X4.
 ///
-/// Phase 23 intentionally does not move physical SSD1677/SPI/display refresh
+/// The current implementation intentionally does not move physical SSD1677/SPI/display refresh
 /// behavior out of the imported X4/Pulp runtime. This module makes the display
-/// contract explicit so a later phase can extract one behavior at a time with
+/// contract explicit so a later implementation can extract one behavior at a time with
 /// checks around geometry, pins, rotation, RAM commands, and shared-bus rules.
 #[cfg(target_arch = "riscv32")]
 pub struct VaachakDisplayBoundary;
@@ -58,7 +58,7 @@ impl VaachakDisplayBoundary {
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const RUNTIME_OWNER: DisplayRuntimeOwner = DisplayRuntimeOwner::ImportedPulpRuntime;
 
-    /// Phase 23 records the contract only. It must not move physical display IO.
+    /// The current implementation records the contract only. It must not move physical display IO.
     pub const PHYSICAL_DISPLAY_INIT_MOVED_TO_BOUNDARY: bool = false;
     pub const PHYSICAL_DISPLAY_REFRESH_MOVED_TO_BOUNDARY: bool = false;
     pub const SSD1677_SPI_TRANSACTIONS_MOVED_TO_BOUNDARY: bool = false;
@@ -176,9 +176,9 @@ impl VaachakDisplayBoundary {
 
 #[cfg(target_arch = "riscv32")]
 impl VaachakDisplayBoundary {
-    /// Backward-compatible Phase 20 scaffold marker.
+    /// Backward-compatible scaffold marker.
     ///
-    /// Phase 23 expands the display boundary, but Phase 20 acceptance still
+    /// The display boundary expands, but the existing acceptance contract still
     /// expects this scaffold marker to remain available through the display
     /// boundary.
     pub fn emit_scaffold_marker() {

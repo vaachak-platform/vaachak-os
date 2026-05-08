@@ -71,7 +71,7 @@ pub trait StorageHal {
     fn remove(&mut self, path: &str) -> Result<(), StorageError>;
     fn exists(&self, path: &str) -> bool;
 
-    /// Bootstrap Phase 1 byte-store helper.
+    /// Bootstrap Bootstrap byte-store helper.
     ///
     /// Implementations may keep this as `Unsupported` until a real filesystem
     /// adapter is extracted. Models/services can still target this seam.
@@ -79,7 +79,7 @@ pub trait StorageHal {
         Err(StorageError::Unsupported)
     }
 
-    /// Bootstrap Phase 1 byte-store helper.
+    /// Bootstrap Bootstrap byte-store helper.
     fn write_file(&mut self, _path: &str, _bytes: &[u8]) -> Result<(), StorageError> {
         Err(StorageError::Unsupported)
     }

@@ -6,7 +6,7 @@ use crate::vaachak_x4::contracts::storage_path_helpers::{
 
 /// Vaachak-owned storage state contract smoke.
 ///
-/// Phase 25 makes state-file naming and reserved-file expectations explicit
+/// This module makes state-file naming and reserved-file expectations explicit
 /// without moving SD/SPI/FAT/EPUB-cache behavior out of the imported Pulp
 /// runtime yet.
 pub struct VaachakStorageStateContract;

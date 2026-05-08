@@ -1,6 +1,6 @@
 //! Minimal Xteink X4 SSD1677 display smoke/home/input-navigation/library/TXT-reader driver.
 //!
-//! Phase 7 keeps the proven Phase 5.4 display transport shape:
+//! Keeps the proven display transport shape:
 //! - DMA-backed `SpiDevice` chip-select ownership.
 //! - SD chip-select kept high when the panel owns the shared SPI bus.
 //! - Full-frame strip rendering, no full framebuffer.
@@ -649,7 +649,7 @@ fn smoke_pixel(x: u16, y: u16) -> bool {
 
     text_pixel(b"VAACHAKOS", x, y, 78, 106, 6)
         || text_pixel(b"X4 DISPLAY SMOKE", x, y, 96, 204, 3)
-        || text_pixel(b"PHASE 5", x, y, 156, 284, 4)
+        || text_pixel(b"X4 READY", x, y, 156, 284, 4)
         || text_pixel(b"480X800 PORTRAIT", x, y, 108, 430, 2)
         || text_pixel(b"BOOT OK", x, y, 168, 640, 3)
 }

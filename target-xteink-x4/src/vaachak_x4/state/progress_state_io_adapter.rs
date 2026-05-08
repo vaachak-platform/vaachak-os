@@ -1,4 +1,4 @@
-//! Phase 35C — Progress State I/O Adapter Overlay.
+//! Progress State I/O Adapter.
 //!
 //! This module is deliberately pure and hardware-free. It defines the narrow
 //! boundary between Vaachak reader state and whichever storage implementation
@@ -8,7 +8,7 @@
 //! - `state/<BOOKID>.PRG` path convention
 //! - fixed progress record encode/decode
 //! - progress-state read/write adapter contract
-//! - phase marker
+//! - validation marker
 //!
 //! Not owned here:
 //! - SD-card access
@@ -21,7 +21,7 @@
 
 use core::fmt;
 
-/// Phase marker emitted by validation / boot marker plumbing.
+/// Validation marker emitted by validation / boot marker plumbing.
 pub const PROGRESS_STATE_IO_ADAPTER_MARKER: &str = "x4-progress-state-io-adapter-ok";
 
 pub const PROGRESS_STATE_DIR: &str = "state";

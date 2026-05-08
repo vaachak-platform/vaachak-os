@@ -1,12 +1,12 @@
-// Settings app: Phase 42A app shell settings implementation.
+// Settings app implementation.
 //
 // The active runtime already owns AppId::Settings.  This screen keeps the
-// existing loaded SystemSettings available to the app manager, while Phase 42B
+// existing loaded SystemSettings available to the app manager, while the reader-preference work
 // persists the safe Settings rows through the existing _X4/SETTINGS.TXT path.
 
 use core::fmt::Write as _;
 
-use crate::apps::{App, AppContext, AppId, PendingSetting, Transition, reader_state};
+use crate::apps::{App, AppContext, AppId, PendingSetting, Transition, reader_state, time_status};
 use crate::board::action::{Action, ActionEvent};
 use crate::board::{SCREEN_H, SCREEN_W};
 use crate::drivers::strip::StripBuffer;
@@ -19,12 +19,6 @@ use crate::ui::{
     Alignment, BUTTON_BAR_H, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W, LARGE_MARGIN,
     Region, StackFmt, TITLE_Y, wrap_next, wrap_prev,
 };
-
-pub const APP_SHELL_SETTINGS_MARKER: &str = "x4-app-shell-routing-settings-implementation-ok";
-pub const SETTINGS_PERSISTENCE_MARKER: &str = "x4-settings-persistence-reader-preview-ok";
-pub const READER_VOCABULARY_ALIGNMENT_MARKER: &str = "x4-settings-reader-vocabulary-alignment-ok";
-pub const SHARED_READER_PREFS_MARKER: &str = "x4-shared-reader-preferences-sync-ok";
-pub const SETTINGS_TO_READER_SYNC_MARKER: &str = "x4-settings-to-reader-runtime-sync-ok";
 
 const ROW_H: u16 = 34;
 const ROW_GAP: u16 = 4;
@@ -56,6 +50,20 @@ const SLEEP_IMAGE_MODE_LABELS: [&str; SLEEP_IMAGE_MODE_COUNT as usize] = [
     "Text",
     "No Redraw",
 ];
+
+const TITLE_CACHE_ACTION_NONE: u8 = 0;
+const TITLE_CACHE_ACTION_RELOAD: u8 = 1;
+const TITLE_CACHE_ACTION_REBUILD: u8 = 2;
+
+const TITLE_CACHE_MODE_COUNT: u8 = 2;
+const TITLE_CACHE_MODE_LABELS: [&str; TITLE_CACHE_MODE_COUNT as usize] = ["Runtime", "Reset stale"];
+
+const TITLE_CACHE_STATUS_READY: u8 = 0;
+const TITLE_CACHE_STATUS_QUEUED: u8 = 1;
+const TITLE_CACHE_STATUS_RUNNING: u8 = 2;
+const TITLE_CACHE_STATUS_DONE: u8 = 3;
+const TITLE_CACHE_STATUS_FAILED: u8 = 4;
+const TITLE_CACHE_STATUS_LABELS: [&str; 5] = ["Run now", "Queued", "Running", "Run again", "Retry"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsRowKind {
@@ -216,7 +224,11 @@ pub struct SettingsApp {
     display_invert: bool,
     display_contrast: bool,
     device_sleep_timeout: u8,
+    device_battery_mv: u16,
     sleep_image_mode: u8,
+    title_cache_mode: u8,
+    title_cache_status: u8,
+    title_cache_action: u8,
 }
 
 impl SettingsApp {
@@ -240,7 +252,11 @@ impl SettingsApp {
             display_invert: false,
             display_contrast: false,
             device_sleep_timeout: 1,
+            device_battery_mv: 0,
             sleep_image_mode: 0,
+            title_cache_mode: 0,
+            title_cache_status: TITLE_CACHE_STATUS_READY,
+            title_cache_action: TITLE_CACHE_ACTION_NONE,
         }
     }
 
@@ -276,6 +292,7 @@ impl SettingsApp {
 
     fn load(&mut self, k: &mut KernelHandle<'_>) {
         let mut buf = [0u8; 1024];
+        self.device_battery_mv = k.battery_mv();
 
         self.settings = SystemSettings::defaults();
         self.wifi = WifiConfig::empty();
@@ -296,6 +313,31 @@ impl SettingsApp {
         self.loaded = true;
     }
 
+    fn read_wifi_credentials_from_settings_file(k: &mut KernelHandle<'_>) -> WifiConfig {
+        let mut buf = [0u8; 1024];
+        let mut settings = SystemSettings::defaults();
+        let mut wifi = WifiConfig::empty();
+
+        if let Ok((_size, n)) = k.read_app_data_start(config::SETTINGS_FILE, &mut buf) {
+            if n > 0 {
+                parse_settings_txt(&buf[..n], &mut settings, &mut wifi);
+            }
+        }
+
+        wifi
+    }
+
+    fn preserve_wifi_credentials_before_save(&mut self, k: &mut KernelHandle<'_>) {
+        if self.wifi.has_credentials() && !self.wifi.password().is_empty() {
+            return;
+        }
+
+        let existing = Self::read_wifi_credentials_from_settings_file(k);
+        if existing.has_credentials() && !existing.password().is_empty() {
+            self.wifi = existing;
+        }
+    }
+
     fn load_sleep_image_mode(&mut self, k: &mut KernelHandle<'_>) {
         let mut buf = [0u8; 32];
         self.sleep_image_mode = match k.read_file_start(SLEEP_IMAGE_MODE_FILE, &mut buf) {
@@ -312,6 +354,44 @@ impl SettingsApp {
             Err(e) => {
                 log::error!("settings: sleep image mode save failed: {}", e);
                 false
+            }
+        }
+    }
+
+    fn queue_title_cache_action(&mut self, action: u8) {
+        self.title_cache_action = action;
+        self.title_cache_status = TITLE_CACHE_STATUS_QUEUED;
+    }
+
+    fn run_title_cache_action(&mut self, k: &mut KernelHandle<'_>) {
+        let action = self.title_cache_action;
+        if action == TITLE_CACHE_ACTION_NONE {
+            return;
+        }
+
+        self.title_cache_action = TITLE_CACHE_ACTION_NONE;
+        self.title_cache_status = TITLE_CACHE_STATUS_RUNNING;
+
+        let result = match action {
+            TITLE_CACHE_ACTION_RELOAD => {
+                k.invalidate_dir_cache();
+                k.ensure_dir_cache_loaded().map(|_| ())
+            }
+            TITLE_CACHE_ACTION_REBUILD => {
+                let _ = k.delete_cache(crate::drivers::storage::TITLES_FILE);
+                k.invalidate_dir_cache();
+                k.ensure_dir_cache_loaded().map(|_| ())
+            }
+            _ => Ok(()),
+        };
+
+        match result {
+            Ok(()) => {
+                self.title_cache_status = TITLE_CACHE_STATUS_DONE;
+            }
+            Err(e) => {
+                log::warn!("settings: title cache action failed: {}", e);
+                self.title_cache_status = TITLE_CACHE_STATUS_FAILED;
             }
         }
     }
@@ -368,8 +448,9 @@ impl SettingsApp {
         self.settings.sanitize();
     }
 
-    fn save(&self, k: &mut KernelHandle<'_>) -> bool {
+    fn save(&mut self, k: &mut KernelHandle<'_>) -> bool {
         let mut buf = [0u8; 1024];
+        self.preserve_wifi_credentials_before_save(k);
         let len = write_settings_txt(&self.settings, &self.wifi, &mut buf);
         let settings_saved = match k.write_app_data(config::SETTINGS_FILE, &buf[..len]) {
             Ok(_) => {
@@ -507,6 +588,21 @@ impl SettingsApp {
                 self.device_sleep_timeout = cycle_index(self.device_sleep_timeout, 4, delta);
                 true
             }
+            SettingsRowKind::StorageTitleCache => {
+                self.title_cache_mode =
+                    cycle_index(self.title_cache_mode, TITLE_CACHE_MODE_COUNT, delta);
+                self.title_cache_status = TITLE_CACHE_STATUS_READY;
+                true
+            }
+            SettingsRowKind::StorageRebuildCache => {
+                let action = if self.title_cache_mode == 0 {
+                    TITLE_CACHE_ACTION_RELOAD
+                } else {
+                    TITLE_CACHE_ACTION_REBUILD
+                };
+                self.queue_title_cache_action(action);
+                true
+            }
             SettingsRowKind::DeviceSleepImageMode => {
                 self.sleep_image_mode =
                     cycle_index(self.sleep_image_mode, SLEEP_IMAGE_MODE_COUNT, delta);
@@ -578,13 +674,17 @@ impl SettingsApp {
                 let _ = write!(buf, "Library");
             }
             SettingsRowKind::StorageTitleCache => {
-                let _ = write!(buf, "Host managed");
+                let _ = write!(buf, "{}", title_cache_mode_name(self.title_cache_mode));
             }
             SettingsRowKind::StorageRebuildCache => {
-                let _ = write!(buf, "Host tool only");
+                let _ = write!(buf, "{}", title_cache_status_name(self.title_cache_status));
             }
             SettingsRowKind::DeviceBattery => {
-                let _ = write!(buf, "Unknown");
+                if let Some(pct) = time_status::battery_percent_value(self.device_battery_mv) {
+                    let _ = write!(buf, "{}% {}mV", pct, self.device_battery_mv);
+                } else {
+                    let _ = write!(buf, "--");
+                }
             }
             SettingsRowKind::DeviceSleepTimeout => {
                 let _ = write!(
@@ -616,7 +716,8 @@ impl SettingsApp {
 }
 
 impl App<AppId> for SettingsApp {
-    fn on_enter(&mut self, ctx: &mut AppContext, _k: &mut KernelHandle<'_>) {
+    fn on_enter(&mut self, ctx: &mut AppContext, k: &mut KernelHandle<'_>) {
+        self.device_battery_mv = k.battery_mv();
         if self.loaded {
             self.sync_local_from_system_settings();
         }
@@ -658,10 +759,23 @@ impl App<AppId> for SettingsApp {
     }
 
     async fn background(&mut self, ctx: &mut AppContext, k: &mut KernelHandle<'_>) {
+        let battery_mv = k.battery_mv();
+        if battery_mv != self.device_battery_mv {
+            self.device_battery_mv = battery_mv;
+            if self.loaded {
+                ctx.request_full_redraw();
+            }
+        }
+
         if !self.loaded {
             self.load(k);
             ctx.request_full_redraw();
             return;
+        }
+
+        if self.title_cache_action != TITLE_CACHE_ACTION_NONE {
+            self.run_title_cache_action(k);
+            ctx.mark_dirty(self.row_region(self.selected - self.scroll));
         }
 
         if self.save_needed && self.save(k) {
@@ -676,10 +790,14 @@ impl App<AppId> for SettingsApp {
     }
 
     fn has_background_when_suspended(&self) -> bool {
-        self.save_needed
+        self.save_needed || self.title_cache_action != TITLE_CACHE_ACTION_NONE
     }
 
     fn background_suspended(&mut self, k: &mut KernelHandle<'_>) {
+        if self.title_cache_action != TITLE_CACHE_ACTION_NONE {
+            self.run_title_cache_action(k);
+        }
+
         if self.save_needed && self.save(k) {
             self.save_needed = false;
         }
@@ -751,6 +869,20 @@ impl App<AppId> for SettingsApp {
             }
         }
     }
+}
+
+fn title_cache_mode_name(idx: u8) -> &'static str {
+    TITLE_CACHE_MODE_LABELS
+        .get(idx as usize)
+        .copied()
+        .unwrap_or("Runtime")
+}
+
+fn title_cache_status_name(idx: u8) -> &'static str {
+    TITLE_CACHE_STATUS_LABELS
+        .get(idx as usize)
+        .copied()
+        .unwrap_or("Run now")
 }
 
 fn sleep_image_mode_name(idx: u8) -> &'static str {

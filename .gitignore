@@ -4,29 +4,19 @@
 .idea/
 .vscode/
 *.log
-
-# Vaachak OS phase generated artifacts
-*.bak-phase*
-*.phase15a-backup.*
-.phase_backups/
-tools/phase-overlays/*.zip
-# Phase-generated backups
+*.bak*
+*_overlay/
+*.zip
+/_archive/
+/.deploy-cache/
+/.vaachak*/
 /.odylith/
 /odylith/compass/runtime/refresh-state.v1.json
-# Vaachak OS local phase/deploy artifacts
-/phase*_overlay/
-/phase*.zip
-/_archive/phase-artifacts/
-/.deploy-cache/
 
-# Vaachak font preparation generated artifacts
+# Host-tool generated files
 tools/prepared_txt_real_vfnt/target/
 tools/prepared_epub_smoke/__pycache__/
 tools/font_prepare/__pycache__/
 tools/font_prepare/*.pyc
-
-# USB transfer host-tool artifacts
 tools/usb_transfer/__pycache__/
 tools/usb_transfer/*.pyc
-
-/.vaachak*/

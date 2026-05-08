@@ -8,7 +8,7 @@
 //! The goal is to make the future VaachakOS extraction easier without
 //! disturbing the current X4 runtime path.
 //!
-//! Phase 8 makes the extraction surface explicit through BookIdentity,
+//! This module makes the extraction surface explicit through BookIdentity,
 //! BookStateLayout, and ReaderSliceDescriptor.
 
 extern crate alloc;
@@ -74,7 +74,7 @@ impl BookId {
     }
 }
 
-/// Phase 8 extraction boundary: stable, portable identity for one reader item.
+/// Reader-state boundary: stable, portable identity for one reader item.
 ///
 /// This type is intentionally independent of X4 UI/kernel objects so the same
 /// identity contract can be moved into VaachakOS later. The current X4 build
@@ -121,7 +121,7 @@ impl BookIdentity {
     }
 }
 
-/// Phase 8 extraction boundary: all per-book file locations needed by the
+/// Reader-state boundary: all per-book file locations needed by the
 /// reader state slice. Paths remain 8.3-safe where the X4 SD stack requires it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BookStateLayout {
@@ -175,7 +175,7 @@ impl BookStateLayout {
     }
 }
 
-/// Phase 8 extraction manifest for the VaachakOS reader slice.
+/// Reader-state manifest for the VaachakOS reader slice.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReaderSliceDescriptor {
     pub schema: &'static str,
@@ -639,7 +639,7 @@ pub const STATE_DIR: &str = "state";
 pub const CACHE_DIR: &str = "cache";
 pub const FINGERPRINT_KIND: &str = "path-v2";
 pub const RECENT_RECORD_FILE: &str = "recent.txt";
-// Legacy nested-cache filenames. Keep these constants so Phase 6.1 can still
+// Legacy nested-cache filenames. Keep these constants so legacy readers can still
 // read older SD cards, but new typed state is written flat under STATE_DIR with
 // 8.3-safe names generated from the book id.
 pub const PROGRESS_RECORD_FILE: &str = "progress.txt";
@@ -651,7 +651,7 @@ pub const META_RECORD_FILE: &str = "meta.txt";
 //   state/8A79A61F.PRG
 //   state/8A79A61F.THM
 //   state/8A79A61F.MTA
-// Bookmarks intentionally stay on the already-working Phase 5.4/v5 layout:
+// Bookmarks intentionally stay on the already-working stable flat layout:
 //   state/8A79A61F.BKM
 //   state/BMIDX.TXT
 pub const PROGRESS_RECORD_EXT: &str = ".PRG";

@@ -206,6 +206,7 @@ impl SystemSettings {
 pub const WIFI_SSID_CAP: usize = 32;
 pub const WIFI_PASS_CAP: usize = 63;
 
+#[derive(Clone, Copy)]
 pub struct WifiConfig {
     ssid: [u8; WIFI_SSID_CAP],
     ssid_len: u8,

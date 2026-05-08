@@ -2,7 +2,7 @@
 
 /// Vaachak-owned pure storage path helper layer.
 ///
-/// Phase 29 intentionally extracts only deterministic path/name logic.
+/// The current implementation intentionally extracts only deterministic path/name logic.
 /// Physical SD/SPI/filesystem IO remains owned by the imported Pulp runtime.
 pub struct VaachakStoragePathHelpers;
 
@@ -102,8 +102,8 @@ impl VaachakStoragePathHelpers {
     pub const THEME_EXTENSION: &'static str = "THM";
     pub const METADATA_EXTENSION: &'static str = "MTA";
 
-    /// Phase 29 boot marker. This is the only phase marker emitted by the
-    /// Vaachak facade after previous development-phase logging is quieted.
+    /// Validation marker. This is the only validation marker emitted by the
+    /// Vaachak facade after previous development-development logging is quieted.
     #[cfg(target_arch = "riscv32")]
     pub fn emit_storage_path_helpers_marker() {
         esp_println::println!("{}", Self::STORAGE_PATH_HELPERS_MARKER);

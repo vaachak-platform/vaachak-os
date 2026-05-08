@@ -4,7 +4,7 @@ use crate::vaachak_x4::contracts::input::{VaachakButtonRole, VaachakInputBoundar
 
 /// Vaachak-owned input contract smoke.
 ///
-/// Phase 26 validates the pure input contract owned by Vaachak without moving
+/// The current implementation validates the pure input contract owned by Vaachak without moving
 /// physical ADC reads, debounce/repeat handling, ladder thresholds, or runtime
 /// input dispatch away from the imported Pulp/X4 runtime.
 pub struct VaachakInputContractSmoke;
@@ -39,7 +39,7 @@ pub struct VaachakInputPinContract {
 impl VaachakInputContractSmoke {
     pub const INPUT_CONTRACT_SMOKE_MARKER: &'static str = "x4-input-contract-smoke-ok";
 
-    /// Runtime behavior remains imported. Phase 26 owns only pure metadata and
+    /// Runtime behavior remains imported. The current implementation owns only pure metadata and
     /// contract validation helpers.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
     pub const PHYSICAL_ADC_READS_MOVED_TO_BOUNDARY: bool = false;

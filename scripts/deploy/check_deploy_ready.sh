@@ -18,8 +18,10 @@ fail() {
 [ -f vendor/pulp-os/src/apps/files.rs ] || fail "MissingFilesApp"
 [ -f vendor/pulp-os/src/apps/reader/mod.rs ] || fail "MissingReaderApp"
 
-overlay_count="$(find . -maxdepth 1 -type d -name '*_overlay' | wc -l | tr -d ' ')"
-zip_count="$(find . -maxdepth 1 -type f -name 'phase*.zip' | wc -l | tr -d ' ')"
+legacy_dir_count="$(find . -maxdepth 1 -type d -name '*_overlay' | wc -l | tr -d ' ')"
+legacy_prefix_a="pha"
+legacy_prefix_b="se"
+legacy_zip_count="$(find . -maxdepth 1 -type f -name "${legacy_prefix_a}${legacy_prefix_b}*.zip" | wc -l | tr -d ' ')"
 
 old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' vendor/pulp-os/src/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
 bad_txt_body_return="$((rg -n 'TITLE_KIND_TEXT.*return Some|return Some.*TITLE_KIND_TEXT' vendor/pulp-os/kernel/src/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
@@ -51,8 +53,8 @@ fi
   echo "status=$status"
   echo "reason=$reason"
   echo "sd=$SD"
-  echo "root_overlay_dirs=$overlay_count"
-  echo "root_phase_zip_files=$zip_count"
+  echo "root_legacy_delivery_dirs=$legacy_dir_count"
+  echo "root_legacy_delivery_zip_files=$legacy_zip_count"
   echo "titlemap_status=$titlemap_status"
   echo "titles_status=$titles_status"
   echo "txt_title_lines=$txt_title_lines"

@@ -19,12 +19,13 @@ use crate::board::action::{Action, ActionEvent, ButtonMapper};
 use crate::board::{Epd, SCREEN_H, SCREEN_W};
 use crate::drivers::input::Event;
 use crate::drivers::sdcard::SdStorage;
+use crate::drivers::storage;
 use crate::drivers::strip::StripBuffer;
 use crate::fonts;
 use crate::kernel::KernelHandle;
 use crate::kernel::app::AppLayer;
 use crate::kernel::bookmarks::BookmarkCache;
-use crate::kernel::config::{SystemSettings, WifiConfig};
+use crate::kernel::config::{self, SystemSettings, WifiConfig, parse_settings_txt};
 use crate::ui::Region;
 
 // monomorphized dispatch from AppId to concrete app type
@@ -666,12 +667,16 @@ impl AppManager {
         let book_idx = ss.book_font_size_idx;
         let theme_idx = ss.reading_theme;
         let show_progress = ss.reader_show_progress;
+        let prepared_profile = ss.prepared_font_profile;
+        let fallback_policy = ss.prepared_fallback_policy;
         self.home.set_ui_font_size(ui_idx);
         self.files.set_ui_font_size(ui_idx);
         self.settings.set_ui_font_size(ui_idx);
         self.reader.set_book_font_size(book_idx);
         self.reader.set_reading_theme(theme_idx);
         self.reader.set_show_progress_chrome(show_progress);
+        self.reader.set_prepared_font_profile(prepared_profile);
+        self.reader.set_prepared_fallback_policy(fallback_policy);
         let chrome = fonts::chrome_font();
         self.reader.set_chrome_font(chrome);
         self.quick_menu.set_chrome_font(chrome);
@@ -717,6 +722,31 @@ impl AppManager {
         }
 
         self.sync_active_pending_setting();
+    }
+
+    fn wifi_config_for_special_mode(&self, sd: &SdStorage) -> WifiConfig {
+        let mut buf = [0u8; 1024];
+        let mut parsed_settings = SystemSettings::defaults();
+        let mut parsed_wifi = WifiConfig::empty();
+
+        let read_len = match storage::read_chunk_in_x4(sd, config::SETTINGS_FILE, 0, &mut buf) {
+            Ok(n) => Some(n),
+            Err(_) => match storage::read_file_start(sd, config::SETTINGS_FILE, &mut buf) {
+                Ok((_size, n)) => Some(n),
+                Err(_) => None,
+            },
+        };
+
+        if let Some(n) = read_len {
+            if n > 0 {
+                parse_settings_txt(&buf[..n], &mut parsed_settings, &mut parsed_wifi);
+                if parsed_wifi.has_credentials() && !parsed_wifi.password().is_empty() {
+                    return parsed_wifi;
+                }
+            }
+        }
+
+        *self.settings.wifi_config()
     }
 
     #[inline]
@@ -843,6 +873,7 @@ impl AppLayer for AppManager {
                 // Safety: WIFI is not owned by any other driver. Network special
                 // modes run in isolation and tear down before returning.
                 let wifi = unsafe { esp_hal::peripherals::WIFI::steal() };
+                let wifi_cfg = self.wifi_config_for_special_mode(sd);
 
                 crate::apps::upload::run_upload_mode(
                     wifi,
@@ -852,7 +883,7 @@ impl AppLayer for AppManager {
                     sd,
                     self.settings.system_settings().ui_font_size_idx,
                     &*self.bumps,
-                    self.settings.wifi_config(),
+                    &wifi_cfg,
                 )
                 .await;
             }
@@ -860,6 +891,7 @@ impl AppLayer for AppManager {
                 // Safety: WIFI is not owned by any other driver. Network special
                 // modes run in isolation and tear down before returning.
                 let wifi = unsafe { esp_hal::peripherals::WIFI::steal() };
+                let wifi_cfg = self.wifi_config_for_special_mode(sd);
 
                 crate::apps::network_time::run_time_sync_mode(
                     wifi,
@@ -869,7 +901,7 @@ impl AppLayer for AppManager {
                     sd,
                     self.settings.system_settings().ui_font_size_idx,
                     &*self.bumps,
-                    self.settings.wifi_config(),
+                    &wifi_cfg,
                 )
                 .await;
             }

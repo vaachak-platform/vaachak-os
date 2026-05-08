@@ -393,6 +393,7 @@ pub struct ReaderApp {
     pub(super) prepared_fallback_policy: u8,
     pub(super) prepared_cache_debug_id: Option<[u8; 8]>,
     pub(super) prepared_cache_debug_err: Option<&'static str>,
+    pub(super) prepared_cache_active_id: Option<[u8; 8]>,
     pub(super) qa_buf: [QuickAction; QA_MAX],
     pub(super) qa_count: u8,
 
@@ -454,6 +455,7 @@ impl ReaderApp {
             prepared_fallback_policy: crate::kernel::config::DEFAULT_PREPARED_FALLBACK_POLICY,
             prepared_cache_debug_id: None,
             prepared_cache_debug_err: None,
+            prepared_cache_active_id: None,
 
             qa_buf: [QuickAction::trigger(0, "", ""); QA_MAX],
             qa_count: 0,
@@ -544,7 +546,7 @@ impl ReaderApp {
                 80
             }
         } else {
-            // image phase: 80% to 100%
+            // image loading: 80% to 100%
             if img_found > 0 {
                 let _ = write!(lbuf, "Caching images {}/{}", img_cached, img_found);
                 (80 + (img_cached * 20) / img_found).min(100) as u8
@@ -605,7 +607,7 @@ impl ReaderApp {
     fn rebuild_quick_actions(&mut self) {
         let mut n = 0usize;
 
-        // Phase 7 reader UX model:
+        // Reader UX model:
         // - core actions first and shared by TXT/EPUB
         // - EPUB-only navigation actions after the shared reader actions
         // - labels are short enough for the bottom quick-action chrome
@@ -654,9 +656,21 @@ impl ReaderApp {
         self.qa_count = n as u8;
     }
 
+    fn prepared_cache_id_bytes(cache_book_id: &str) -> [u8; 8] {
+        let mut debug_id = [0u8; 8];
+        let bytes = cache_book_id.as_bytes();
+        let n = bytes.len().min(debug_id.len());
+        debug_id[..n].copy_from_slice(&bytes[..n]);
+        debug_id
+    }
+
     fn clear_prepared_cache_error(&mut self) {
         self.prepared_cache_debug_id = None;
         self.prepared_cache_debug_err = None;
+    }
+
+    fn clear_prepared_cache_active_id(&mut self) {
+        self.prepared_cache_active_id = None;
     }
 
     fn record_prepared_cache_error(
@@ -664,12 +678,20 @@ impl ReaderApp {
         cache_book_id: &str,
         err: prepared_txt::PreparedTxtError,
     ) {
-        let mut debug_id = [0u8; 8];
-        let bytes = cache_book_id.as_bytes();
-        let n = bytes.len().min(debug_id.len());
-        debug_id[..n].copy_from_slice(&bytes[..n]);
-        self.prepared_cache_debug_id = Some(debug_id);
+        self.prepared_cache_debug_id = Some(Self::prepared_cache_id_bytes(cache_book_id));
         self.prepared_cache_debug_err = Some(err.code());
+    }
+
+    fn record_prepared_cache_page_error(&mut self) {
+        self.prepared_cache_debug_id = self.prepared_cache_active_id;
+        if self.prepared_cache_debug_id.is_none() {
+            if let Some(book_id) = self.current_book_id() {
+                let id = reader_state::book_id_hex8(&book_id);
+                self.prepared_cache_debug_id = Some(Self::prepared_cache_id_bytes(id.as_str()));
+            }
+        }
+        self.prepared_cache_debug_err = Some("PAGE");
+        self.clear_prepared_cache_active_id();
     }
 
     fn try_open_prepared_book_cache(
@@ -678,6 +700,7 @@ impl ReaderApp {
         source_path: &str,
     ) -> bool {
         self.clear_prepared_cache_error();
+        self.clear_prepared_cache_active_id();
 
         let mut candidate_ids: Vec<String> = Vec::new();
 
@@ -711,9 +734,18 @@ impl ReaderApp {
                 {
                     Ok(()) => {
                         self.clear_prepared_cache_error();
-                        self.restore_offset = None;
-                        self.pg.page = self.pg.page.min(self.prepared_txt.page_count() - 1);
-                        self.pg.total_pages = self.prepared_txt.page_count();
+                        self.record_prepared_cache_id(cache_book_id.as_str());
+                        self.prepared_cache_active_id =
+                            Some(Self::prepared_cache_id_bytes(cache_book_id.as_str()));
+                        let prepared_page_count = self.prepared_txt.page_count();
+                        let restored_prepared_page = self
+                            .restore_offset
+                            .take()
+                            .map(|offset| offset as usize)
+                            .unwrap_or(self.pg.page);
+                        self.pg.page =
+                            restored_prepared_page.min(prepared_page_count.saturating_sub(1));
+                        self.pg.total_pages = prepared_page_count;
                         self.pg.fully_indexed = true;
                         self.pg.buf_len = 0;
                         self.pg.line_count = 0;
@@ -738,7 +770,9 @@ impl ReaderApp {
                         return true;
                     }
                     Err(err) => {
-                        self.record_prepared_cache_error(cache_book_id.as_str(), err);
+                        if !matches!(err, prepared_txt::PreparedTxtError::Missing) {
+                            self.record_prepared_cache_error(cache_book_id.as_str(), err);
+                        }
                         log::info!(
                             "reader: prepared cache miss cache_id={} source={} err={:?}",
                             cache_book_id.as_str(),
@@ -927,7 +961,7 @@ impl ReaderApp {
             return false;
         };
 
-        // Phase 6.1: typed reader state is flat and 8.3-safe under state/.
+        // typed reader state is flat and 8.3-safe under state/.
         // Do not write meta/progress/theme into cache/<bookid>/; EPUB text/image
         // cache behavior remains owned by the existing EPUB cache path.
         let ensured_state = typed_state_wiring::ensure_state_dir(k).is_ok();
@@ -966,7 +1000,7 @@ impl ReaderApp {
 
         let mut buf = [0u8; PROGRESS_RECORD_BUF];
 
-        // Phase 6.1 primary storage: flat, 8.3-safe typed state file.
+        // Primary storage: flat, 8.3-safe typed state file.
         let progress_file = reader_state::progress_record_file_for(&book_id);
         if let Ok(size) =
             k.read_app_subdir_chunk(reader_state::STATE_DIR, progress_file.as_str(), 0, &mut buf)
@@ -978,6 +1012,7 @@ impl ReaderApp {
                             self.book_font_size_idx = rec.font_size_idx;
                             if allow_position {
                                 self.epub.chapter = rec.chapter;
+                                self.pg.page = rec.page as usize;
                                 self.restore_offset = if rec.byte_offset > 0 {
                                     Some(rec.byte_offset)
                                 } else {
@@ -1007,7 +1042,7 @@ impl ReaderApp {
             }
         }
 
-        // Legacy fallback: previous Phase 6 nested cache paths. Read only; do not
+        // Legacy fallback: previous nested cache paths. Read only; do not
         // write new typed records back into these paths.
         for subdir in self.current_book_cache_dirs(&book_id) {
             let size = match k.read_app_subdir_chunk(
@@ -1041,6 +1076,7 @@ impl ReaderApp {
             self.book_font_size_idx = rec.font_size_idx;
             if allow_position {
                 self.epub.chapter = rec.chapter;
+                self.pg.page = rec.page as usize;
                 self.restore_offset = if rec.byte_offset > 0 {
                     Some(rec.byte_offset)
                 } else {
@@ -1194,7 +1230,7 @@ impl ReaderApp {
 
         let mut buf = [0u8; PROGRESS_RECORD_BUF];
 
-        // Phase 6.1 primary storage: flat, 8.3-safe typed state file.
+        // Primary storage: flat, 8.3-safe typed state file.
         let theme_file = reader_state::theme_record_file_for(&book_id);
         if let Ok(size) =
             k.read_app_subdir_chunk(reader_state::STATE_DIR, theme_file.as_str(), 0, &mut buf)
@@ -1584,7 +1620,7 @@ impl ReaderApp {
         self.persist_bookmarks(k);
         self.persist_bookmarks_index(k);
 
-        // Phase 7.1: Mark must be a non-navigation action.
+        // Mark must be a non-navigation action.
         // The quick-action Select event can otherwise leave a pending bookmark-list
         // open request behind, and any follow-up re-index must land back on the
         // exact page where Mark was pressed.
@@ -1791,6 +1827,11 @@ impl ReaderApp {
     }
 
     fn progress_pct(&self) -> u8 {
+        // prepared cache progress uses prepared page count, not normal file_size
+        if self.prepared_txt.is_active() && self.pg.total_pages > 0 {
+            let pct = (((self.pg.page + 1) as u64 * 100) / self.pg.total_pages as u64).min(100);
+            return pct as u8;
+        }
         if self.is_epub && !self.epub.spine.is_empty() {
             let spine_len = self.epub.spine.len() as u64;
             let ch = self.epub.chapter as u64;
@@ -1826,6 +1867,19 @@ impl ReaderApp {
     }
 
     fn write_position_label<const N: usize>(&self, out: &mut StackFmt<N>, include_progress: bool) {
+        // prepared cache position uses prepared page count, not normal file_size
+        if self.prepared_txt.is_active() {
+            if self.pg.fully_indexed && self.pg.total_pages > 0 {
+                let _ = write!(out, "Pg {}/{}", self.pg.page + 1, self.pg.total_pages);
+            } else {
+                let _ = write!(out, "Pg {}", self.pg.page + 1);
+            }
+
+            if include_progress {
+                let _ = write!(out, " · {}%", self.progress_pct());
+            }
+            return;
+        }
         if self.is_epub && !self.epub.spine.is_empty() {
             if self.epub.spine.len() > 1 {
                 let _ = write!(
@@ -1866,16 +1920,45 @@ impl ReaderApp {
             return;
         }
 
-        if let (Some(id), Some(err)) = (self.prepared_cache_debug_id, self.prepared_cache_debug_err)
-        {
-            let id_str = core::str::from_utf8(&id).unwrap_or("????????");
-            let _ = write!(out, "Read cache:{} err:{} ", id_str, err);
-            self.write_position_label(out, true);
-            return;
-        }
-
         let _ = write!(out, "{}", READER_STATUS_PREFIX);
         self.write_position_label(out, true);
+    }
+
+    fn record_prepared_cache_id(&mut self, cache_book_id: &str) {
+        let mut debug_id = [0u8; 8];
+        let bytes = cache_book_id.as_bytes();
+        let n = bytes.len().min(debug_id.len());
+        debug_id[..n].copy_from_slice(&bytes[..n]);
+        self.prepared_cache_debug_id = Some(debug_id);
+    }
+
+    fn draw_prepared_cache_notice(
+        &self,
+        strip: &mut StripBuffer,
+        status_font: Option<&'static BitmapFont>,
+    ) {
+        let (Some(id), Some(err)) = (self.prepared_cache_debug_id, self.prepared_cache_debug_err)
+        else {
+            return;
+        };
+        let id_str = core::str::from_utf8(&id).unwrap_or("????????");
+        let mut cbuf = StackFmt::<64>::new();
+        let _ = write!(cbuf, "Read cache:{} err:{}", id_str, err);
+
+        if LOADING_REGION.intersects(strip.logical_window()) {
+            LOADING_REGION
+                .to_rect()
+                .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
+                .draw(strip)
+                .unwrap();
+            draw_chrome_text(
+                strip,
+                LOADING_REGION,
+                cbuf.as_str(),
+                Alignment::CenterLeft,
+                status_font,
+            );
+        }
     }
 }
 
@@ -1915,6 +1998,26 @@ pub(super) fn extract_zip_entry(
             .read_chunk(name, offset, buf)
             .map_err(|e: Error| -> &'static str { e.into() })
     })
+}
+
+fn reader_body_display_char(fonts: &fonts::FontSet, style: fonts::Style, ch: char) -> char {
+    if fonts.font(style).has_glyph(ch) {
+        return ch;
+    }
+
+    match ch {
+        '\u{00A0}' | '\u{2007}' | '\u{202F}' => ' ',
+        '\u{2010}' | '\u{2011}' | '\u{2012}' | '\u{2013}' | '\u{2014}' | '\u{2212}' => '-',
+        '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}' => '\'',
+        '\u{201C}' | '\u{201D}' | '\u{201E}' | '\u{201F}' => '"',
+        '\u{2026}' => '.',
+        '\u{00B7}' | '\u{2022}' | '\u{2043}' | '\u{2217}' => '*',
+        '\u{00A9}' => 'C',
+        '\u{00AE}' => 'R',
+        '\u{FFFD}' => ' ',
+        c if c.is_whitespace() => ' ',
+        _ => ' ',
+    }
 }
 
 fn draw_chrome_text(
@@ -1992,6 +2095,8 @@ impl App<AppId> for ReaderApp {
         self.apply_theme_layout();
         self.reset_paging();
         self.prepared_txt.clear();
+        self.clear_prepared_cache_error();
+        self.clear_prepared_cache_active_id();
         self.epub.ch_cache = Vec::new();
         self.file_size = 0;
         self.bookmarks.clear();
@@ -2037,6 +2142,8 @@ impl App<AppId> for ReaderApp {
         self.restore_offset = None;
         self.show_position = false;
         self.prepared_txt.clear();
+        self.clear_prepared_cache_error();
+        self.clear_prepared_cache_active_id();
         self.epub.ch_cache = Vec::new();
         self.page_img = None;
 
@@ -2079,7 +2186,7 @@ impl App<AppId> for ReaderApp {
         loop {
             if self.pending_bookmark_toggle {
                 self.pending_bookmark_toggle = false;
-                // Phase 7.1: Mark/Add/Remove is intentionally non-navigation.
+                // Mark/Add/Remove is intentionally non-navigation.
                 // If the quick-action input path also queued List, discard it so
                 // the reader stays on the current page after saving a bookmark.
                 self.pending_open_bookmarks = false;
@@ -2313,7 +2420,7 @@ impl App<AppId> for ReaderApp {
                                 ctx.mark_dirty(PAGE_REGION);
                             }
                             Err(_) => {
-                                self.prepared_cache_debug_err = Some("PAGE");
+                                self.record_prepared_cache_page_error();
                                 self.prepared_txt.clear();
                                 self.pg.page = 0;
                                 self.pg.offsets[0] = 0;
@@ -2617,7 +2724,7 @@ impl App<AppId> for ReaderApp {
 
             ActionEvent::Press(Action::Select) => {
                 if self.state == State::Ready {
-                    // Phase 7: short Select opens the reader bookmark list for both TXT and EPUB.
+                    // short Select opens the reader bookmark list for both TXT and EPUB.
                     // Long Select still toggles the current bookmark.
                     self.pending_open_bookmarks = true;
                 }
@@ -2678,7 +2785,7 @@ impl App<AppId> for ReaderApp {
                 self.pending_open_bookmarks = true;
             }
             QA_BOOKMARK_TOGGLE => {
-                // Phase 7.1: Mark should save/remove a bookmark and remain on the
+                // Mark should save/remove a bookmark and remain on the
                 // reading page. It must not fall through into the bookmark list.
                 self.pending_open_bookmarks = false;
                 self.pending_bookmark_toggle = true;
@@ -2780,7 +2887,9 @@ impl App<AppId> for ReaderApp {
                 status_font,
             );
         } else if self.show_progress_chrome
-            && (self.file_size > 0 || (self.is_epub && !self.epub.spine.is_empty()))
+            && (self.prepared_txt.is_active()
+                || self.file_size > 0
+                || (self.is_epub && !self.epub.spine.is_empty()))
         {
             let mut sbuf = StackFmt::<64>::new();
             self.write_reader_status_label(&mut sbuf);
@@ -3056,6 +3165,7 @@ impl App<AppId> for ReaderApp {
                         }
                         if b >= 0xC0 {
                             let (ch, seq_len) = decode_utf8_char(line, j);
+                            let ch = reader_body_display_char(&fs, sty, ch);
                             cx += fs.draw_char(strip, ch, sty, cx, baseline) as i32;
                             j += seq_len;
                             continue;
@@ -3088,6 +3198,8 @@ impl App<AppId> for ReaderApp {
                     .unwrap();
             }
         }
+
+        self.draw_prepared_cache_notice(strip, status_font);
 
         if self.show_position
             && self.state == State::Ready

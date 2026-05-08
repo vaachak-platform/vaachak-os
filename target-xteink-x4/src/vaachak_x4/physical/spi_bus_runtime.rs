@@ -9,7 +9,7 @@ pub enum VaachakSharedSpiDevice {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VaachakSpiBusPhase {
+pub enum VaachakSpiBusMode {
     SdProbeSlow,
     OperationalFast,
     DisplayRefresh,
@@ -47,7 +47,7 @@ pub struct VaachakSpiBusRuntimeReport {
     pub pins_ok: bool,
     pub timing_ok: bool,
     pub selection_rules_ok: bool,
-    pub phase_rules_ok: bool,
+    pub mode_rules_ok: bool,
     pub physical_spi_owned: bool,
     pub physical_sd_owned: bool,
     pub physical_display_owned: bool,
@@ -58,7 +58,7 @@ impl VaachakSpiBusRuntimeReport {
         self.pins_ok
             && self.timing_ok
             && self.selection_rules_ok
-            && self.phase_rules_ok
+            && self.mode_rules_ok
             && !self.physical_spi_owned
             && !self.physical_sd_owned
             && !self.physical_display_owned
@@ -101,7 +101,7 @@ impl VaachakSpiBusRuntimeBridge {
             pins_ok: Self::pins_ok(),
             timing_ok: Self::timing_ok(),
             selection_rules_ok: Self::selection_rules_ok(),
-            phase_rules_ok: Self::phase_rules_ok(),
+            mode_rules_ok: Self::mode_rules_ok(),
             physical_spi_owned: Self::PHYSICAL_SPI_OWNED_BY_BRIDGE,
             physical_sd_owned: Self::PHYSICAL_SD_OWNED_BY_BRIDGE,
             physical_display_owned: Self::PHYSICAL_DISPLAY_OWNED_BY_BRIDGE,
@@ -119,20 +119,20 @@ impl VaachakSpiBusRuntimeBridge {
         !(selection.display_selected && selection.storage_selected)
     }
 
-    pub const fn phase_allows_storage_io(phase: VaachakSpiBusPhase) -> bool {
+    pub const fn mode_allows_storage_io(mode: VaachakSpiBusMode) -> bool {
         matches!(
-            phase,
-            VaachakSpiBusPhase::SdProbeSlow
-                | VaachakSpiBusPhase::OperationalFast
-                | VaachakSpiBusPhase::StorageIo
-                | VaachakSpiBusPhase::DisplayBusyBackgroundStorage
+            mode,
+            VaachakSpiBusMode::SdProbeSlow
+                | VaachakSpiBusMode::OperationalFast
+                | VaachakSpiBusMode::StorageIo
+                | VaachakSpiBusMode::DisplayBusyBackgroundStorage
         )
     }
 
-    pub const fn phase_allows_display_io(phase: VaachakSpiBusPhase) -> bool {
+    pub const fn mode_allows_display_io(mode: VaachakSpiBusMode) -> bool {
         matches!(
-            phase,
-            VaachakSpiBusPhase::OperationalFast | VaachakSpiBusPhase::DisplayRefresh
+            mode,
+            VaachakSpiBusMode::OperationalFast | VaachakSpiBusMode::DisplayRefresh
         )
     }
 
@@ -169,14 +169,14 @@ impl VaachakSpiBusRuntimeBridge {
         })
     }
 
-    fn phase_rules_ok() -> bool {
-        Self::phase_allows_storage_io(VaachakSpiBusPhase::SdProbeSlow)
-            && Self::phase_allows_storage_io(VaachakSpiBusPhase::DisplayBusyBackgroundStorage)
-            && Self::phase_allows_storage_io(VaachakSpiBusPhase::StorageIo)
-            && Self::phase_allows_display_io(VaachakSpiBusPhase::DisplayRefresh)
-            && Self::phase_allows_display_io(VaachakSpiBusPhase::OperationalFast)
-            && !Self::phase_allows_display_io(VaachakSpiBusPhase::SdProbeSlow)
-            && !Self::phase_allows_storage_io(VaachakSpiBusPhase::DisplayRefresh)
+    fn mode_rules_ok() -> bool {
+        Self::mode_allows_storage_io(VaachakSpiBusMode::SdProbeSlow)
+            && Self::mode_allows_storage_io(VaachakSpiBusMode::DisplayBusyBackgroundStorage)
+            && Self::mode_allows_storage_io(VaachakSpiBusMode::StorageIo)
+            && Self::mode_allows_display_io(VaachakSpiBusMode::DisplayRefresh)
+            && Self::mode_allows_display_io(VaachakSpiBusMode::OperationalFast)
+            && !Self::mode_allows_display_io(VaachakSpiBusMode::SdProbeSlow)
+            && !Self::mode_allows_storage_io(VaachakSpiBusMode::DisplayRefresh)
     }
 }
 

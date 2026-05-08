@@ -48,8 +48,8 @@ impl VaachakReaderStateRuntimeBridge {
     }
 
     pub fn preflight_report() -> VaachakReaderStateRuntimePreflightReport {
-        let identity = VaachakBookIdentity::from_path("/books/Phase35D1 Reader State Bridge.epub")
-            .with_display_title("Phase 35D1");
+        let identity = VaachakBookIdentity::from_path("/books/Reader State Bridge.epub")
+            .with_display_title("Reader State");
 
         VaachakReaderStateRuntimePreflightReport {
             progress_record_ok: Self::progress_record_round_trips(&identity),
@@ -105,7 +105,7 @@ impl VaachakReaderStateRuntimeBridge {
     fn metadata_record_round_trips(identity: &VaachakBookIdentity) -> bool {
         let record = VaachakBookMetaRecord::from_identity(identity);
         VaachakBookMetaRecord::decode_line(&record.encode_line())
-            .is_some_and(|decoded| decoded == record && decoded.display_title == "Phase 35D1")
+            .is_some_and(|decoded| decoded == record && decoded.display_title == "Reader State")
     }
 
     fn layout_paths_match(book_id: &VaachakBookId) -> bool {

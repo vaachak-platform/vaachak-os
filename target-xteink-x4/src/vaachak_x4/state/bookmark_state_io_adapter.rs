@@ -1,4 +1,4 @@
-//! Phase 35F — Bookmark State I/O Adapter Overlay.
+//! Bookmark State I/O Adapter.
 //!
 //! This module is deliberately pure and hardware-free. It defines the narrow
 //! boundary between Vaachak bookmark state and whichever storage implementation
@@ -9,7 +9,7 @@
 //! - `state/BMIDX.TXT` index path convention
 //! - fixed bookmark file encode/decode
 //! - bookmark-state read/write adapter contract
-//! - phase marker
+//! - validation marker
 //!
 //! Not owned here:
 //! - SD-card access
@@ -24,7 +24,7 @@
 
 use super::progress_state_io_adapter::{BOOK_ID_8_3_LEN, BookId8};
 
-/// Phase marker emitted by validation / boot marker plumbing.
+/// Validation marker emitted by validation / boot marker plumbing.
 pub const BOOKMARK_STATE_IO_ADAPTER_MARKER: &str = "x4-bookmark-state-io-adapter-ok";
 
 pub const BOOKMARK_STATE_DIR: &str = "state";
@@ -47,7 +47,7 @@ pub const BOOKMARK_INDEX_PATH_LEN: usize = "state/".len() + "BMIDX.TXT".len();
 
 /// Persisted bookmark entry kind.
 ///
-/// Only `Bookmark` is meant for live reader behavior in this phase. The other
+/// Only `Bookmark` is meant for live reader behavior in this implementation. The other
 /// values reserve space so the on-disk shape can evolve without changing the
 /// file size when highlights/notes are moved later.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

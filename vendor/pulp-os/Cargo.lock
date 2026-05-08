@@ -1736,6 +1736,7 @@ dependencies = [
  "esp-rtos",
  "fontdue",
  "log",
+ "nb 1.1.0",
  "smol-epub",
  "static_cell",
  "x4-kernel",

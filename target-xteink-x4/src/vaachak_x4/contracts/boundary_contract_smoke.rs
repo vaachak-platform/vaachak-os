@@ -2,10 +2,10 @@
 
 /// Vaachak-owned combined contract smoke for the Xteink X4 target.
 ///
-/// Phase 28 intentionally does not move physical storage, input, display,
+/// The current implementation intentionally does not move physical storage, input, display,
 /// SPI, ADC, SSD1677, SD, or reader behavior out of the imported Pulp runtime.
 /// This module only consolidates the already-established Vaachak-owned contract
-/// smokes from Phase 25, Phase 26, and Phase 27 under one stable boundary layer.
+/// smokes from the related display, input, and storage contract checks under one stable boundary layer.
 pub struct VaachakBoundaryContractSmoke;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -38,14 +38,14 @@ impl VaachakBoundaryContractSmoke {
     pub const INPUT_CONTRACT_MARKER: &'static str = "x4-input-contract-smoke-ok";
     pub const DISPLAY_CONTRACT_MARKER: &'static str = "x4-display-contract-smoke-ok";
 
-    /// Phase 28 remains non-invasive. Physical behavior is still imported from
+    /// The current implementation remains non-invasive. Physical behavior is still imported from
     /// vendor/pulp-os and is not owned by this Vaachak contract smoke layer.
     pub const PHYSICAL_STORAGE_MOVED_TO_BOUNDARY: bool = false;
     pub const PHYSICAL_INPUT_MOVED_TO_BOUNDARY: bool = false;
     pub const PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY: bool = false;
 
     /// Compile-time dependency names used by the contract smoke. These strings
-    /// intentionally keep the relationship to the Phase 25/26/27 modules visible
+    /// intentionally keep the relationship to the the related contract modules visible
     /// without calling into physical hardware paths.
     pub const DEPENDS_ON_CONTRACT_MODULES: [&'static str; 3] = [
         Self::STORAGE_CONTRACT_SOURCE,

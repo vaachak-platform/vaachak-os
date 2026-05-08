@@ -1,4 +1,4 @@
-//! Phase 40F library title layout helper.
+//! Library title layout helper.
 //!
 //! This helper is pure and side-effect free. It does not choose a title source.
 //! It only normalizes display bytes for a fixed-width library row.
@@ -10,7 +10,7 @@ pub const LIBRARY_TITLE_LAYOUT_HELPER_MARKER: &str = "x4-library-title-layout-he
 pub const LIBRARY_TITLE_MAX_BYTES: usize = 42;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Phase40fTitlePolishOutcome {
+pub enum LibraryTitlePolishOutcome {
     Empty,
     Copied,
     Trimmed,
@@ -18,8 +18,8 @@ pub enum Phase40fTitlePolishOutcome {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Phase40fTitlePolishReport {
-    pub outcome: Phase40fTitlePolishOutcome,
+pub struct LibraryTitlePolishReport {
+    pub outcome: LibraryTitlePolishOutcome,
     pub len: usize,
 }
 
@@ -34,12 +34,12 @@ fn is_separator(byte: u8) -> bool {
 pub fn polish_library_title<'a>(
     input: &[u8],
     output: &'a mut [u8],
-) -> (&'a [u8], Phase40fTitlePolishReport) {
+) -> (&'a [u8], LibraryTitlePolishReport) {
     if output.is_empty() {
         return (
             &output[..0],
-            Phase40fTitlePolishReport {
-                outcome: Phase40fTitlePolishOutcome::Empty,
+            LibraryTitlePolishReport {
+                outcome: LibraryTitlePolishOutcome::Empty,
                 len: 0,
             },
         );
@@ -58,8 +58,8 @@ pub fn polish_library_title<'a>(
     if start >= end {
         return (
             &output[..0],
-            Phase40fTitlePolishReport {
-                outcome: Phase40fTitlePolishOutcome::Empty,
+            LibraryTitlePolishReport {
+                outcome: LibraryTitlePolishOutcome::Empty,
                 len: 0,
             },
         );
@@ -95,21 +95,21 @@ pub fn polish_library_title<'a>(
     }
 
     let mut outcome = if index < end {
-        Phase40fTitlePolishOutcome::Trimmed
+        LibraryTitlePolishOutcome::Trimmed
     } else {
-        Phase40fTitlePolishOutcome::Copied
+        LibraryTitlePolishOutcome::Copied
     };
 
     if index < end && written >= 3 {
         output[written - 3] = b'.';
         output[written - 2] = b'.';
         output[written - 1] = b'.';
-        outcome = Phase40fTitlePolishOutcome::Ellipsized;
+        outcome = LibraryTitlePolishOutcome::Ellipsized;
     }
 
     (
         &output[..written],
-        Phase40fTitlePolishReport {
+        LibraryTitlePolishReport {
             outcome,
             len: written,
         },

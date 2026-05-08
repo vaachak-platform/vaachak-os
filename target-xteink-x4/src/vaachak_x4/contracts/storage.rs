@@ -2,16 +2,16 @@
 
 /// Vaachak-owned storage boundary metadata for the Xteink X4 target.
 ///
-/// Phase 21 intentionally extracts only ownership metadata and typed helpers.
+/// The current implementation intentionally extracts only ownership metadata and typed helpers.
 /// Physical SD/SPI initialization, volume mounting, file IO, EPUB cache IO,
 /// bookmark persistence, progress persistence, and theme persistence still live
 /// in the imported `vendor/pulp-os` runtime.
 pub struct VaachakStorageBoundary;
 
-/// High-level storage artifact groups that VaachakOS must preserve when it later
+/// High-level storage resource groups that VaachakOS must preserve when it later
 /// takes over storage orchestration from the imported Pulp runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VaachakStorageArtifactKind {
+pub enum VaachakStorageResourceKind {
     StateDirectory,
     ProgressRecord,
     BookmarkRecord,
@@ -24,8 +24,8 @@ pub enum VaachakStorageArtifactKind {
 
 /// Static descriptor for a known storage path or naming convention.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct VaachakStorageArtifact {
-    pub kind: VaachakStorageArtifactKind,
+pub struct VaachakStorageResource {
+    pub kind: VaachakStorageResourceKind,
     pub directory: &'static str,
     pub pattern: &'static str,
     pub owner: &'static str,
@@ -37,7 +37,7 @@ impl VaachakStorageBoundary {
     /// Current source of truth for behavior.
     pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
 
-    /// Phase 21 only extracts metadata/helpers. Runtime behavior is still imported.
+    /// The current implementation only extracts metadata/helpers. Runtime behavior is still imported.
     pub const BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
     pub const PHYSICAL_SD_INIT_MOVED_TO_BOUNDARY: bool = false;
     pub const FILE_IO_MOVED_TO_BOUNDARY: bool = false;
@@ -58,51 +58,51 @@ impl VaachakStorageBoundary {
     pub const THEME_EXT: &'static str = "THM";
     pub const METADATA_EXT: &'static str = "MTA";
 
-    /// EPUB cache remains owned by the imported Pulp/smol-epub path in Phase 21.
+    /// EPUB cache remains owned by the imported Pulp/smol-epub path in The current implementation
     pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os + vendor/smol-epub";
     pub const EPUB_CACHE_MOVED_TO_BOUNDARY: bool = false;
 
-    pub const ARTIFACTS: &'static [VaachakStorageArtifact] = &[
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::StateDirectory,
+    pub const RESOURCES: &'static [VaachakStorageResource] = &[
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::StateDirectory,
             directory: "state",
             pattern: "state/",
             owner: "Vaachak boundary metadata; imported Pulp runtime behavior",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::ProgressRecord,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::ProgressRecord,
             directory: "state",
             pattern: "state/<BOOKID>.PRG",
             owner: "imported Pulp reader progress behavior",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::BookmarkRecord,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::BookmarkRecord,
             directory: "state",
             pattern: "state/<BOOKID>.BKM",
             owner: "imported Pulp reader bookmark behavior",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::BookmarkIndex,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::BookmarkIndex,
             directory: "state",
             pattern: "state/BMIDX.TXT",
             owner: "imported Pulp reader bookmark index behavior",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::ThemeRecord,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::ThemeRecord,
             directory: "state",
             pattern: "state/<BOOKID>.THM",
             owner: "imported Pulp reader theme behavior",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::MetadataRecord,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::MetadataRecord,
             directory: "state",
             pattern: "state/<BOOKID>.MTA",
             owner: "Vaachak typed metadata convention",
         },
-        VaachakStorageArtifact {
-            kind: VaachakStorageArtifactKind::EpubCache,
+        VaachakStorageResource {
+            kind: VaachakStorageResourceKind::EpubCache,
             directory: "imported-runtime-managed",
-            pattern: "smol-epub chapter/cache artifacts",
+            pattern: "smol-epub chapter/cache resources",
             owner: "vendor/pulp-os + vendor/smol-epub",
         },
     ];
@@ -127,8 +127,8 @@ impl VaachakStorageBoundary {
         Self::BOOKMARK_INDEX_FILE
     }
 
-    pub const fn artifacts() -> &'static [VaachakStorageArtifact] {
-        Self::ARTIFACTS
+    pub const fn resources() -> &'static [VaachakStorageResource] {
+        Self::RESOURCES
     }
 
     pub fn is_state_extension(ext: &[u8]) -> bool {

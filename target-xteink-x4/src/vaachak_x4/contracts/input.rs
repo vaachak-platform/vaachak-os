@@ -2,10 +2,10 @@
 
 /// Vaachak-owned input boundary metadata for the Xteink X4 target.
 ///
-/// Phase 22 intentionally does not move physical ADC reads, debounce/repeat
+/// The current implementation intentionally does not move physical ADC reads, debounce/repeat
 /// handling, or button ladder calibration. The working implementation remains
 /// in the imported Pulp/X4 runtime while Vaachak records the contract it will
-/// own in later extraction phases.
+/// own in later extraction steps.
 pub struct VaachakInputBoundary;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,14 +44,14 @@ impl VaachakInputBoundary {
     pub const ROW2_ADC_GPIO: u8 = 2;
     pub const POWER_BUTTON_GPIO: u8 = 3;
 
-    /// Phase 22 records the boundary only. It does not move runtime behavior.
+    /// The current implementation records the boundary only. It does not move runtime behavior.
     pub const PHYSICAL_ADC_READS_MOVED_TO_BOUNDARY: bool = false;
     pub const BUTTON_LADDER_CALIBRATION_MOVED_TO_BOUNDARY: bool = false;
     pub const DEBOUNCE_REPEAT_HANDLING_MOVED_TO_BOUNDARY: bool = false;
     pub const BUTTON_EVENT_ROUTING_MOVED_TO_BOUNDARY: bool = false;
 
     /// Reader footer/action labels expected by Vaachak. The imported runtime
-    /// continues to render and route actions in Phase 22.
+    /// continues to render and route actions in The current implementation
     pub const READER_FOOTER_ACTION_LABELS: [&'static str; 4] = ["Back", "Select", "Open", "Stay"];
 
     /// Role order used for documentation/checking. This is not the physical

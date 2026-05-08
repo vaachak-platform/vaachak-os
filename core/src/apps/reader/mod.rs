@@ -1,6 +1,6 @@
 //! Reader app-level contracts.
 //!
-//! Phase 14 moves stable reader/library vocabulary into `crate::models` while
+//! This module moves stable reader/library vocabulary into `crate::models` while
 //! leaving the current X4 target smoke runtime untouched. Target code can now
 //! progressively replace local structs with these core models without pulling
 //! hardware dependencies into `core`.

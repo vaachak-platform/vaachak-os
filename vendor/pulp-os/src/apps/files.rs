@@ -1,7 +1,7 @@
 // paginated file browser for SD card root directory
 // background title scanner resolves EPUB titles from OPF metadata
 
-// Phase 40F: Library title layout polish is intentionally limited to
+// Library title layout polish is intentionally limited to
 // display/layout treatment. Title source/cache behavior remains unchanged.
 use alloc::vec::Vec;
 use core::fmt::Write as _;

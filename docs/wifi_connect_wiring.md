@@ -1,6 +1,6 @@
 # Wi-Fi Connect wiring
 
-This overlay turns `Network > Wi-Fi Connect` from a placeholder into a local configuration/status screen.
+The current implementation turns `Network > Wi-Fi Connect` from a placeholder into a local configuration/status screen.
 
 Current behavior:
 

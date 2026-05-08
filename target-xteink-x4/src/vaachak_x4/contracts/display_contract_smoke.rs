@@ -5,7 +5,7 @@
 /// This module validates the display contract metadata only. It intentionally
 /// does not initialize SSD1677, perform SPI transactions, allocate a framebuffer,
 /// render strips, or trigger e-paper refresh. Physical display behavior remains
-/// owned by the imported Pulp runtime in Phase 27.
+/// owned by the imported Pulp runtime in The current implementation
 pub struct VaachakDisplayContractSmoke;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,7 +50,7 @@ pub enum DisplayContractCheck {
 impl VaachakDisplayContractSmoke {
     pub const DISPLAY_CONTRACT_SMOKE_MARKER: &'static str = "x4-display-contract-smoke-ok";
 
-    /// Physical behavior remains imported in Phase 27.
+    /// Physical behavior remains imported in The current implementation
     pub const PHYSICAL_DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
     pub const SSD1677_INIT_MOVED_TO_BOUNDARY: bool = false;
     pub const SPI_TRANSACTIONS_MOVED_TO_BOUNDARY: bool = false;

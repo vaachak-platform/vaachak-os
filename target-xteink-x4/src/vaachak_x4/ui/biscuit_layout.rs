@@ -1,7 +1,7 @@
 //! Biscuit-inspired layout primitives for the X4 target.
 //!
-//! Phase 41B exposes layout descriptions only. Existing screen implementations
-//! are not rewired in this phase.
+//! The current implementation exposes layout descriptions only. Existing screen implementations
+//! are not rewired in this implementation.
 
 #![allow(dead_code)]
 

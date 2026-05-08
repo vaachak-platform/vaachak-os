@@ -161,6 +161,7 @@ pub async fn run_time_sync_mode(
                 "Wi-Fi credentials missing",
                 "Set wifi_ssid and wifi_pass in",
                 "_x4/SETTINGS.TXT",
+                "Password is never shown",
             ],
             Some("Press BACK to exit"),
             bumps,
@@ -237,7 +238,7 @@ pub async fn run_time_sync_mode(
         }
         Err(NetworkTimeError::Cancelled) => {}
         Err(err) => {
-            let cache = time_status::TimeCache::default().with_error(err.as_str(), now_uptime);
+            let cache = load_time_cache_from_sd(sd).with_error(err.as_str(), now_uptime);
             let mut buf = [0u8; TIME_STATUS_BUF_LEN];
             let n = time_status::write_time_txt(&cache, &mut buf);
             let _ = storage::write_in_x4(sd, time_status::TIME_FILE, &buf[..n]);
@@ -265,6 +266,14 @@ pub async fn run_time_sync_mode(
             .await;
             drain_until_back().await;
         }
+    }
+}
+
+fn load_time_cache_from_sd(sd: &SdStorage) -> time_status::TimeCache {
+    let mut buf = [0u8; TIME_STATUS_BUF_LEN];
+    match storage::read_chunk_in_x4(sd, time_status::TIME_FILE, 0, &mut buf) {
+        Ok(n) if n > 0 => time_status::parse_time_txt(&buf[..n]),
+        _ => time_status::TimeCache::default(),
     }
 }
 

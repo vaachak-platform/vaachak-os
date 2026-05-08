@@ -1,6 +1,6 @@
 # App Category Dashboard Home Wiring
 
-This overlay makes the category dashboard the main Vaachak OS Home screen.
+The current implementation makes the category dashboard the main Vaachak OS Home screen.
 
 ## Home
 

@@ -1,15 +1,15 @@
-//! Phase 35G — State Registry Adapter Overlay.
+//! State Registry Adapter.
 //!
 //! This module is deliberately pure and hardware-free. It provides a single
 //! Vaachak-owned registry/facade for the typed per-book state files introduced
-//! in Phase 35C through Phase 35F.
+//! in the state I/O adapter set
 //!
 //! Owned here:
 //! - typed state kind registry
 //! - path/spec discovery for `state/<BOOKID>.PRG`, `state/<BOOKID>.THM`, `state/<BOOKID>.MTA`, and `state/<BOOKID>.BKM`
 //! - bookmark index path discovery for `state/BMIDX.TXT`
 //! - optional inventory adapter trait over caller-provided byte/file metadata I/O
-//! - phase marker
+//! - validation marker
 //!
 //! Not owned here:
 //! - physical media access
@@ -33,7 +33,7 @@ use super::theme_state_io_adapter::{
     THEME_RECORD_LEN, THEME_STATE_EXTENSION, THEME_STATE_PATH_MAX_LEN,
 };
 
-/// Phase marker emitted by validation / boot marker plumbing.
+/// Validation marker emitted by validation / boot marker plumbing.
 pub const STATE_REGISTRY_ADAPTER_MARKER: &str = "x4-state-registry-adapter-ok";
 
 pub const STATE_REGISTRY_DIR: &str = "state";

@@ -8,8 +8,9 @@ pub mod imported;
 pub mod input;
 pub mod io;
 pub mod physical;
+pub mod runtime_adapter_contracts;
 
-// Phase 35C — Vaachak-owned progress state boundary.
+// Vaachak-owned progress state boundary.
 pub mod state;
 
 pub mod ui;

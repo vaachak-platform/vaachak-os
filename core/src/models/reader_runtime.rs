@@ -1,6 +1,6 @@
 //! Reader runtime state models shared by target adapters and future core apps.
 //!
-//! Phase 14 keeps X4 hardware code in `target-xteink-x4`; this module gives the
+//! Keeps X4 hardware code in `target-xteink-x4`; this module gives the
 //! reader/library flow a stable, target-neutral vocabulary before EPUB parity.
 
 use super::{BookId, LibraryEntry, ReaderFileKind};

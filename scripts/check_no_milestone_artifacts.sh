@@ -6,21 +6,51 @@ cd "$root"
 
 low_a="pha"
 low_b="se"
-up_a="PHA"
-up_b="SE"
+cap_a="Pha"
+cap_b="se"
 needle_low="${low_a}${low_b}"
-needle_up="${up_a}${up_b}"
+needle_cap="${cap_a}${cap_b}"
+old_suffix="_over"
+old_suffix="${old_suffix}lay"
+fail=0
 
-if rg -n \
-  "${needle_low}[0-9]|${needle_up}[0-9]|${needle_up}_[0-9]|_IN_${needle_up}|MOVED_IN_${needle_up}|OWNED_IN_${needle_up}|README-APPLY-${needle_up}|${needle_low}.*overlay" \
+report_match() {
+  echo "$1" >&2
+  fail=1
+}
+
+while IFS= read -r path; do
+  report_match "forbidden generated path: $path"
+done < <(
+  find . \
+    \( -path './.git' -o -path './target' -o -path './vendor' \) -prune -o \
+    \( \
+      -name '.vaachak_backups' -o \
+      -name '.vaachak_pre_github_backups' -o \
+      -name '__MACOSX' -o \
+      -name '.DS_Store' -o \
+      -name '*.bak' -o \
+      -name '*.bak-*' -o \
+      -name "*${old_suffix}" -o \
+      -name "${needle_low}*.zip" -o \
+      -name "${needle_low}*${old_suffix}" -o \
+      -name "${needle_cap}*${old_suffix}" \
+    \) -print
+)
+
+if rg -n -i \
+  "${needle_low}[[:space:]_-]*[0-9]|_in_${needle_low}|moved_in_${needle_low}|owned_in_${needle_low}|readme-apply-${needle_low}|${needle_low}.*${old_suffix}" \
+  --hidden \
   --glob '!target/**' \
-  --glob '!vendor/pulp-os/kernel/src/drivers/ssd1677.rs' \
-  --glob '!vendor/pulp-os/kernel/src/kernel/scheduler.rs' \
-  --glob '!vendor/pulp-os/kernel/src/kernel/mod.rs' \
+  --glob '!.git/**' \
+  --glob '!vendor/**' \
   --glob '!scripts/check_no_milestone_artifacts.sh'
 then
-  echo "error: forbidden delivery artifacts found" >&2
+  report_match "forbidden generated delivery labels found"
+fi
+
+if [ "$fail" != "0" ]; then
   exit 1
 fi
 
-echo "ok: no forbidden delivery artifacts found"
+echo "ok: repository cleanup guard passed"
