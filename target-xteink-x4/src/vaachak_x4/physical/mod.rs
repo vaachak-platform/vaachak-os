@@ -7,7 +7,9 @@ pub mod spi_bus_runtime;
 pub mod spi_bus_runtime_contract;
 pub mod spi_bus_runtime_owner;
 pub mod storage_probe_mount_contract;
+pub mod storage_probe_mount_executor_pulp_backend;
 pub mod storage_probe_mount_pulp_backend;
+pub mod storage_probe_mount_runtime_executor_bridge;
 pub mod storage_probe_mount_runtime_owner;
 
 pub mod display_pulp_backend;
