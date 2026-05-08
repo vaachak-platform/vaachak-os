@@ -19,6 +19,7 @@ pub mod hardware_executor_pulp_backend;
 pub mod hardware_runtime_backend;
 pub mod hardware_runtime_backend_pulp;
 pub mod hardware_runtime_backend_takeover;
+pub mod hardware_runtime_backend_takeover_cleanup;
 pub mod hardware_runtime_executor;
 pub mod hardware_runtime_executor_acceptance;
 pub mod hardware_runtime_executor_boot_markers;

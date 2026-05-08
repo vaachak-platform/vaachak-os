@@ -2,6 +2,8 @@
 
 Status: `hardware_runtime_backend_takeover_bridge=ok`
 
+Cleanup checkpoint: [`hardware-runtime-backend-takeover-cleanup.md`](hardware-runtime-backend-takeover-cleanup.md)
+
 This checkpoint turns the accepted live hardware executor handoff into a real Vaachak-owned backend interface layer.
 
 ## Ownership
@@ -72,3 +74,7 @@ This checkpoint does not rewrite or move:
 `hardware_runtime_executor_live_handoff.rs` now references `VaachakHardwareRuntimeBackendTakeover` and calls the backend takeover layer from its live handoff adoption functions.
 
 That means the live handoff path now goes through Vaachak-owned backend traits while preserving the PulpCompatibility low-level executor.
+
+## Cleanup checkpoint
+
+`hardware_runtime_backend_takeover_cleanup=ok` is the final acceptance checkpoint for this backend takeover bridge. It verifies that the Vaachak-owned backend traits, PulpCompatibility implementation, live handoff integration, runtime-use cleanup, and behavior-preservation guards remain aligned.

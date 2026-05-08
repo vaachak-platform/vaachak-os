@@ -21,6 +21,7 @@ pub mod storage_readonly_boundary_smoke;
 pub mod storage_readonly_pulp_bridge_smoke;
 pub mod storage_state_contract;
 
+pub mod hardware_runtime_backend_takeover_cleanup_smoke;
 pub mod hardware_runtime_backend_takeover_smoke;
 pub mod hardware_runtime_executor_acceptance_smoke;
 pub mod hardware_runtime_executor_boot_markers_smoke;
