@@ -95,3 +95,19 @@ Expected:
 ```text
 hardware_runtime_executor_runtime_use=ok
 ```
+
+## Cleanup checkpoint
+
+The accepted runtime-use layer is finalized by:
+
+```text
+hardware_runtime_executor_runtime_use_cleanup=ok
+```
+
+Canonical cleanup document:
+
+```text
+docs/architecture/hardware-runtime-executor-runtime-use-cleanup.md
+```
+
+The cleanup checkpoint folds the validator repair into the main runtime-use validator and removes temporary runtime-use overlay artifacts without changing hardware behavior.
