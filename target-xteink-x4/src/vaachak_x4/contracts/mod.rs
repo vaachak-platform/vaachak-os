@@ -8,6 +8,7 @@ pub mod input;
 pub mod input_contract_smoke;
 pub mod input_runtime_ownership_smoke;
 pub mod input_semantics;
+pub mod spi_bus_arbitration_runtime_ownership_smoke;
 pub mod spi_bus_runtime_contract_smoke;
 pub mod spi_bus_runtime_ownership_smoke;
 pub mod storage;
