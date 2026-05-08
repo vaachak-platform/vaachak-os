@@ -3,6 +3,7 @@ pub mod boundary_contract_smoke;
 pub mod display;
 pub mod display_contract_smoke;
 pub mod display_geometry;
+pub mod display_runtime_ownership_smoke;
 pub mod input;
 pub mod input_contract_smoke;
 pub mod input_semantics;
