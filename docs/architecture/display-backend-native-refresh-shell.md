@@ -2,6 +2,8 @@
 
 `display_backend_native_refresh_shell` is the first native display backend migration slice after the hardware backend takeover bridge.
 
+Cleanup checkpoint: [`display-backend-native-refresh-shell-cleanup.md`](display-backend-native-refresh-shell-cleanup.md)
+
 ## Goal
 
 Move the display refresh command shell into the Vaachak `target-xteink-x4` layer while keeping the active SSD1677/e-paper execution path Pulp-compatible.
@@ -56,17 +58,21 @@ This slice intentionally does not rewrite or move:
 
 ## Backend takeover integration
 
-The existing hardware backend takeover path now calls the native display refresh shell before routing to the Pulp-compatible display backend:
+The existing hardware backend takeover path calls the native display refresh shell before routing to the Pulp-compatible display backend:
 
 - `execute_display_full_refresh_handoff()` calls `VaachakDisplayBackendNativeRefreshShell::execute_full_refresh_handoff()`
 - `execute_display_partial_refresh_handoff()` calls `VaachakDisplayBackendNativeRefreshShell::execute_partial_refresh_handoff()`
 
 If the shell report is not safe, the route falls back to the existing `PulpCompatibility` backend call. The current expected path is behavior-preserving and should not change hardware output.
 
+## Cleanup checkpoint
+
+`display_backend_native_refresh_shell_cleanup=ok` is the final acceptance checkpoint for the display refresh shell. It verifies that refresh command normalization and intent mapping remain Vaachak-owned while SSD1677 algorithms, physical SPI transfer, chip-select behavior, storage, input, reader/file-browser UX, and app navigation behavior remain unchanged.
+
 ## Validation marker
 
 ```text
- display_backend_native_refresh_shell=ok
+display_backend_native_refresh_shell=ok
 ```
 
 ## Hardware smoke expectation
