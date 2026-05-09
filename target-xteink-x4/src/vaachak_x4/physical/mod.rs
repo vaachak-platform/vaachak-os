@@ -63,3 +63,4 @@ pub mod storage_backend_native_sd_mmc_fat_executor_cleanup;
 pub mod storage_executor_bridge;
 pub mod storage_fat_algorithm_native_driver;
 pub mod storage_physical_sd_mmc_native_driver;
+pub mod vendor_pulp_os_scope_reduction;
