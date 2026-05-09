@@ -23,6 +23,7 @@ pub mod display_runtime_owner;
 pub mod hardware_executor_pulp_backend;
 pub mod hardware_native_behavior_consolidation;
 pub mod hardware_native_behavior_consolidation_cleanup;
+pub mod hardware_physical_full_migration_consolidation;
 pub mod hardware_runtime_backend;
 pub mod hardware_runtime_backend_pulp;
 pub mod hardware_runtime_backend_takeover;

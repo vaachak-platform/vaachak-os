@@ -28,6 +28,7 @@ pub mod storage_state_contract;
 pub mod display_physical_ssd1677_native_driver_smoke;
 pub mod hardware_native_behavior_consolidation_cleanup_smoke;
 pub mod hardware_native_behavior_consolidation_smoke;
+pub mod hardware_physical_full_migration_consolidation_smoke;
 pub mod hardware_runtime_backend_takeover_cleanup_smoke;
 pub mod hardware_runtime_backend_takeover_smoke;
 pub mod hardware_runtime_executor_acceptance_smoke;
