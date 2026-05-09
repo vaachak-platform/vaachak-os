@@ -51,4 +51,5 @@ pub mod sd_fat_runtime_readonly_ownership_smoke;
 pub mod spi_physical_native_driver_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_cleanup_smoke;
 pub mod storage_backend_native_sd_mmc_fat_executor_smoke;
+pub mod storage_fat_algorithm_native_driver_smoke;
 pub mod storage_physical_sd_mmc_native_driver_smoke;
