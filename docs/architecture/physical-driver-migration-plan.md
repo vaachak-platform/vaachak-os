@@ -90,3 +90,7 @@ This plan does not move:
 - chip-select GPIO toggling
 - reader/file-browser UX
 - app navigation screens
+
+## SPI full migration checkpoint
+
+- `spi_physical_native_driver_full_migration`: SPI physical-driver ownership moved fully to Vaachak.

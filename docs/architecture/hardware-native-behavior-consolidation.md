@@ -55,3 +55,11 @@ The cleanup checkpoint adds:
 - `cleanup_hardware_native_behavior_consolidation_artifacts.sh`
 
 The cleanup checkpoint does not add any lower-level driver migration. Next lower-level migrations should be treated as separate physical-driver work and should not be mixed with this behavior consolidation checkpoint.
+
+## Next lower-level driver migration checkpoint
+
+The accepted native behavior consolidation now points to
+`docs/architecture/physical-driver-migration-plan.md` for the lower-level
+physical driver migration order. The first recommended native physical driver
+slice is `input_physical_sampling_native_driver`; destructive FAT migration
+remains last.

@@ -93,3 +93,12 @@ display_backend_native_refresh_shell_cleanup=ok
 ## Next recommended slice
 
 After hardware smoke confirms this checkpoint, the next native migration can be a deeper display refresh command bridge or the first storage-native lifecycle slice. Storage remains higher-risk because it can affect SD mount and FAT behavior.
+
+## Display native refresh command executor
+
+`display_backend_native_refresh_command_executor` moves refresh command selection behavior into the Vaachak `target-xteink-x4` layer. The selected low-level executor remains `PulpCompatibility`; SSD1677 draw, waveform, BUSY wait, physical SPI transfer, and chip-select behavior remain in the imported Pulp-compatible runtime.
+
+## Display native refresh command executor cleanup checkpoint
+
+The accepted `display_backend_native_refresh_command_executor_cleanup` checkpoint verifies that `VaachakDisplayRefreshCommandExecutorWithPulpExecutor` remains selected, `PulpCompatibility` remains the low-level SSD1677 executor fallback, the rustfmt repair has been folded into the main checkpoint, and no SSD1677 draw/full/partial refresh algorithm, waveform, BUSY wait, physical SPI transfer, chip-select, storage, input, reader/file-browser UX, or app-navigation behavior moved.
+

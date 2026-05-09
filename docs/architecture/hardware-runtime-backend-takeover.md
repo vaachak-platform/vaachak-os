@@ -78,3 +78,36 @@ That means the live handoff path now goes through Vaachak-owned backend traits w
 ## Cleanup checkpoint
 
 `hardware_runtime_backend_takeover_cleanup=ok` is the final acceptance checkpoint for this backend takeover bridge. It verifies that the Vaachak-owned backend traits, PulpCompatibility implementation, live handoff integration, runtime-use cleanup, and behavior-preservation guards remain aligned.
+
+## Input native backend handoff
+
+The input handoff now calls `VaachakInputBackendNativeExecutor` before continuing through the accepted hardware backend takeover bridge. The selected input-native backend is `VaachakInputNativeWithPulpSampling`; the low-level physical sampling fallback remains `PulpCompatibility`.
+
+No ADC ladder sampling, debounce/repeat execution, navigation dispatch, display behavior, storage behavior, SPI transfer behavior, reader/file-browser UX, or app navigation behavior is rewritten by this handoff.
+
+## Display native refresh shell
+
+`display_backend_native_refresh_shell` adds the first Vaachak-native display backend slice. The backend takeover path now calls `VaachakDisplayBackendNativeRefreshShell` for full and partial refresh handoff pre-routing, while the active low-level executor remains `PulpCompatibility`.
+
+## Display native refresh shell cleanup checkpoint
+
+The accepted `display_backend_native_refresh_shell_cleanup` checkpoint verifies that `VaachakDisplayNativeRefreshShellWithPulpExecutor` remains selected, `PulpCompatibility` remains the refresh executor fallback, and no SSD1677 draw/full/partial refresh algorithm, physical SPI transfer, chip-select, storage, input, reader/file-browser UX, or app-navigation behavior moved.
+
+## Input native event pipeline
+
+`input_backend_native_event_pipeline` moves Vaachak-owned button event behavior into `target-xteink-x4` while physical ADC/GPIO sampling remains `PulpCompatibility`. The backend takeover path calls `VaachakInputBackendNativeEventPipeline` for scan and navigation handoff pre-routing before continuing through the existing Pulp-compatible backend.
+## Input native event pipeline cleanup checkpoint
+
+`input_backend_native_event_pipeline_cleanup` finalizes the first actual input behavior migration. The backend takeover path calls `VaachakInputBackendNativeEventPipeline` for input scan and navigation handoff pre-routing while physical ADC/GPIO sampling remains `PulpCompatibility`.
+
+## Display native refresh command executor
+
+`display_backend_native_refresh_command_executor` moves refresh command selection behavior into the Vaachak `target-xteink-x4` layer. The selected low-level executor remains `PulpCompatibility`; SSD1677 draw, waveform, BUSY wait, physical SPI transfer, and chip-select behavior remain in the imported Pulp-compatible runtime.
+
+## Display native refresh command executor cleanup checkpoint
+
+The accepted `display_backend_native_refresh_command_executor_cleanup` checkpoint verifies that `VaachakDisplayRefreshCommandExecutorWithPulpExecutor` remains selected, `PulpCompatibility` remains the low-level SSD1677 executor fallback, the rustfmt repair has been folded into the main checkpoint, and no SSD1677 draw/full/partial refresh algorithm, waveform, BUSY wait, physical SPI transfer, chip-select, storage, input, reader/file-browser UX, or app-navigation behavior moved.
+## Storage native SD/MMC/FAT executor
+
+`storage_backend_native_sd_mmc_fat_executor=ok` moves storage command decision behavior, probe/mount state interpretation, FAT operation classification, path-role policy, and destructive-operation denial into Vaachak while keeping the low-level SD/MMC block driver and FAT algorithms behind `PulpCompatibility`.
+

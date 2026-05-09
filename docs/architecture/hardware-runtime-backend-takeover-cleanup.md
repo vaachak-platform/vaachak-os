@@ -73,3 +73,12 @@ input_backend_native_executor
 ```
 
 That lets Vaachak begin replacing backend behavior without touching display refresh or storage/FAT behavior first.
+
+## Input native executor cleanup checkpoint
+
+The accepted `input_backend_native_executor_cleanup` checkpoint verifies that `VaachakInputNativeWithPulpSampling` remains the selected native input backend, `PulpCompatibility` remains the physical sampling fallback, and no display/storage/SPI/reader/file-browser/app-navigation behavior is changed by the input-native slice.
+
+## Display native refresh shell cleanup checkpoint
+
+The accepted `display_backend_native_refresh_shell_cleanup` checkpoint verifies that `VaachakDisplayNativeRefreshShellWithPulpExecutor` remains selected, `PulpCompatibility` remains the refresh executor fallback, and no SSD1677 draw/full/partial refresh algorithm, physical SPI transfer, chip-select, storage, input, reader/file-browser UX, or app-navigation behavior moved.
+

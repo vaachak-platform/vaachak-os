@@ -107,3 +107,8 @@ storage_backend_native_probe_mount_shell
 ```
 
 Do not move SD/FAT algorithms until input and display smoke remain stable on hardware.
+
+## Display native refresh command executor cleanup checkpoint
+
+The accepted `display_backend_native_refresh_command_executor_cleanup` checkpoint verifies that `VaachakDisplayRefreshCommandExecutorWithPulpExecutor` remains selected, `PulpCompatibility` remains the low-level SSD1677 executor fallback, the rustfmt repair has been folded into the main checkpoint, and no SSD1677 draw/full/partial refresh algorithm, waveform, BUSY wait, physical SPI transfer, chip-select, storage, input, reader/file-browser UX, or app-navigation behavior moved.
+
