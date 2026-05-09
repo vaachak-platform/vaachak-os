@@ -1,82 +1,53 @@
-# Controlled extraction ownership
+# Controlled Extraction Ownership
 
-This document consolidates the current Vaachak-owned pure model extractions and the active runtime boundary.
+This document records the current controlled extraction state after the documentation reset.
 
-## Active runtime
+## Current posture
 
-`vendor/pulp-os` remains the active X4 runtime. It still owns the running firmware behavior for:
+The active X4 runtime is still the imported Pulp-derived runtime. Vaachak-owned code has accumulated useful contracts, models, adapters, layout helpers, and preflight probes, but the uploaded code does not yet remove the imported runtime from the active device path.
 
-- SD card probing, mounting, and file I/O
-- SPI bus behavior
-- SSD1677 display driver behavior
-- strip rendering
-- EPD refresh behavior
-- partial/full refresh policy
-- button scan/debounce behavior
-- Wi-Fi connection logic
-- HTTP upload handling
-- mDNS behavior
-- reader app runtime state machine
-- file browser runtime behavior
-- settings app runtime behavior
+## Vaachak-owned extracted areas
 
-The root `vaachak-core` crate now owns pure domain models and compatibility contracts only. These models are intentionally behavior-neutral and hardware-free.
+Current extracted areas that remain useful:
 
-## Vaachak-owned pure models
+- reader state and progress/bookmark models
+- book identity and title-cache helpers
+- prepared-cache metadata models
+- input semantic mapping
+- storage path helpers
+- Wi-Fi Transfer configuration models
+- display geometry and drawing metadata
+- Biscuit-style UI layout helpers
+- font/glyph/text helpers
+- sleep-image and daily mantra helpers
+- Date & Time status helpers
+- runtime adapter and boundary contracts
+- SPI bus runtime metadata
 
-Current owned model slices:
+## Imported runtime areas still active
 
-- `core/src/models/state.rs`
-  - reader preferences
-  - sleep image mode state
-  - Date & Time state
-  - safe Wi-Fi Transfer state shape
+The imported runtime still executes:
 
-- `core/src/models/reader_state_io.rs`
-  - reader progress records
-  - bookmark records
-  - bookmark index records
-  - compatibility with `state/<BOOKID>.PRG`, `state/<BOOKID>.BKM`, and `state/BMIDX.TXT`
-
-- `core/src/models/book_identity_title_cache.rs`
-  - stable book identity
-  - title-cache record shape
-  - title fallback rules
-  - compatibility with `_x4/TITLES.BIN`
-
-- `core/src/models/prepared_cache_metadata.rs`
-  - FCACHE path and metadata models
-  - prepared page/chapter metadata
-  - missing-cache versus malformed-cache classification
-
-- `core/src/models/input_semantic_mapping.rs`
-  - semantic input actions
-  - app-context input policy
-  - reader navigation semantics
-
-- `core/src/models/storage_path_helpers.rs`
-  - SD layout constants
-  - safe path joining
-  - state, FCACHE, settings, title-cache, and sleep-image path helpers
-
-- `core/src/models/wifi_transfer_config.rs`
-  - Original Transfer / Chunked Resume configuration
-  - chunk/retry limits
-  - target folder validation
-  - no credential storage
-
-- `core/src/models/display_drawing_abstractions.rs`
-  - 800x480 display geometry
-  - header/body/footer/popup regions
-  - app-context layout metadata
-  - diagnostic placement rules
+- board initialization
+- display driver behavior
+- input sampling and input task
+- SD/FAT behavior
+- Reader app behavior
+- Home/Files/Settings behavior
+- Wi-Fi runtime behavior
+- worker tasks and kernel run loop
 
 ## Non-goals for this checkpoint
 
-This checkpoint does not move SD, SPI, display, input, Wi-Fi, or reader runtime behavior out of `vendor/pulp-os`.
+This docs checkpoint does not move runtime behavior. It updates documentation to match the uploaded code state and removes stale transition-era documents.
 
-It also does not change on-device behavior. It only consolidates validation and documents current ownership.
+## Future extraction principle
 
-## Migration principle
+Move behavior only when there is:
 
-Future hardware-adjacent work should move one behavior path at a time. Every move must preserve the existing Pulp-derived runtime as the comparison baseline and must keep the device flashable after each slice.
+1. a Vaachak-owned implementation,
+2. a validator proving the intended boundary,
+3. a device smoke test proving no product regression,
+4. clear rollback or fallback notes.
+
+The next product work should focus on Reader Home, Library, Resume, and the reader data model before lower-level hardware migrations are resumed.

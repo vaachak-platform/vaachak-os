@@ -1,28 +1,28 @@
 # Vaachak OS Scope
 
-## In scope now
+## Current accepted scope
 
-- Stable Xteink X4 reader experience using the Pulp-derived runtime.
-- Home dashboard, Reader, Settings, Wi-Fi Transfer, Date & Time, and sleep-image flows already present in the active runtime.
-- Prepared reader cache support for large and mixed-script books.
-- Host-side tools for prepared cache generation, title-cache generation, and sleep-image assets.
-- Vaachak-owned models and contracts that can be adopted without disturbing working hardware behavior.
+Vaachak OS is currently scoped as an Xteink X4 reader-first firmware with Vaachak-native hardware ownership accepted.
 
-## In scope next
+In scope now:
 
-- Repository cleanup and current-runtime documentation.
-- Reader stabilization across TXT, prepared TXT, and mixed EPUB smoke files.
-- Wi-Fi Transfer hardening for large `/FCACHE/<BOOKID>` uploads.
-- Date & Time reliability, including live/cached/unsynced state display.
-- Settings-to-reader preference consistency.
-- Careful extraction of target-neutral state, title, and prepared-cache logic.
+- X4 boot, display, input, storage, reader, settings, transfer, and sleep-state validation.
+- Vaachak-native hardware runtime surfaces for SPI, SSD1677 display, SD/MMC, FAT, and input sampling.
+- Reader Home / Continue Reading and local library polish.
+- Reader state model freeze for progress, bookmarks, highlights, per-book settings, and library entries.
+- XTC compatibility as an import/open path.
+- `.vchk` as the long-term Vaachak-native book package contract.
+- Sync alignment after local reader state is stable.
 
-## Explicitly deferred
+## Explicitly retained but not active hardware scope
 
-- Cloud sync.
-- Crypto or signed package handling.
-- Advanced EPUB fidelity beyond the current smoke path.
-- Generic desktop simulator.
-- Waveshare target support.
-- Full app sandboxing.
-- Rewriting display, SPI, SD, or button hardware behavior outside the proven runtime.
+`vendor/pulp-os` remains in the repository for scoped non-hardware compatibility, import, reference, and historical comparison surfaces. It is not the active X4 hardware owner.
+
+## Deferred scope
+
+- Palm/Tern compatibility as a product milestone.
+- Broad app ecosystem.
+- Script/plugin runtime.
+- OPDS, analytics, achievements, games, and cloud-only flows.
+- Waveshare/S3 profile implementation until the X4 reader path is stable.
+- Sync transport features that require reader-state redesign.

@@ -1,82 +1,75 @@
 # Vaachak OS
 
-Vaachak OS is the Xteink X4 firmware/runtime track for the Vaachak Platform. The current target is the ESP32-C3 based Xteink X4 with SSD1677 4.26-inch e-paper display, SD-card backed local storage, physical button input, and reader-oriented runtime behavior.
+Vaachak OS is an X4-first reader operating system for ESP32-family e-paper devices. The current Xteink X4 branch has accepted the Vaachak-native hardware runtime and now uses Vaachak-owned hardware driver surfaces for SPI, SSD1677 display, SD/MMC, FAT, and input sampling.
 
-This repository now treats `target-xteink-x4` as the Vaachak-owned hardware/runtime boundary. The historical `vendor/pulp-os` tree remains present only for non-hardware compatibility/import surfaces while the active hardware ownership has moved to Vaachak-native modules.
+## Current status
 
-## Current checkpoint
-
-The accepted checkpoint is:
+Accepted hardware gate:
 
 ```text
 vaachak_hardware_runtime_final_acceptance=ok
+hardware_physical_full_migration_consolidation=ok
+vendor_pulp_os_scope_reduction=ok
 ```
 
-The final hardware migration stack has been accepted for:
+The active X4 hardware ownership map is:
+
+| Hardware surface | Active Vaachak owner |
+| --- | --- |
+| SPI physical driver | `VaachakNativeSpiPhysicalDriver` |
+| SSD1677 display driver | `VaachakNativeSsd1677PhysicalDriver` |
+| SD/MMC physical driver | `VaachakNativeSdMmcPhysicalDriver` |
+| FAT/filesystem algorithm driver | `VaachakNativeFatAlgorithmDriver` |
+| Input physical sampling | Vaachak native input physical sampling driver and native input event pipeline |
+
+Pulp OS is not the active hardware runtime. `vendor/pulp-os` remains present only for scoped non-hardware compatibility, import, reference, or historical comparison surfaces until the remaining dependency audit says it can be reduced further.
+
+## Product direction
+
+The product remains reader-first:
+
+1. Boot reliably on Xteink X4.
+2. Show Home / Reader / Library / Settings / Transfer surfaces.
+3. Open local reading content from storage.
+4. Preserve progress, bookmarks, and per-book state.
+5. Keep Wi-Fi transfer/import practical and bounded.
+6. Prepare XTC compatibility and `.vchk` as the Vaachak-native package path.
+7. Align local state with Vaachak sync only after local reader behavior is stable.
+
+The architecture keeps the uploaded planning direction: X4-first, shared-core friendly, native Vaachak contracts before compatibility layers, and Waveshare/S3 as a later capability profile.
+
+## Repository layout
 
 ```text
-- SPI physical driver ownership
-- SSD1677 display physical driver ownership
-- SD/MMC physical driver ownership
-- FAT/filesystem algorithm ownership
-- input physical sampling ownership
-- native hardware behavior consolidation
-- Pulp hardware reference audit/quarantine/removal
-- vendor/pulp-os scope reduction
-```
-
-## Hardware ownership status
-
-| Area | Active owner | Active backend | Pulp hardware fallback |
-|---|---|---|---|
-| SPI bus / transaction lifecycle | Vaachak `target-xteink-x4` | `VaachakNativeSpiPhysicalDriver` | Disabled |
-| SSD1677 display lifecycle | Vaachak `target-xteink-x4` | `VaachakNativeSsd1677PhysicalDriver` | Disabled |
-| SD/MMC physical lifecycle | Vaachak `target-xteink-x4` | `VaachakNativeSdMmcPhysicalDriver` | Disabled |
-| FAT / filesystem algorithms | Vaachak `target-xteink-x4` | `VaachakNativeFatAlgorithmDriver` | Disabled |
-| Input physical sampling | Vaachak `target-xteink-x4` | `VaachakPhysicalSamplingWithPulpAdcGpioReadFallback` | Limited to physical ADC/GPIO read fallback only |
-
-`vendor/pulp-os` is intentionally not deleted yet. Its allowed role is now limited to non-hardware compatibility/import surfaces and documentation-only references captured in the deprecation and scope-reduction docs.
-
-## Primary docs
-
-Start here:
-
-```text
-docs/architecture/vaachak-os-hardware-runtime-architecture.md
-docs/architecture/vaachak-hardware-runtime-final-acceptance.md
-docs/architecture/hardware-physical-full-migration-consolidation.md
-docs/architecture/hardware-physical-full-migration-cleanup.md
-docs/architecture/vendor-pulp-os-scope-reduction.md
-docs/operations/final-hardware-validation.md
-docs/operations/github-upload-checklist.md
+core/                 Shared Vaachak data models and contracts
+hal-xteink-x4/        X4 HAL-facing seams and smoke helpers
+target-xteink-x4/     X4 target integration, native hardware runtime, contracts, state, and imported compatibility boundaries
+vendor/pulp-os/       Retained non-hardware compatibility/import/reference scope
+src/apps/             Current first-party app/runtime path used by the X4 firmware
+docs/                 Architecture, roadmap, validation, reader, state, and format planning
+scripts/              Build/validation and cleanup helpers
 ```
 
 ## Validation
 
-Run the final hardware/runtime acceptance checks before committing or pushing:
+Run the current final gate before committing or flashing:
 
 ```bash
 cargo fmt --all
 ./scripts/validate_vaachak_hardware_runtime_final_acceptance.sh
 ./scripts/validate_hardware_physical_full_migration_consolidation.sh
-./scripts/validate_hardware_physical_full_migration_cleanup.sh
-./scripts/validate_pulp_hardware_reference_deprecation_audit.sh
-./scripts/validate_pulp_hardware_dead_path_quarantine.sh
-./scripts/validate_pulp_hardware_dead_path_removal.sh
 ./scripts/validate_vendor_pulp_os_scope_reduction.sh
-./scripts/validate_docs_and_artifact_cleanup.sh
+./scripts/validate_vaachak_docs_final_native_hardware_state.sh
 cargo build
 ```
 
-## Hardware smoke
-
-After a successful build, flash the device using the project’s normal flow:
+Run the device smoke after flashing:
 
 ```bash
 cargo run --release
 ```
 
-Validate on the Xteink X4:
+Hardware smoke checklist:
 
 ```text
 - device boots normally
@@ -84,48 +77,26 @@ Validate on the Xteink X4:
 - full refresh works
 - partial/list refresh works
 - all buttons respond correctly
-- no missed/double button press regression
 - SD card initializes
-- storage availability state is correct
 - file browser opens
 - SD root listing works
-- nested directory listing works if available
-- long filename/title mapping still works
-- TXT files open
-- EPUB files open
-- progress/state/cache files still work
+- TXT/EPUB files open
+- progress/state/cache files work
 - Back navigation works
 - no FAT/path/cluster-chain errors
 ```
 
-## Cleanup before GitHub upload
+## Next roadmap focus
 
-Remove generated overlay zip files, extracted overlay folders, temporary patch scripts, validator-fix scripts, and accidental `__pycache__` folders:
+The next work should move away from hardware migration and toward the reader product path:
 
-```bash
-./scripts/cleanup_legacy_deliverable_artifacts.sh
-```
+1. Reader Home + Continue Reading foundation.
+2. Reader data model freeze.
+3. Library index polish.
+4. XTC compatibility path.
+5. `.vchk` spec freeze.
+6. `.vchk` read/open support.
+7. `.vchk` mutable reading-state support.
+8. Vaachak sync alignment.
 
-The cleanup script intentionally preserves repository source files, architecture docs, canonical validators, `vendor/pulp-os`, `target-xteink-x4`, and Cargo project files.
-
-After cleanup:
-
-```bash
-git status --short
-```
-
-## Suggested commit
-
-```bash
-git add README.md \
-        docs/architecture \
-        docs/operations \
-        scripts/cleanup_legacy_deliverable_artifacts.sh \
-        scripts/validate_docs_and_artifact_cleanup.sh
-
-git commit -m "Update Vaachak hardware migration docs and cleanup artifacts"
-```
-
-## Current migration posture
-
-Vaachak hardware ownership is complete at the architecture/runtime boundary level. The next safe work should focus on stabilization, removing remaining non-hardware vendor dependency only after a separate audit, and tightening runtime tests around hardware smoke paths.
+Do not expand platform features ahead of the reader path.

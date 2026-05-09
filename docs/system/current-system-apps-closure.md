@@ -1,41 +1,40 @@
 # Current System Apps Closure
 
-This gate closes the system apps that already exist in the X4 runtime instead of adding another architecture layer.
+This document records the expected behavior of system apps in the active X4 runtime.
 
 ## Wi-Fi Transfer
 
 Expected behavior:
 
-- `Original Transfer` remains the SD-card file manager for normal uploads, downloads, rename, delete, and folder creation.
-- `Chunked Resume` remains available for large prepared-cache uploads such as `/FCACHE/15D1296A`.
-- Browser and device UI never display the saved Wi-Fi password.
-- Upload failures keep a visible status and tell the user to retry or use chunked resume.
-- Chunked resume skips complete files and resumes partial folders after interruption.
+- normal transfer remains available for ordinary files.
+- large prepared-cache folder transfer remains possible through the current runtime flow.
+- browser/device UI must not expose saved Wi-Fi passwords.
+- failed transfers should leave visible retry guidance.
 
 ## Date & Time
 
 Expected behavior:
 
-- Back can cancel the network sync path during Wi-Fi start, connect, DHCP, DNS, send, and receive waits.
-- The Date & Time screen reports `Live`, `Cached`, or `Unsynced`.
-- A failed retry preserves previously cached time and records the failure reason.
-- Select can safely retry from the Date & Time screen.
+- Back can cancel or leave the network sync path without locking input.
+- Date & Time reports Live, Cached, or Unsynced.
+- failed retry preserves previously cached time.
+- Select/retry can be used without reboot.
 
 ## Settings
 
 Expected behavior:
 
-- Reader settings flow both ways: Settings to Reader and Reader quick actions back to Settings.
-- Prepared profile and fallback policy are propagated to the live Reader, not only saved to settings.
-- Sleep image mode persists through `SLPMODE.TXT`.
-- Settings shows the current battery reading using the same battery percentage helper used by the Home header.
+- Reader-facing settings apply to Reader.
+- sleep image mode persists.
+- battery/header display remains consistent.
+- settings persistence remains compatible with `/_X4/SETTINGS.TXT`.
 
-## Validation
+## Manual validation
 
-Run:
+After flashing:
 
-```bash
-./scripts/validate_system_apps_closure.sh
-```
-
-After flashing, complete the on-device checklist printed by the script.
+1. Open Wi-Fi Transfer and complete a normal upload where possible.
+2. Complete or resume a large prepared-cache upload where possible.
+3. Open Date & Time and exercise retry/back paths.
+4. Change Settings, reboot, and confirm persistence.
+5. Open Reader and verify settings still apply.

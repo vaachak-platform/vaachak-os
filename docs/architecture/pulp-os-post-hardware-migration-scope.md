@@ -1,35 +1,10 @@
-# Pulp OS Scope After Hardware Migration
+# Pulp OS Post-Hardware-Migration Scope
 
 ## Status
 
-`vendor/pulp-os` remains in the repository, but its scope has been reduced after the Vaachak-native hardware migration.
+`vendor/pulp-os` remains present, but Pulp OS is not the active hardware owner.
 
-## Allowed scope
-
-The allowed remaining scope for Pulp references is:
-
-```text
-- non-hardware compatibility/import surfaces
-- imported reader/runtime compatibility surfaces
-- documentation-only historical references
-- migration notes that explain previous ownership
-```
-
-## Disallowed scope
-
-Pulp must not be treated as the active owner for:
-
-```text
-- SPI physical runtime
-- SSD1677 display runtime
-- SD/MMC physical runtime
-- FAT/filesystem algorithm runtime
-- input physical sampling interpretation
-```
-
-## Accepted checkpoints
-
-The Pulp deprecation path is accepted through:
+Accepted gates:
 
 ```text
 pulp_hardware_reference_deprecation_audit=ok
@@ -38,25 +13,25 @@ pulp_hardware_dead_path_removal=ok
 vendor_pulp_os_scope_reduction=ok
 ```
 
-## Removal policy
+## Allowed retained scope
 
-Do not delete `vendor/pulp-os` wholesale until a separate non-hardware dependency audit proves that imported reader/runtime compatibility is no longer needed.
+Allowed remaining uses of `vendor/pulp-os`:
 
-Safe cleanup now includes:
+- non-hardware compatibility/import surfaces
+- historical reference while Vaachak reader features stabilize
+- comparison source for behavior parity where explicitly documented
+- temporary non-hardware scaffolding that is tracked for later removal
 
-```text
-- generated overlay folders
-- generated overlay zip files
-- temporary validator-fix scripts
-- temporary patch scripts
-- accidental __pycache__ folders
-```
+## Disallowed scope
 
-Unsafe cleanup now includes:
+Do not reintroduce Pulp ownership for:
 
-```text
-- deleting vendor/pulp-os wholesale
-- deleting imported runtime boundaries without a separate audit
-- deleting reader/file-browser paths
-- deleting state/cache compatibility code
-```
+- SPI physical runtime
+- SSD1677 display runtime
+- SD/MMC physical runtime
+- FAT/filesystem algorithm runtime
+- input sampling / event interpretation runtime
+
+## Rule
+
+Any new Pulp reference must be classified before merge. Unclassified Pulp hardware fallback is not allowed.

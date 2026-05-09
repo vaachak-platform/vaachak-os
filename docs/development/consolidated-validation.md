@@ -1,25 +1,25 @@
-# Consolidated validation
+# Consolidated Validation
 
-Use this validation script after the pure-model extraction series:
+## Final native hardware state
 
 ```bash
 cargo fmt --all
-./scripts/validate_controlled_extraction_consolidation.sh
+./scripts/validate_vaachak_hardware_runtime_final_acceptance.sh
+./scripts/validate_hardware_physical_full_migration_consolidation.sh
+./scripts/validate_hardware_physical_full_migration_cleanup.sh
+./scripts/validate_pulp_hardware_reference_deprecation_audit.sh
+./scripts/validate_pulp_hardware_dead_path_quarantine.sh
+./scripts/validate_pulp_hardware_dead_path_removal.sh
+./scripts/validate_vendor_pulp_os_scope_reduction.sh
+./scripts/validate_vaachak_docs_final_native_hardware_state.sh
+cargo build
 ```
 
-The script checks:
+Expected markers include:
 
-- formatting
-- cleanup guard
-- Vaachak-owned core model inventory
-- hardware-free pure model boundary
-- active `vendor/pulp-os` runtime markers
-- consolidated docs
-- `vaachak-core` tests
-- host workspace checks
-- embedded workspace checks
-- clippy with warnings denied
-- release build for `target-xteink-x4`
-- active Pulp runtime release build
-
-The script does not replace on-device testing. Use the manual checklist printed at the end of the script and the hardware migration readiness checklist before starting hardware-adjacent work.
+```text
+vaachak_hardware_runtime_final_acceptance=ok
+hardware_physical_full_migration_consolidation=ok
+vendor_pulp_os_scope_reduction=ok
+vaachak_docs_final_native_hardware_state=ok
+```

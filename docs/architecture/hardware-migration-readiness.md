@@ -1,79 +1,60 @@
-# Hardware migration readiness checklist
+# Hardware Migration Readiness
 
-Do not start SD/SPI/display behavior migration until this checklist is green.
+## Current status
 
-## Build/readiness gate
+The uploaded repository is not yet a fully Vaachak-native hardware runtime. The active device path imports `vendor/pulp-os` for board, display, input, SD/FAT, kernel, and app runtime behavior.
 
-Run:
+This means hardware migration should not be described as complete in docs. The current state is:
 
-```bash
-cargo fmt --all --check
-./scripts/check_no_milestone_artifacts.sh .
-./scripts/validate_controlled_extraction_consolidation.sh
+```text
+hardware runtime behavior: imported Pulp-derived runtime
+Vaachak-owned code: contracts, helpers, models, preflight probes, and migration seams
 ```
 
-The validation script must pass before any hardware-adjacent extraction begins.
+## Readiness gate before the next hardware behavior move
 
-## Current runtime baseline
+Run from repository root:
 
-The active baseline is still `vendor/pulp-os`. Before moving behavior, confirm:
+```bash
+cargo fmt --all
+cargo build
+./scripts/validate_documentation_refresh.sh
+```
 
-- `vendor/pulp-os` builds in release mode.
-- `target-xteink-x4` builds in release mode for `riscv32imc-unknown-none-elf`.
-- The device flashes and boots.
-- Reader, Settings, Wi-Fi Transfer, Date & Time, title cache, sleep image, and display behavior are stable.
+If doing embedded validation on the X4 toolchain, also run the target-specific checks documented in `docs/development/build-and-flash.md`.
 
-## On-device checklist
+## Device smoke baseline
 
-After flashing the current build:
+Before moving any hardware behavior, verify the current baseline:
 
-1. Reader
-   - Open a regular TXT file.
-   - Open a regular EPUB file.
-   - Open `YEARLY_H.TXT` with prepared cache.
-   - Open the mixed prepared EPUB smoke file.
-   - Confirm progress restores for each supported path.
-   - Confirm EPUB bookmarks still work.
+- device boots repeatedly
+- Home/category dashboard appears
+- Files/Library opens
+- SD card lists files
+- TXT opens
+- EPUB/EPU smoke path opens
+- prepared cache path still reports clean success/failure status
+- Back navigation works
+- Settings persists expected values
+- Wi-Fi Transfer remains usable
+- Date & Time screen remains cancellable and recoverable
+- sleep-image mode still works
 
-2. Settings
-   - Confirm reader settings sync both ways.
-   - Confirm sleep image mode persists.
-   - Confirm title-cache action rows are selectable/actionable.
-   - Confirm battery/header display remains consistent.
+## Recommended next hardware migration order
 
-3. Wi-Fi Transfer
-   - Confirm Original Transfer tab works.
-   - Confirm Chunked Resume tab works.
-   - Confirm large FCACHE upload notes remain visible.
-   - Confirm credentials are not shown in browser UI.
+Hardware behavior should only move after Reader Home / data model stabilization unless a bug requires it.
 
-4. Date & Time
-   - Confirm Live/Cached/Unsynced status behavior.
-   - Confirm Back/retry does not lock buttons.
-   - Confirm cached time is preserved after failed retry.
+Recommended order if/when hardware migration resumes:
 
-5. Display and sleep
-   - Confirm reader header/body/footer remain readable.
-   - Confirm cache diagnostics do not pollute the header.
-   - Confirm sleep image mode still works.
+1. input physical sampling interpretation, with Pulp physical reads available as comparison baseline
+2. SPI transaction ownership and arbitration, because display and SD share the bus
+3. display command sequencing, keeping rendering artifacts visible in smoke tests
+4. SD/MMC lifecycle, with FAT behavior protected by tests and smoke checks
+5. FAT algorithms, after library and reader state models are frozen
 
-## Hardware migration entry criteria
+## What not to do
 
-Only start hardware-adjacent migration when all of these are true:
-
-- Pure model tests are green.
-- Active runtime release build is green.
-- Flash and on-device smoke are green.
-- There is one clearly scoped behavior to move.
-- There is a rollback path to the Pulp-owned behavior.
-- The migration does not combine SD, SPI, display, and input changes in one step.
-
-## Recommended first hardware-adjacent candidates
-
-Start with the lowest-risk adapters before moving drivers:
-
-1. Storage path adapter wiring that calls Vaachak-owned path helpers but still uses Pulp SD I/O.
-2. Input semantic adapter wiring that maps Pulp button events to Vaachak-owned semantic actions.
-3. Display chrome geometry adapter wiring that uses Vaachak-owned layout constants while keeping Pulp drawing.
-
-Do actual SD/SPI/display driver behavior last.
+- Do not combine input, SPI, display, and SD/FAT changes in one unvalidated slice.
+- Do not delete `vendor/pulp-os` while the uploaded code still imports it.
+- Do not claim native hardware ownership in docs unless the active code path proves it.
+- Do not add feature work that destabilizes the reader baseline.

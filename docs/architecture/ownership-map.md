@@ -1,29 +1,28 @@
 # Ownership Map
 
-## Active runtime ownership
+## Hardware ownership
 
-| Area | Current owner | Notes |
+| Area | Vaachak owner | Pulp hardware fallback |
 | --- | --- | --- |
-| Boot and scheduler | `vendor/pulp-os` | Active flashed runtime. |
-| Display refresh | `vendor/pulp-os` | SSD1677 behavior stays in the proven path. |
-| Button/input hardware | `vendor/pulp-os` | Ladder thresholds and event flow stay stable. |
-| SD/FAT I/O | `vendor/pulp-os` | Physical storage behavior stays stable. |
-| Home dashboard | `vendor/pulp-os` | Category dashboard is active here. |
-| Reader | `vendor/pulp-os` | TXT, EPUB smoke, progress, bookmarks, prepared cache. |
-| Wi-Fi Transfer | `vendor/pulp-os` | Original and chunked-resume tabs stay active. |
-| Date & Time | `vendor/pulp-os` | Explicit isolated Wi-Fi sync mode. |
-| Settings | `vendor/pulp-os` | Persists to `/_X4/SETTINGS.TXT`. |
+| SPI | `VaachakNativeSpiPhysicalDriver` | Disabled |
+| SSD1677 display | `VaachakNativeSsd1677PhysicalDriver` | Disabled |
+| SD/MMC physical storage | `VaachakNativeSdMmcPhysicalDriver` | Disabled |
+| FAT/filesystem algorithms | `VaachakNativeFatAlgorithmDriver` | Disabled |
+| Input physical sampling | Vaachak native input sampling driver | Disabled for interpretation/classification; Pulp code remains only outside active hardware ownership |
 
-## Vaachak-owned architecture
+## Runtime and product ownership
 
-| Area | Current owner | Notes |
-| --- | --- | --- |
-| Reader/domain models | `core/` | Shared target-neutral vocabulary. |
-| HAL seams | `hal-xteink-x4/` | X4 contracts and smoke helpers. |
-| Adapter contracts | `target-xteink-x4/` | Future adoption surface. |
-| Prepared cache tools | `tools/` | Host-side cache creation and inspection. |
-| Title cache tools | `tools/x4-title-cache/` | Host-side title-map generation. |
+| Area | Current owner / direction |
+| --- | --- |
+| Reader Home | Next product work |
+| Library index | Next product work |
+| Reader state model | Must be frozen before XTC and `.vchk` work |
+| XTC | Compatibility/open path, not native long-term package |
+| `.vchk` | Long-term Vaachak-native package contract |
+| Sync | Align after local state is stable |
+| Waveshare/S3 | Future profile after X4 reader path is stable |
+| Compatibility host | Future optional layer; not a v1 X4 milestone |
 
-## Rule for future work
+## Vendor scope
 
-Move pure deterministic logic first. Keep physical hardware behavior in the active runtime until the replacement path can be validated on the X4 without changing reader behavior.
+`vendor/pulp-os` is retained for non-hardware compatibility/import/reference scope. Any future use must be classified before it becomes product-critical.
