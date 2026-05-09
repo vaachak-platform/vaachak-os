@@ -50,6 +50,7 @@ pub mod input_physical_sampling_native_driver_cleanup_smoke;
 pub mod input_physical_sampling_native_driver_smoke;
 pub mod physical_driver_migration_plan_smoke;
 pub mod pulp_hardware_dead_path_quarantine_smoke;
+pub mod pulp_hardware_dead_path_removal_smoke;
 pub mod pulp_hardware_reference_deprecation_audit_smoke;
 pub mod sd_fat_runtime_readonly_ownership_smoke;
 pub mod spi_physical_native_driver_smoke;

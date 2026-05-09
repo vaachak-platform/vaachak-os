@@ -52,6 +52,7 @@ pub mod input_pulp_backend;
 pub mod input_runtime_owner;
 pub mod physical_driver_migration_plan;
 pub mod pulp_hardware_dead_path_quarantine;
+pub mod pulp_hardware_dead_path_removal;
 pub mod pulp_hardware_reference_deprecation_audit;
 pub mod sd_fat_readonly_pulp_backend;
 pub mod sd_fat_runtime_readonly_owner;
