@@ -58,7 +58,7 @@ impl VaachakDisplayGeometryAdoptionReport {
 
 impl VaachakDisplayGeometry {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure display geometry helpers";
-    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_DISPLAY_MOVED_TO_BOUNDARY: bool = false;
 
     pub const NATIVE_WIDTH: u16 = 800;

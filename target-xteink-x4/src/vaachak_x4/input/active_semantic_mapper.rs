@@ -3,17 +3,17 @@
 //! Active input semantic mapping adapter.
 //!
 //! This module is the first active input-semantic takeover step. It does not
-//! sample ADC pins, debounce buttons, poll input events, or edit vendored Pulp
+//! sample ADC pins, debounce buttons, poll input events, or edit vendored X4
 //! code. Instead it owns the semantic button/action mapping contract and returns
 //! a behavior-equivalent imported `ButtonMapper` to the still-imported
 //! `AppManager` API.
 
-use pulp_os::board::action::{
+use crate::vaachak_x4::x4_kernel::board::action::{
     Action as ImportedAction, ActionEvent as ImportedActionEvent,
     ButtonMapper as ImportedButtonMapper,
 };
-use pulp_os::board::button::Button as ImportedButton;
-use pulp_os::drivers::input::Event as ImportedInputEvent;
+use crate::vaachak_x4::x4_kernel::board::button::Button as ImportedButton;
+use crate::vaachak_x4::x4_kernel::drivers::input::Event as ImportedInputEvent;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VaachakActiveInputSemanticMapper;
@@ -41,7 +41,7 @@ impl VaachakActiveInputSemanticReport {
 
 impl VaachakActiveInputSemanticMapper {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned active semantic mapper adapter";
-    pub const ADC_AND_DEBOUNCE_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const ADC_AND_DEBOUNCE_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const ACTIVE_TAKEOVER_SCOPE: &'static str = "semantic mapping only";
 
     /// Construct the imported mapper behind a Vaachak-owned factory.

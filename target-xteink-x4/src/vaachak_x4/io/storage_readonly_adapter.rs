@@ -4,8 +4,8 @@
 //!
 //! This module defines contracts only. It intentionally does not mount SD cards,
 //! probe media, arbitrate SPI, parse FAT, initialize display hardware, or call
-//! into the active Pulp runtime. A future Pulp-backed implementation can satisfy
-//! these traits while keeping the existing `vendor/pulp-os` SD/FAT behavior as
+//! into the active X4 runtime. A future X4-backed implementation can satisfy
+//! these traits while keeping the existing `target-xteink-x4/src/vaachak_x4` SD/FAT behavior as
 //! the active runtime path.
 
 use core::str;
@@ -19,11 +19,11 @@ impl VaachakReadonlyStorageContract {
 
     /// The facade is Vaachak-owned, but the active implementation remains imported.
     pub const FACADE_OWNER: &'static str = "target-xteink-x4 Vaachak adapter contract";
-    pub const ACTIVE_STORAGE_BACKEND_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_SD_DRIVER_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_FAT_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_SPI_ARBITRATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const ACTIVE_STORAGE_BACKEND_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_SD_DRIVER_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_FAT_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_SPI_ARBITRATION_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_DISPLAY_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     /// Behavior movement guards. These must remain false until a later explicit
     /// hardware slice moves and validates one behavior path at a time.
@@ -97,7 +97,7 @@ impl<'a> VaachakStoragePathRef<'a> {
     }
 }
 
-/// Known active X4 storage paths as seen by the current Pulp-backed runtime.
+/// Known active X4 storage paths as seen by the current X4-backed runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VaachakResolvedStoragePaths<'a> {
     pub root: VaachakStoragePathRef<'a>,
@@ -111,9 +111,9 @@ pub struct VaachakResolvedStoragePaths<'a> {
 }
 
 impl VaachakResolvedStoragePaths<'static> {
-    /// Current path map. It mirrors the active Pulp runtime layout but does not
+    /// Current path map. It mirrors the active X4 runtime layout but does not
     /// perform any storage IO.
-    pub const PULP_BACKED_ACTIVE_PATHS: Self = Self {
+    pub const X4_BACKED_ACTIVE_PATHS: Self = Self {
         root: VaachakStoragePathRef::from_static(b"/"),
         library_root: VaachakStoragePathRef::from_static(b"/"),
         state_root: VaachakStoragePathRef::from_static(b"/state"),
@@ -217,8 +217,8 @@ pub enum VaachakReadonlyStorageContractError {
 /// Vaachak-owned read-only storage facade trait.
 ///
 /// Implementors provide the actual backend. On X4 today, that backend should be
-/// Pulp-backed and must keep SD driver, FAT, SPI arbitration, and display behavior
-/// in `vendor/pulp-os`.
+/// X4-backed and must keep SD driver, FAT, SPI arbitration, and display behavior
+/// in `target-xteink-x4/src/vaachak_x4`.
 pub trait VaachakReadonlyStorage {
     type Error;
 
@@ -416,7 +416,7 @@ mod tests {
         }
 
         fn resolve_current_storage_paths(&self) -> VaachakResolvedStoragePaths<'static> {
-            VaachakResolvedStoragePaths::PULP_BACKED_ACTIVE_PATHS
+            VaachakResolvedStoragePaths::X4_BACKED_ACTIVE_PATHS
         }
     }
 
@@ -449,8 +449,8 @@ mod tests {
     }
 
     #[test]
-    fn resolved_paths_match_pulp_backed_runtime_layout() {
-        let paths = VaachakResolvedStoragePaths::PULP_BACKED_ACTIVE_PATHS;
+    fn resolved_paths_match_x4_backed_runtime_layout() {
+        let paths = VaachakResolvedStoragePaths::X4_BACKED_ACTIVE_PATHS;
         assert_eq!(paths.root.as_bytes(), b"/");
         assert_eq!(paths.state_root.as_bytes(), b"/state");
         assert_eq!(paths.epub_cache_root.as_bytes(), b"/FCACHE");
@@ -463,7 +463,7 @@ mod tests {
         assert!(!VaachakReadonlyStorageContract::physical_behavior_moved());
         assert_eq!(
             VaachakReadonlyStorageContract::ACTIVE_STORAGE_BACKEND_OWNER,
-            "vendor/pulp-os imported runtime"
+            "Vaachak-owned X4 runtime"
         );
     }
 

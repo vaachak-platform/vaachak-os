@@ -7,7 +7,7 @@ use crate::vaachak_x4::contracts::storage_path_helpers::{
 /// Vaachak-owned storage state contract smoke.
 ///
 /// This module makes state-file naming and reserved-file expectations explicit
-/// without moving SD/SPI/FAT/EPUB-cache behavior out of the imported Pulp
+/// without moving SD/SPI/FAT/EPUB-cache behavior out of the imported X4
 /// runtime yet.
 pub struct VaachakStorageStateContract;
 
@@ -38,7 +38,7 @@ impl VaachakStorageStateContract {
     pub const METADATA_EXT: &'static str = VaachakStoragePathHelpers::METADATA_EXTENSION;
 
     pub const BOOKMARK_INDEX_FILE: &'static str = VaachakStoragePathHelpers::BOOKMARK_INDEX_FILE;
-    pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const EPUB_CACHE_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_SD_IO_MOVED_TO_BOUNDARY: bool = false;
     pub const EPUB_CACHE_IO_MOVED_TO_BOUNDARY: bool = false;
 

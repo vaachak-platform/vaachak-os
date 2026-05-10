@@ -1604,24 +1604,33 @@ dependencies = [
 name = "target-xteink-x4"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "embassy-executor",
+ "embassy-futures",
+ "embassy-net",
+ "embassy-sync 0.7.2",
+ "embassy-time",
+ "embedded-graphics",
+ "embedded-graphics-core",
  "embedded-hal 1.0.0",
+ "embedded-hal-async",
  "embedded-hal-bus",
+ "embedded-io-async 0.7.0",
  "embedded-sdmmc",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-println",
+ "esp-radio",
  "esp-rtos",
+ "fontdue",
  "hal-xteink-x4",
  "log",
  "nb 1.1.0",
  "smol-epub",
  "static_cell",
  "vaachak-core",
- "x4-kernel",
- "x4-os",
 ]
 
 [[package]]
@@ -1777,55 +1786,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee1708bef14716a11bae175f579062d4554d95be2c6829f518df847b7b3fdd0"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "x4-kernel"
-version = "0.1.0"
-dependencies = [
- "critical-section",
- "embassy-executor",
- "embassy-futures",
- "embassy-sync 0.7.2",
- "embassy-time",
- "embedded-graphics",
- "embedded-graphics-core",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-hal-bus",
- "embedded-sdmmc",
- "esp-alloc",
- "esp-hal",
- "esp-println",
- "log",
- "nb 1.1.0",
- "static_cell",
-]
-
-[[package]]
-name = "x4-os"
-version = "0.1.0"
-dependencies = [
- "embassy-executor",
- "embassy-futures",
- "embassy-net",
- "embassy-time",
- "embedded-graphics",
- "embedded-graphics-core",
- "embedded-io-async 0.7.0",
- "esp-alloc",
- "esp-backtrace",
- "esp-bootloader-esp-idf",
- "esp-hal",
- "esp-println",
- "esp-radio",
- "esp-rtos",
- "fontdue",
- "log",
- "nb 1.1.0",
- "smol-epub",
- "static_cell",
- "x4-kernel",
 ]
 
 [[package]]

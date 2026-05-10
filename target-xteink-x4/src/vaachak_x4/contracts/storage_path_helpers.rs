@@ -3,7 +3,7 @@
 /// Vaachak-owned pure storage path helper layer.
 ///
 /// The current implementation intentionally extracts only deterministic path/name logic.
-/// Physical SD/SPI/filesystem IO remains owned by the imported Pulp runtime.
+/// Physical SD/SPI/filesystem IO remains owned by the imported X4 runtime.
 pub struct VaachakStoragePathHelpers;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -83,7 +83,7 @@ impl VaachakStatePath {
 
 impl VaachakStoragePathHelpers {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure path helpers";
-    pub const PHYSICAL_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_IO_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const STORAGE_PATH_HELPERS_MARKER: &'static str = "x4-storage-path-helpers-ok";
     pub const STORAGE_PATH_ADOPTION_CHECK: &'static str = "storage-path-helper-adoption";
     pub const PHYSICAL_STORAGE_IO_MOVED_TO_BOUNDARY: bool = false;

@@ -2,6 +2,9 @@
 #![cfg_attr(target_arch = "riscv32", no_main)]
 
 #[cfg(target_arch = "riscv32")]
+extern crate alloc;
+
+#[cfg(target_arch = "riscv32")]
 mod vaachak_x4;
 
 #[cfg(not(target_arch = "riscv32"))]

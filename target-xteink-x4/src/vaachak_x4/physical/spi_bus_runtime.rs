@@ -67,9 +67,9 @@ impl VaachakSpiBusRuntimeReport {
 
 impl VaachakSpiBusRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned SPI arbitration facade";
-    pub const PHYSICAL_SPI_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_SD_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_SPI_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const PHYSICAL_SD_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     pub const PHYSICAL_SPI_OWNED_BY_BRIDGE: bool = false;
     pub const PHYSICAL_SD_OWNED_BY_BRIDGE: bool = false;

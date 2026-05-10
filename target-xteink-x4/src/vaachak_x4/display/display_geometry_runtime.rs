@@ -70,7 +70,7 @@ impl VaachakDisplayGeometryRuntimeReport {
 
 impl VaachakDisplayGeometryRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned display geometry runtime facade";
-    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_DISPLAY_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_DISPLAY_INIT_OWNED_BY_BRIDGE: bool = false;
     pub const REFRESH_OR_STRIP_RENDER_OWNED_BY_BRIDGE: bool = false;
 

@@ -32,3 +32,5 @@
 - `docs/reader/on-device-reader-smoke.md`
 - `docs/operations/final-hardware-validation.md`
 - `docs/operations/github-upload-checklist.md`
+
+- `docs/network/vaachak-owned-wifi-runtime.md` — active Wi-Fi setup/scan/transfer/time ownership in Vaachak-owned X4 target code.

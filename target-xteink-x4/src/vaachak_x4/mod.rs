@@ -20,3 +20,9 @@ pub mod text;
 pub mod sleep;
 
 pub mod time;
+
+pub mod network;
+
+// Vaachak-owned runtime modules migrated out of target-xteink-x4/src/vaachak_x4.
+pub mod x4_apps;
+pub mod x4_kernel;

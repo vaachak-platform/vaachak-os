@@ -48,8 +48,8 @@ impl VaachakInputAdcRuntimeReport {
 
 impl VaachakInputAdcRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned input ADC classification facade";
-    pub const PHYSICAL_ADC_SAMPLING_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const DEBOUNCE_LOOP_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_ADC_SAMPLING_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const DEBOUNCE_LOOP_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_ADC_SAMPLING_OWNED_BY_BRIDGE: bool = false;
     pub const DEBOUNCE_LOOP_OWNED_BY_BRIDGE: bool = false;
 

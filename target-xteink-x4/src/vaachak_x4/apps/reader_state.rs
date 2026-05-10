@@ -596,7 +596,7 @@ impl VaachakReaderThemeRecord {
 }
 
 pub const READER_STATE_FACADE_OWNER: &str = "Vaachak-owned reader state facade";
-pub const ACTIVE_READER_STATE_IO_OWNER: &str = "vendor/pulp-os imported runtime";
+pub const ACTIVE_READER_STATE_IO_OWNER: &str = "Vaachak-owned X4 runtime";
 pub const ACTIVE_READER_STATE_IO_MOVED_TO_IMPORTED_RUNTIME: bool = false;
 pub const ACTIVE_PROGRESS_BOOKMARK_IO_MOVED_TO_IMPORTED_RUNTIME: bool = false;
 pub const BOOK_ID_MODEL: &str = "path-fnv1a32-v2";

@@ -5,11 +5,11 @@
 /// The current implementation intentionally extracts only ownership metadata and typed helpers.
 /// Physical SD/SPI initialization, volume mounting, file IO, EPUB cache IO,
 /// bookmark persistence, progress persistence, and theme persistence still live
-/// in the imported `vendor/pulp-os` runtime.
+/// in the imported `target-xteink-x4/src/vaachak_x4` runtime.
 pub struct VaachakStorageBoundary;
 
 /// High-level storage resource groups that VaachakOS must preserve when it later
-/// takes over storage orchestration from the imported Pulp runtime.
+/// takes over storage orchestration from the imported X4 runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VaachakStorageResourceKind {
     StateDirectory,
@@ -35,7 +35,7 @@ impl VaachakStorageBoundary {
     pub const STORAGE_BOUNDARY_MARKER: &'static str = "x4-storage-boundary-ok";
 
     /// Current source of truth for behavior.
-    pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     /// The current implementation only extracts metadata/helpers. Runtime behavior is still imported.
     pub const BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
@@ -58,8 +58,8 @@ impl VaachakStorageBoundary {
     pub const THEME_EXT: &'static str = "THM";
     pub const METADATA_EXT: &'static str = "MTA";
 
-    /// EPUB cache remains owned by the imported Pulp/smol-epub path in The current implementation
-    pub const EPUB_CACHE_OWNER: &'static str = "vendor/pulp-os + vendor/smol-epub";
+    /// EPUB cache remains owned by the imported X4/smol-epub path in The current implementation
+    pub const EPUB_CACHE_OWNER: &'static str = "target-xteink-x4/src/vaachak_x4 + vendor/smol-epub";
     pub const EPUB_CACHE_MOVED_TO_BOUNDARY: bool = false;
 
     pub const RESOURCES: &'static [VaachakStorageResource] = &[
@@ -67,31 +67,31 @@ impl VaachakStorageBoundary {
             kind: VaachakStorageResourceKind::StateDirectory,
             directory: "state",
             pattern: "state/",
-            owner: "Vaachak boundary metadata; imported Pulp runtime behavior",
+            owner: "Vaachak boundary metadata; imported X4 runtime behavior",
         },
         VaachakStorageResource {
             kind: VaachakStorageResourceKind::ProgressRecord,
             directory: "state",
             pattern: "state/<BOOKID>.PRG",
-            owner: "imported Pulp reader progress behavior",
+            owner: "imported X4 reader progress behavior",
         },
         VaachakStorageResource {
             kind: VaachakStorageResourceKind::BookmarkRecord,
             directory: "state",
             pattern: "state/<BOOKID>.BKM",
-            owner: "imported Pulp reader bookmark behavior",
+            owner: "imported X4 reader bookmark behavior",
         },
         VaachakStorageResource {
             kind: VaachakStorageResourceKind::BookmarkIndex,
             directory: "state",
             pattern: "state/BMIDX.TXT",
-            owner: "imported Pulp reader bookmark index behavior",
+            owner: "imported X4 reader bookmark index behavior",
         },
         VaachakStorageResource {
             kind: VaachakStorageResourceKind::ThemeRecord,
             directory: "state",
             pattern: "state/<BOOKID>.THM",
-            owner: "imported Pulp reader theme behavior",
+            owner: "imported X4 reader theme behavior",
         },
         VaachakStorageResource {
             kind: VaachakStorageResourceKind::MetadataRecord,
@@ -103,7 +103,7 @@ impl VaachakStorageBoundary {
             kind: VaachakStorageResourceKind::EpubCache,
             directory: "imported-runtime-managed",
             pattern: "smol-epub chapter/cache resources",
-            owner: "vendor/pulp-os + vendor/smol-epub",
+            owner: "target-xteink-x4/src/vaachak_x4 + vendor/smol-epub",
         },
     ];
 

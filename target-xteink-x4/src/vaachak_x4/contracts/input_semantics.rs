@@ -62,7 +62,7 @@ impl VaachakInputSemanticAdoptionReport {
 
 impl VaachakInputSemantics {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned pure input semantic helpers";
-    pub const PHYSICAL_INPUT_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_INPUT_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_INPUT_MOVED_TO_BOUNDARY: bool = false;
 
     pub const ROW1_ADC_GPIO: u8 = 1;

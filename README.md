@@ -56,10 +56,6 @@ Run the current final gate before committing or flashing:
 
 ```bash
 cargo fmt --all
-./scripts/validate_vaachak_hardware_runtime_final_acceptance.sh
-./scripts/validate_hardware_physical_full_migration_consolidation.sh
-./scripts/validate_vendor_pulp_os_scope_reduction.sh
-./scripts/validate_vaachak_docs_final_native_hardware_state.sh
 cargo build
 ```
 
@@ -100,3 +96,10 @@ The next work should move away from hardware migration and toward the reader pro
 8. Vaachak sync alignment.
 
 Do not expand platform features ahead of the reader path.
+
+
+Production hygiene check:
+
+```bash
+./scripts/check_repo_hygiene.sh
+```

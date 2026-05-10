@@ -115,8 +115,8 @@ impl VaachakRuntimeButtonMapper {
 
 impl VaachakInputSemanticsRuntimeBridge {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned input semantic runtime facade";
-    pub const PHYSICAL_INPUT_SAMPLING_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const DEBOUNCE_REPEAT_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_INPUT_SAMPLING_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const DEBOUNCE_REPEAT_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_INPUT_SAMPLING_OWNED_BY_BRIDGE: bool = false;
     pub const DEBOUNCE_REPEAT_OWNED_BY_BRIDGE: bool = false;
 

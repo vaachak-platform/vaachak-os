@@ -14,17 +14,17 @@ fail() {
 
 [ -f Cargo.toml ] || fail "MissingCargoToml"
 [ -f target-xteink-x4/Cargo.toml ] || fail "MissingTargetCargoToml"
-[ -f vendor/pulp-os/src/apps/home.rs ] || fail "MissingHomeApp"
-[ -f vendor/pulp-os/src/apps/files.rs ] || fail "MissingFilesApp"
-[ -f vendor/pulp-os/src/apps/reader/mod.rs ] || fail "MissingReaderApp"
+[ -f target-xteink-x4/src/vaachak_x4/apps/home.rs ] || fail "MissingHomeApp"
+[ -f target-xteink-x4/src/vaachak_x4/x4_apps/apps/files.rs ] || fail "MissingFilesApp"
+[ -f target-xteink-x4/src/vaachak_x4/x4_apps/apps/reader/mod.rs ] || fail "MissingReaderApp"
 
 legacy_dir_count="$(find . -maxdepth 1 -type d -name '*_overlay' | wc -l | tr -d ' ')"
 legacy_prefix_a="pha"
 legacy_prefix_b="se"
 legacy_zip_count="$(find . -maxdepth 1 -type f -name "${legacy_prefix_a}${legacy_prefix_b}*.zip" | wc -l | tr -d ' ')"
 
-old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' vendor/pulp-os/src/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
-bad_txt_body_return="$((rg -n 'TITLE_KIND_TEXT.*return Some|return Some.*TITLE_KIND_TEXT' vendor/pulp-os/kernel/src/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
+old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' target-xteink-x4/src/vaachak_x4/x4_apps/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
+bad_txt_body_return="$((rg -n 'TITLE_KIND_TEXT.*return Some|return Some.*TITLE_KIND_TEXT' target-xteink-x4/src/vaachak_x4/x4_kernel/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
 
 titlemap_status="missing"
 titles_status="missing"

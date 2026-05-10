@@ -4,7 +4,7 @@
 ///
 /// This module is Vaachak-owned. It consolidates the display/input/storage
 /// metadata boundaries introduced in earlier extraction steps without moving physical
-/// hardware behavior out of the imported X4/Pulp runtime yet.
+/// hardware behavior out of the imported X4/X4 runtime yet.
 #[cfg(target_arch = "riscv32")]
 pub struct VaachakBoundaryContract;
 
@@ -15,7 +15,7 @@ impl VaachakBoundaryContract {
 
     /// Current ownership model.
     pub const METADATA_OWNER: &'static str = "Vaachak runtime boundary contract";
-    pub const PHYSICAL_BEHAVIOR_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_BEHAVIOR_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     /// The current implementation does not move physical hardware behavior.
     pub const DISPLAY_BEHAVIOR_MOVED_TO_BOUNDARY: bool = false;
@@ -46,7 +46,7 @@ impl VaachakBoundaryContract {
 
     /// Human-readable current ownership summary.
     pub fn ownership_summary() -> &'static str {
-        "Vaachak owns boundary metadata/contracts; imported X4/Pulp runtime still owns display/input/storage physical behavior"
+        "Vaachak owns boundary metadata/contracts; imported X4/X4 runtime still owns display/input/storage physical behavior"
     }
 
     /// Physical behavior remains imported until explicit later extraction steps.

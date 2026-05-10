@@ -4,7 +4,7 @@
 ///
 /// The current implementation intentionally does not move physical ADC reads, debounce/repeat
 /// handling, or button ladder calibration. The working implementation remains
-/// in the imported Pulp/X4 runtime while Vaachak records the contract it will
+/// in the imported X4/X4 runtime while Vaachak records the contract it will
 /// own in later extraction steps.
 pub struct VaachakInputBoundary;
 
@@ -22,7 +22,7 @@ pub enum VaachakButtonRole {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VaachakInputOwner {
-    ImportedPulpRuntime,
+    ImportedX4Runtime,
     VaachakBoundaryMetadata,
 }
 
@@ -37,7 +37,7 @@ impl VaachakInputBoundary {
     pub const INPUT_BOUNDARY_MARKER: &'static str = "x4-input-boundary-ok";
 
     /// Current source of truth for physical input behavior.
-    pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     /// X4 ADC ladder / button GPIO metadata.
     pub const ROW1_ADC_GPIO: u8 = 1;
@@ -75,7 +75,7 @@ impl VaachakInputBoundary {
     }
 
     pub const fn owner_for_runtime_behavior() -> VaachakInputOwner {
-        VaachakInputOwner::ImportedPulpRuntime
+        VaachakInputOwner::ImportedX4Runtime
     }
 
     pub const fn is_adc_ladder_gpio(gpio: u8) -> bool {
@@ -103,7 +103,7 @@ impl VaachakInputBoundary {
         VaachakButtonRoleInfo {
             role,
             label: Self::role_name(role),
-            imported_owner: VaachakInputOwner::ImportedPulpRuntime,
+            imported_owner: VaachakInputOwner::ImportedX4Runtime,
         }
     }
 

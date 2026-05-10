@@ -5,6 +5,9 @@ version = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
 
+[features]
+default = []
+
 [dependencies]
 
 [target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
@@ -16,9 +19,7 @@ esp-alloc = { version = "0.9.0", features = ["internal-heap-stats"] }
 vaachak-core = { path = "../core" }
 hal-xteink-x4 = { path = "../hal-xteink-x4" }
 nb = "1"
-pulp-os = { package = "x4-os", path = "../vendor/pulp-os" }
-x4-kernel = { path = "../vendor/pulp-os/kernel" }
-smol-epub = { path = "../vendor/smol-epub" }
+smol-epub = { path = "../vendor/smol-epub", features = ["async"] }
 esp-hal = { workspace = true }
 esp-backtrace = { workspace = true }
 esp-println = { workspace = true }
@@ -26,3 +27,16 @@ esp-bootloader-esp-idf = { workspace = true }
 embedded-hal-bus = { workspace = true }
 embedded-hal = { workspace = true }
 embedded-sdmmc = { workspace = true }
+embedded-graphics = "0.8.2"
+embassy-time = "0.5"
+embassy-futures = "0.1"
+embassy-sync = "0.7"
+embedded-hal-async = "1.0.0"
+embedded-graphics-core = "0.4.1"
+critical-section = "1.2.0"
+embassy-net = { version = "0.8", features = ["dhcpv4", "dns", "medium-ethernet", "tcp", "udp"] }
+embedded-io-async = "0.7"
+esp-radio = { version = "0.17", default-features = false, features = ["esp32c3", "wifi", "log-04", "esp-alloc"] }
+
+[build-dependencies]
+fontdue = "0.9"

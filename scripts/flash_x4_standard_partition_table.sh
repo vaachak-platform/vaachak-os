@@ -6,8 +6,8 @@ if [ -z "$PORT" ]; then
   cat >&2 <<'EOF'
 usage: scripts/flash_x4_standard_partition_table.sh /dev/cu.usbmodemXXXX
 
-This performs the one-time migration from the old Vaachak single-factory
-partition table to the standard Xteink X4 OTA-compatible table.
+This performs the one-time migration from an incompatible Vaachak partition
+table to the Xteink X4 / CrossPoint-compatible dual-OTA table.
 EOF
   exit 2
 fi
@@ -17,13 +17,13 @@ cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
 
 cat <<EOF
 
-About to erase flash on $PORT and flash Vaachak OS using the standard X4
-partition table from espflash.toml:
+About to erase flash on $PORT and flash Vaachak OS using the Xteink X4 /
+CrossPoint-compatible partition table from espflash.toml:
 
   partitions/xteink_x4_standard.bin
 
-This erase is expected only for migration from the old Vaachak factory-only
-layout. Keep the SD card contents backed up separately.
+This erase is expected only for migration from an incompatible Vaachak
+partition table. Keep the SD card contents backed up separately.
 EOF
 
 read -r -p "Type ERASE-AND-FLASH to continue: " answer
@@ -33,6 +33,11 @@ if [ "$answer" != "ERASE-AND-FLASH" ]; then
 fi
 
 espflash erase-flash --chip esp32c3 --port "$PORT"
+# Keep the first boot after migration on app0. The full erase above clears
+# otadata already, but erase the selector explicitly so future edits to this
+# script do not accidentally preserve an app1 boot choice.
+espflash erase-region --chip esp32c3 --port "$PORT" 0xe000 0x2000
+
 espflash flash \
   --monitor \
   --chip esp32c3 \

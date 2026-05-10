@@ -6,7 +6,7 @@ members = [
 ]
 resolver = "2"
 
-exclude = ["vendor/pulp-os", "vendor/smol-epub"]
+exclude = ["vendor/smol-epub"]
 [workspace.package]
 edition = "2024"
 version = "0.1.0"

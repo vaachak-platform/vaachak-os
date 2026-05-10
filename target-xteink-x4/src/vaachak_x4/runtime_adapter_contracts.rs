@@ -1,17 +1,17 @@
-//! Adapter contracts between Vaachak-owned pure models and the active Pulp-derived runtime.
+//! Adapter contracts between Vaachak-owned pure models and the active Vaachak-owned X4 runtime.
 //!
 //! This module is intentionally behavior-neutral. It documents and exposes thin mapping
 //! constants/helpers used to align Vaachak core ownership with the current runtime without
 //! moving SD, SPI, display, Wi-Fi, input-scan, or refresh behavior.
 
-pub const ACTIVE_RUNTIME_NAME: &str = "vendor/pulp-os";
+pub const ACTIVE_RUNTIME_NAME: &str = "target-xteink-x4/src/vaachak_x4";
 pub const ACTIVE_RUNTIME_OWNS_HARDWARE_BEHAVIOR: bool = true;
 pub const VAACHAK_ADAPTER_MOVES_HARDWARE_BEHAVIOR: bool = false;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PulpRuntimeAdapterContracts;
+pub struct X4RuntimeAdapterContracts;
 
-impl PulpRuntimeAdapterContracts {
+impl X4RuntimeAdapterContracts {
     pub const fn active_runtime_name(&self) -> &'static str {
         ACTIVE_RUNTIME_NAME
     }
@@ -38,13 +38,13 @@ pub trait RuntimeAdapterContract {
     fn hardware_behavior_moved(&self) -> bool;
 }
 
-impl RuntimeAdapterContract for PulpRuntimeAdapterContracts {
+impl RuntimeAdapterContract for X4RuntimeAdapterContracts {
     fn active_runtime_name(&self) -> &'static str {
-        PulpRuntimeAdapterContracts::active_runtime_name(self)
+        X4RuntimeAdapterContracts::active_runtime_name(self)
     }
 
     fn hardware_behavior_moved(&self) -> bool {
-        PulpRuntimeAdapterContracts::hardware_behavior_moved(self)
+        X4RuntimeAdapterContracts::hardware_behavior_moved(self)
     }
 }
 
@@ -69,7 +69,7 @@ pub enum StoragePathContractKind {
 pub struct StoragePathRuntimeContract {
     pub kind: StoragePathContractKind,
     pub core_owner: &'static str,
-    pub pulp_runtime_path: &'static str,
+    pub runtime_path: &'static str,
     pub behavior_owner: &'static str,
 }
 
@@ -77,79 +77,79 @@ pub const STORAGE_PATH_RUNTIME_CONTRACTS: &[StoragePathRuntimeContract] = &[
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::LibraryRootCurrent,
         core_owner: "StoragePathModel::library_path_current",
-        pulp_runtime_path: "/",
+        runtime_path: "/",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::LibraryRootBooks,
         core_owner: "StoragePathModel::library_path_books",
-        pulp_runtime_path: "/books",
+        runtime_path: "/books",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::StateDirectory,
         core_owner: "StoragePathModel::state_dir",
-        pulp_runtime_path: "/state",
+        runtime_path: "/state",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::ProgressFileTemplate,
         core_owner: "ReaderProgressModel path helper",
-        pulp_runtime_path: "/state/<BOOKID>.PRG",
+        runtime_path: "/state/<BOOKID>.PRG",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::BookmarkFileTemplate,
         core_owner: "BookmarkEntryModel path helper",
-        pulp_runtime_path: "/state/<BOOKID>.BKM",
+        runtime_path: "/state/<BOOKID>.BKM",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::BookmarkIndexFile,
         core_owner: "BookmarkIndexEntryModel path helper",
-        pulp_runtime_path: "/state/BMIDX.TXT",
+        runtime_path: "/state/BMIDX.TXT",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::PreparedCacheRoot,
         core_owner: "PreparedCachePathModel::root",
-        pulp_runtime_path: "/FCACHE",
+        runtime_path: "/FCACHE",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::PreparedCacheBookTemplate,
         core_owner: "PreparedCachePathModel::book",
-        pulp_runtime_path: "/FCACHE/<BOOKID>",
+        runtime_path: "/FCACHE/<BOOKID>",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::SettingsFile,
         core_owner: "Settings state model path",
-        pulp_runtime_path: "/_x4/SETTINGS.TXT",
+        runtime_path: "/_x4/SETTINGS.TXT",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::TitleCacheFile,
         core_owner: "TitleCacheRecordModel path",
-        pulp_runtime_path: "/_x4/TITLES.BIN",
+        runtime_path: "/_x4/TITLES.BIN",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::SleepRoot,
         core_owner: "SleepImageModeModel path",
-        pulp_runtime_path: "/sleep",
+        runtime_path: "/sleep",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::SleepDailyRoot,
         core_owner: "SleepImageModeModel daily path",
-        pulp_runtime_path: "/sleep/daily",
+        runtime_path: "/sleep/daily",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
     StoragePathRuntimeContract {
         kind: StoragePathContractKind::SleepModeFile,
         core_owner: "SleepImageModeModel persistence path",
-        pulp_runtime_path: "/SLPMODE.TXT",
+        runtime_path: "/SLPMODE.TXT",
         behavior_owner: ACTIVE_RUNTIME_NAME,
     },
 ];
@@ -168,7 +168,7 @@ pub enum CoreInputSemanticActionContract {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PulpButtonEventContract {
+pub enum X4ButtonEventContract {
     Up,
     Down,
     Left,
@@ -199,19 +199,19 @@ pub enum ReaderPageNavigationContract {
     None,
 }
 
-pub const fn pulp_button_for_semantic_action(
+pub const fn x4_button_for_semantic_action(
     action: CoreInputSemanticActionContract,
-) -> PulpButtonEventContract {
+) -> X4ButtonEventContract {
     match action {
-        CoreInputSemanticActionContract::Up => PulpButtonEventContract::Up,
-        CoreInputSemanticActionContract::Down => PulpButtonEventContract::Down,
-        CoreInputSemanticActionContract::Left => PulpButtonEventContract::Left,
-        CoreInputSemanticActionContract::Right => PulpButtonEventContract::Right,
-        CoreInputSemanticActionContract::Select => PulpButtonEventContract::Select,
-        CoreInputSemanticActionContract::Back => PulpButtonEventContract::Back,
-        CoreInputSemanticActionContract::Menu => PulpButtonEventContract::Menu,
-        CoreInputSemanticActionContract::Power => PulpButtonEventContract::Power,
-        CoreInputSemanticActionContract::Unknown => PulpButtonEventContract::Unknown,
+        CoreInputSemanticActionContract::Up => X4ButtonEventContract::Up,
+        CoreInputSemanticActionContract::Down => X4ButtonEventContract::Down,
+        CoreInputSemanticActionContract::Left => X4ButtonEventContract::Left,
+        CoreInputSemanticActionContract::Right => X4ButtonEventContract::Right,
+        CoreInputSemanticActionContract::Select => X4ButtonEventContract::Select,
+        CoreInputSemanticActionContract::Back => X4ButtonEventContract::Back,
+        CoreInputSemanticActionContract::Menu => X4ButtonEventContract::Menu,
+        CoreInputSemanticActionContract::Power => X4ButtonEventContract::Power,
+        CoreInputSemanticActionContract::Unknown => X4ButtonEventContract::Unknown,
     }
 }
 
@@ -286,7 +286,7 @@ pub struct DisplayRegionRuntimeContract {
     pub width: u16,
     pub height: u16,
     pub core_owner: &'static str,
-    pub pulp_runtime_role: &'static str,
+    pub runtime_role: &'static str,
 }
 
 impl DisplayRegionRuntimeContract {
@@ -323,7 +323,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: X4_SCREEN_WIDTH,
         height: X4_SCREEN_HEIGHT,
         core_owner: "DisplaySizeModel",
-        pulp_runtime_role: "full logical screen",
+        runtime_role: "full logical screen",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::Header,
@@ -332,7 +332,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: X4_SCREEN_WIDTH,
         height: 28,
         core_owner: "DisplayChromeLayoutModel::header",
-        pulp_runtime_role: "top chrome/header",
+        runtime_role: "top chrome/header",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::Body,
@@ -341,7 +341,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: X4_SCREEN_WIDTH,
         height: 424,
         core_owner: "DisplayChromeLayoutModel::body",
-        pulp_runtime_role: "reader/list/body drawing area",
+        runtime_role: "reader/list/body drawing area",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::FooterStatus,
@@ -350,7 +350,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: X4_SCREEN_WIDTH,
         height: 28,
         core_owner: "DisplayChromeLayoutModel::footer",
-        pulp_runtime_role: "bottom status/footer chrome",
+        runtime_role: "bottom status/footer chrome",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::BatteryStatus,
@@ -359,7 +359,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: 96,
         height: 28,
         core_owner: "DisplayChromeLayoutModel::battery_status",
-        pulp_runtime_role: "right header battery/status area",
+        runtime_role: "right header battery/status area",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::ReaderProgressStatus,
@@ -368,7 +368,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: X4_SCREEN_WIDTH,
         height: 28,
         core_owner: "DisplayChromeLayoutModel::reader_progress_status",
-        pulp_runtime_role: "reader progress/footer status",
+        runtime_role: "reader progress/footer status",
     },
     DisplayRegionRuntimeContract {
         kind: DisplayRuntimeRegionKind::PopupMessage,
@@ -377,7 +377,7 @@ pub const DISPLAY_REGION_RUNTIME_CONTRACTS: &[DisplayRegionRuntimeContract] = &[
         width: 768,
         height: 96,
         core_owner: "DisplayDiagnosticPlacementModel::popup_message",
-        pulp_runtime_role: "body popup/diagnostic notice",
+        runtime_role: "body popup/diagnostic notice",
     },
 ];
 

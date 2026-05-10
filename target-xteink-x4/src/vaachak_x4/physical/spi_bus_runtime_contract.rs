@@ -7,7 +7,7 @@ use crate::vaachak_x4::physical::spi_bus_runtime::VaachakSpiBusRuntimeBridge;
 /// This module consolidates SPI ownership facts only. It intentionally does not
 /// create a bus, configure a peripheral, select chip-select lines, probe SD,
 /// initialize FAT, initialize SSD1677, refresh the display, or arbitrate access
-/// at runtime. The active runtime remains in the imported Pulp/X4 firmware path.
+/// at runtime. The active runtime remains in the imported X4/X4 firmware path.
 pub struct VaachakSpiBusRuntimeContract;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -18,7 +18,7 @@ pub enum VaachakSpiSharedDevice {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VaachakSpiBehaviorOwner {
-    VendorPulpRuntime,
+    VendorX4Runtime,
     VaachakContractMetadata,
 }
 
@@ -79,9 +79,9 @@ impl VaachakSpiBusRuntimeContract {
     pub const SPI_BUS_RUNTIME_CONTRACT_MARKER: &'static str = "x4-spi-bus-runtime-contract-ok";
 
     pub const CONTRACT_OWNER: &'static str = "Vaachak physical SPI bus contract metadata";
-    pub const ACTIVE_ARBITRATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_SD_RUNTIME_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const ACTIVE_DISPLAY_RUNTIME_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const ACTIVE_ARBITRATION_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_SD_RUNTIME_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const ACTIVE_DISPLAY_RUNTIME_OWNER: &'static str = "Vaachak-owned X4 runtime";
 
     /// This consolidation layer is metadata only. Runtime hardware behavior is not moved.
     pub const SPI_ARBITRATION_MOVED_TO_VAACHAK: bool = false;
@@ -110,14 +110,14 @@ impl VaachakSpiBusRuntimeContract {
             role: "SSD1677 e-paper display over shared SPI",
             chip_select_gpio: Self::DISPLAY_CS_GPIO,
             shares_bus_with: VaachakSpiSharedDevice::Storage,
-            physical_behavior_owner: VaachakSpiBehaviorOwner::VendorPulpRuntime,
+            physical_behavior_owner: VaachakSpiBehaviorOwner::VendorX4Runtime,
         },
         VaachakSpiSharedUser {
             device: VaachakSpiSharedDevice::Storage,
             role: "microSD storage over shared SPI",
             chip_select_gpio: Self::STORAGE_SD_CS_GPIO,
             shares_bus_with: VaachakSpiSharedDevice::Display,
-            physical_behavior_owner: VaachakSpiBehaviorOwner::VendorPulpRuntime,
+            physical_behavior_owner: VaachakSpiBehaviorOwner::VendorX4Runtime,
         },
     ];
 
@@ -144,8 +144,8 @@ impl VaachakSpiBusRuntimeContract {
 
     pub const fn owner_for_device(device: VaachakSpiSharedDevice) -> VaachakSpiBehaviorOwner {
         match device {
-            VaachakSpiSharedDevice::Display => VaachakSpiBehaviorOwner::VendorPulpRuntime,
-            VaachakSpiSharedDevice::Storage => VaachakSpiBehaviorOwner::VendorPulpRuntime,
+            VaachakSpiSharedDevice::Display => VaachakSpiBehaviorOwner::VendorX4Runtime,
+            VaachakSpiSharedDevice::Storage => VaachakSpiBehaviorOwner::VendorX4Runtime,
         }
     }
 

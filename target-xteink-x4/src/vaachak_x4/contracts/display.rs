@@ -3,7 +3,7 @@
 /// Vaachak-owned display boundary metadata for the Adafruit Xteink X4.
 ///
 /// The current implementation intentionally does not move physical SSD1677/SPI/display refresh
-/// behavior out of the imported X4/Pulp runtime. This module makes the display
+/// behavior out of the imported X4/X4 runtime. This module makes the display
 /// contract explicit so a later implementation can extract one behavior at a time with
 /// checks around geometry, pins, rotation, RAM commands, and shared-bus rules.
 #[cfg(target_arch = "riscv32")]
@@ -12,8 +12,8 @@ pub struct VaachakDisplayBoundary;
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DisplayRuntimeOwner {
-    /// The current working implementation remains the imported Pulp/X4 runtime.
-    ImportedPulpRuntime,
+    /// The current working implementation remains the imported X4/X4 runtime.
+    ImportedX4Runtime,
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -55,8 +55,8 @@ impl VaachakDisplayBoundary {
     pub const BOUNDARY_SCAFFOLD_MARKER: &'static str = "x4-boundary-scaffold-ok";
 
     /// Current source of truth for display behavior.
-    pub const IMPLEMENTATION_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const RUNTIME_OWNER: DisplayRuntimeOwner = DisplayRuntimeOwner::ImportedPulpRuntime;
+    pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const RUNTIME_OWNER: DisplayRuntimeOwner = DisplayRuntimeOwner::ImportedX4Runtime;
 
     /// The current implementation records the contract only. It must not move physical display IO.
     pub const PHYSICAL_DISPLAY_INIT_MOVED_TO_BOUNDARY: bool = false;
@@ -91,9 +91,9 @@ impl VaachakDisplayBoundary {
     pub const SSD1677_DISPLAY_UPDATE_CONTROL_2_CMD: u8 = 0x22;
     pub const SSD1677_MASTER_ACTIVATION_CMD: u8 = 0x20;
 
-    pub const REFRESH_OWNER: &'static str = "vendor/pulp-os SSD1677 path";
-    pub const ROTATION_OWNER: &'static str = "vendor/pulp-os display transform";
-    pub const STRIP_RENDER_OWNER: &'static str = "vendor/pulp-os strip renderer";
+    pub const REFRESH_OWNER: &'static str = "target-xteink-x4/src/vaachak_x4 SSD1677 path";
+    pub const ROTATION_OWNER: &'static str = "target-xteink-x4/src/vaachak_x4 display transform";
+    pub const STRIP_RENDER_OWNER: &'static str = "target-xteink-x4/src/vaachak_x4 strip renderer";
 
     pub fn emit_display_boundary_marker() {
         esp_println::println!("{}", Self::DISPLAY_BOUNDARY_MARKER);

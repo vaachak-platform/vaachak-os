@@ -20,3 +20,5 @@ tools/font_prepare/__pycache__/
 tools/font_prepare/*.pyc
 tools/usb_transfer/__pycache__/
 tools/usb_transfer/*.pyc
+*.tar
+*.tar.gz

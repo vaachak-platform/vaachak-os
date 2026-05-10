@@ -1,7 +1,0 @@
-# Local espflash fallback when commands are run from vendor/pulp-os/.
-
-[idf]
-partition_table = "../../partitions/xteink_x4_standard.bin"
-
-[flash]
-size = "16MB"

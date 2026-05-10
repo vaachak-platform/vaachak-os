@@ -12,14 +12,13 @@ CSV = ROOT / "partitions" / "xteink_x4_standard.csv"
 BIN = ROOT / "partitions" / "xteink_x4_standard.bin"
 ROOT_CFG = ROOT / "espflash.toml"
 TARGET_CFG = ROOT / "target-xteink-x4" / "espflash.toml"
-PULP_CFG = ROOT / "vendor" / "pulp-os" / "espflash.toml"
 
 EXPECTED = [
     {"name": "nvs", "type": "data", "subtype": "nvs", "type_id": 0x01, "subtype_id": 0x02, "offset": 0x9000, "size": 0x5000},
     {"name": "otadata", "type": "data", "subtype": "ota", "type_id": 0x01, "subtype_id": 0x00, "offset": 0xE000, "size": 0x2000},
-    {"name": "ota_0", "type": "app", "subtype": "ota_0", "type_id": 0x00, "subtype_id": 0x10, "offset": 0x10000, "size": 0x770000},
-    {"name": "ota_1", "type": "app", "subtype": "ota_1", "type_id": 0x00, "subtype_id": 0x11, "offset": 0x780000, "size": 0x770000},
-    {"name": "spiffs", "type": "data", "subtype": "spiffs", "type_id": 0x01, "subtype_id": 0x82, "offset": 0xEF0000, "size": 0x100000},
+    {"name": "app0", "type": "app", "subtype": "ota_0", "type_id": 0x00, "subtype_id": 0x10, "offset": 0x10000, "size": 0x640000},
+    {"name": "app1", "type": "app", "subtype": "ota_1", "type_id": 0x00, "subtype_id": 0x11, "offset": 0x650000, "size": 0x640000},
+    {"name": "spiffs", "type": "data", "subtype": "spiffs", "type_id": 0x01, "subtype_id": 0x82, "offset": 0xC90000, "size": 0x360000},
     {"name": "coredump", "type": "data", "subtype": "coredump", "type_id": 0x01, "subtype_id": 0x03, "offset": 0xFF0000, "size": 0x10000},
 ]
 
@@ -73,7 +72,7 @@ def validate_csv() -> None:
     if "factory" in labels:
         fail("factory app partition must not be present")
     if any(row["type"] == "data" and row["subtype"] == "phy" for row in rows):
-        fail("data/phy partition must not be present in the standard X4 layout")
+        fail("data/phy partition must not be present in the CrossPoint-compatible X4 layout")
 
 
 def parse_bin() -> list[dict[str, object]]:
@@ -149,7 +148,6 @@ def iter_regression_scan_files() -> list[Path]:
         ROOT / "partitions",
         ROOT / "scripts",
         ROOT / "target-xteink-x4",
-        ROOT / "vendor" / "pulp-os",
     ]
     allowed_suffixes = {".csv", ".toml", ".sh", ".py", ".rs"}
     ignored_names = {
@@ -209,6 +207,5 @@ if __name__ == "__main__":
     validate_bin()
     validate_cfg(ROOT_CFG, "partitions/xteink_x4_standard.bin")
     validate_cfg(TARGET_CFG, "../partitions/xteink_x4_standard.bin")
-    validate_cfg(PULP_CFG, "../../partitions/xteink_x4_standard.bin")
     validate_no_known_regression_files()
-    print("x4-standard-partition-table-compatibility-ok")
+    print("x4-crosspoint-partition-table-compatibility-ok")

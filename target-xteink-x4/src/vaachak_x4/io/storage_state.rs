@@ -73,8 +73,8 @@ impl VaachakStateIoKind {
 
 impl VaachakStorageStatePaths {
     pub const IMPLEMENTATION_OWNER: &'static str = "Vaachak-owned storage state IO seam";
-    pub const PHYSICAL_STORAGE_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
-    pub const READER_CACHE_IO_OWNER: &'static str = "vendor/pulp-os imported runtime";
+    pub const PHYSICAL_STORAGE_IO_OWNER: &'static str = "Vaachak-owned X4 runtime";
+    pub const READER_CACHE_IO_OWNER: &'static str = "Vaachak-owned X4 runtime";
     pub const PHYSICAL_STORAGE_IO_OWNED_BY_BRIDGE: bool = false;
     pub const READER_CACHE_IO_OWNED_BY_BRIDGE: bool = false;
 

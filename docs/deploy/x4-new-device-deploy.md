@@ -87,3 +87,20 @@ Confirm:
 - Reader restore still works.
 - Footer labels remain accepted.
 - No crash/reboot.
+
+## X4-compatible partition table note
+
+This repo includes `espflash.toml` and `partitions/xteink_x4_standard.bin` so the
+X4 is flashed with the CrossPoint-compatible dual-OTA partition table used by
+current X4 firmware tools. Validate it before flashing:
+
+```bash
+./scripts/validate_x4_standard_partition_table_compatibility.sh
+```
+
+If this X4 previously ran a Vaachak build with an incompatible Vaachak partition table,
+do one full erase-and-flash migration first:
+
+```bash
+./scripts/flash_x4_standard_partition_table.sh /dev/cu.usbmodemXXXX
+```

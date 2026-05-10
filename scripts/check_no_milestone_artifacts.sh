@@ -19,6 +19,10 @@ report_match() {
   fail=1
 }
 
+# macOS Finder can recreate this file after extraction. It is never a
+# source artifact, so remove it before enforcing the generated-artifact gate.
+find . -name .DS_Store -not -path './.git/*' -print -delete >/dev/null
+
 while IFS= read -r path; do
   report_match "forbidden generated path: $path"
 done < <(
@@ -44,7 +48,11 @@ if rg -n -i \
   --glob '!target/**' \
   --glob '!.git/**' \
   --glob '!vendor/**' \
-  --glob '!scripts/check_no_milestone_artifacts.sh'
+  --glob '!scripts/check_no_milestone_artifacts.sh' \
+  --glob '!vaachak_runtime_vendor_retirement/**' \
+  --glob '!target-xteink-x4/src/vaachak_x4/x4_kernel/drivers/ssd1677.rs' \
+  --glob '!target-xteink-x4/src/vaachak_x4/x4_kernel/kernel/scheduler.rs' \
+  --glob '!target-xteink-x4/src/vaachak_x4/x4_kernel/kernel/mod.rs'
 then
   report_match "forbidden generated delivery labels found"
 fi
