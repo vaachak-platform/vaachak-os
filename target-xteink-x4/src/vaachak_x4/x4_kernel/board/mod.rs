@@ -11,8 +11,6 @@ pub use crate::vaachak_x4::x4_kernel::drivers::sdcard::{SdStorage, SyncSdCard};
 pub use crate::vaachak_x4::x4_kernel::drivers::ssd1677::{
     DisplayDriver, HEIGHT, SPI_FREQ_MHZ, WIDTH,
 };
-pub use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
-pub use button::{Button, ROW1_THRESHOLDS, ROW2_THRESHOLDS, decode_ladder};
 
 // logical screen size (portrait mode via 270-degree rotation of 800x480 panel)
 pub const SCREEN_W: u16 = HEIGHT; // 480

@@ -1,0 +1,7 @@
+id = "daily_mantra"
+name = "Daily Mantra"
+category = "Tools"
+type = "activity"
+version = "0.1.0"
+entry = "MAIN.LUA"
+capabilities = ["display", "input", "storage", "time"]

@@ -3,6 +3,7 @@ members = [
     "core",
     "hal-xteink-x4",
     "target-xteink-x4",
+    "support/vaachak-lua-vm",
 ]
 resolver = "2"
 

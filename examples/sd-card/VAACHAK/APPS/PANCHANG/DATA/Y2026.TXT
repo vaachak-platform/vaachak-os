@@ -1,0 +1,2 @@
+2026-05-11|Shukla Paksha|Rohini|Sample precomputed Panchang record.
+2026-05-12|Shukla Paksha|Mrigashirsha|Sample precomputed Panchang record.

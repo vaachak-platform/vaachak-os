@@ -34,9 +34,3 @@ pub type Launcher = crate::vaachak_x4::x4_kernel::kernel::app::Launcher<AppId>;
 pub use crate::vaachak_x4::x4_kernel::kernel::app::{
     App, AppContext, PendingSetting, RECENT_FILE, Redraw,
 };
-
-// unified error types
-pub use crate::vaachak_x4::x4_kernel::kernel::{Error, ErrorKind, Result, ResultExt};
-
-// backward-compatible alias
-pub use crate::vaachak_x4::x4_kernel::kernel::StorageError;

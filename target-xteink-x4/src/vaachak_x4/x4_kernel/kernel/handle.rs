@@ -107,6 +107,85 @@ impl<'k> KernelHandle<'k> {
         storage::read_file_start_in_dir(&self.kernel.sd, storage::X4_DIR, name, buf)
     }
 
+    /// Reads the first chunk of `/VAACHAK/APPS/<app_id>/<name>` for the
+    /// first Daily Mantra SD Lua app proof.
+    ///
+    /// This is read-only and does not add recursive scanning or any Lua VM
+    /// dependency. It delegates to the existing X4 storage layer.
+    pub fn read_lua_app_file_start(
+        &mut self,
+        app_id: &str,
+        name: &str,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        storage::read_file_start_in_three_subdir(
+            &self.kernel.sd,
+            "VAACHAK",
+            "APPS",
+            app_id,
+            name,
+            buf,
+        )
+    }
+
+    /// Reads the first chunk of `/VAACHAK/APPS/<app_id>/<data_dir>/<name>`.
+    ///
+    /// This is used for SD-loaded Lua app data files such as
+    /// `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT`. It is fixed-depth and read-only;
+    /// it does not add recursive scanning or change raw SD/FAT/SPI behavior.
+    #[inline]
+    pub fn read_lua_app_data_file_start(
+        &mut self,
+        app_id: &str,
+        data_dir: &str,
+        name: &str,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        storage::read_file_start_in_four_subdir(
+            &self.kernel.sd,
+            "VAACHAK",
+            "APPS",
+            app_id,
+            data_dir,
+            name,
+            buf,
+        )
+    }
+
+    /// Reads `/VAACHAK/APPS/<APP>/<DATA_DIR>/<NAME>` for SD-loaded Lua apps.
+    ///
+    /// Used by Panchang for `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT`. This is
+    /// fixed-depth/read-only and does not add recursive scanning or app
+    /// execution behavior.
+    #[inline]
+    pub fn read_lua_app_nested_data_file_start(
+        &mut self,
+        app_folder: &str,
+        data_dir: &str,
+        name: &str,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        storage::read_file_start_in_vaachak_lua_app_data_file(
+            &self.kernel.sd,
+            app_folder,
+            data_dir,
+            name,
+            buf,
+        )
+    }
+
+    /// Reads `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT` for the SD-loaded Lua
+    /// Panchang app using explicit 8.3 path segments.
+    #[inline]
+    pub fn read_lua_panchang_y2026_start(&mut self, buf: &mut [u8]) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(
+            &self.kernel.sd,
+            "VAACHAK/APPS/PANCHANG/DATA",
+            "Y2026.TXT",
+            buf,
+        )
+    }
+
     #[inline]
     pub fn write_app_data(&mut self, name: &str, data: &[u8]) -> Result<()> {
         storage::write_file_in_dir(&self.kernel.sd, storage::X4_DIR, name, data)

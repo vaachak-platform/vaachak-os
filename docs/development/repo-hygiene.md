@@ -22,3 +22,29 @@ Run:
 ```
 
 before committing cleanup work.
+
+<!-- VAACHAK:LUA_DEPLOYMENT_CONTRACT:START -->
+## Lua app cleanup and commit preparation
+
+Before committing Lua app work, remove old overlay zip files, extracted overlay folders, and generated patch/apply/validator scripts from previous deliverables. Keep canonical docs and examples only.
+
+Current canonical Lua sample app path root:
+
+```text
+examples/sd-card/VAACHAK/APPS
+```
+
+Current SD deployment root:
+
+```text
+/VAACHAK/APPS
+```
+
+Final sample app folder map:
+
+```text
+MANTRA   -> daily_mantra
+CALENDAR -> calendar
+PANCHANG -> panchang
+```
+<!-- VAACHAK:LUA_DEPLOYMENT_CONTRACT:END -->

@@ -1631,6 +1631,7 @@ dependencies = [
  "smol-epub",
  "static_cell",
  "vaachak-core",
+ "vaachak-lua-vm",
 ]
 
 [[package]]
@@ -1736,6 +1737,10 @@ dependencies = [
  "postcard",
  "serde",
 ]
+
+[[package]]
+name = "vaachak-lua-vm"
+version = "0.1.0"
 
 [[package]]
 name = "vcell"

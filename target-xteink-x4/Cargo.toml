@@ -7,8 +7,11 @@ authors = { workspace = true }
 
 [features]
 default = []
+lua-vm = ["dep:vaachak-lua-vm"]
+lua-runtime-probe = []
 
 [dependencies]
+vaachak-lua-vm = { path = "../support/vaachak-lua-vm", optional = true, default-features = false }
 
 [target.'cfg(all(target_arch = "riscv32", target_os = "none"))'.dependencies]
 log = "0.4.27"

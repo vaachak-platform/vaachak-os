@@ -1,0 +1,2 @@
+2026-05-11|Vaachak Lua Calendar|Second SD Lua app proof under Productivity.
+2026-05-12|Review Lua Apps|Confirm SD deployment and app navigation.

@@ -20,16 +20,7 @@ pub mod timing;
 pub mod wake;
 pub mod work_queue;
 
-// Unified error types (primary home: crate::vaachak_x4::x4_kernel::error)
-pub use crate::vaachak_x4::x4_kernel::error::{Error, ErrorKind, Result, ResultExt};
-
-// backward-compatible alias
-pub use crate::vaachak_x4::x4_kernel::drivers::storage::StorageError;
-
-pub use app::{
-    App, AppContext, AppIdType, AppLayer, Launcher, NavEvent, PendingSetting, QuickAction,
-    QuickActionKind, RECENT_FILE, Redraw, Transition,
-};
+pub use app::QuickAction;
 pub use bookmarks::BookmarkCache;
 pub use console::BootConsole;
 pub use handle::KernelHandle;

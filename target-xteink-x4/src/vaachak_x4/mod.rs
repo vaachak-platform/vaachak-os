@@ -6,7 +6,10 @@ pub mod contracts;
 pub mod display;
 pub mod imported;
 pub mod input;
+
+// Optional Lua app runtime probe. Disabled by default; no SD app loading.
 pub mod io;
+pub mod lua;
 pub mod physical;
 pub mod runtime_adapter_contracts;
 

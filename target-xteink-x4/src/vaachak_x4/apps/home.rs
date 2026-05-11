@@ -33,6 +33,22 @@ use crate::vaachak_x4::x4_kernel::kernel::config::{
     self, SystemSettings, WifiConfig, write_settings_txt,
 };
 
+use crate::vaachak_x4::lua::calendar_script::{
+    LUA_CALENDAR_APP_FOLDER, LUA_CALENDAR_APP_MARKER, LUA_CALENDAR_ENTRY_FILE,
+    LUA_CALENDAR_EVENTS_FILE, LUA_CALENDAR_MANIFEST_FILE, LUA_CALENDAR_SD_RUNTIME_MARKER,
+    LuaCalendarScreen, build_calendar_sd_runtime,
+};
+use crate::vaachak_x4::lua::daily_mantra_script::{
+    LUA_DAILY_MANTRA_APP_FOLDER, LUA_DAILY_MANTRA_APP_MARKER, LUA_DAILY_MANTRA_ENTRY_FILE,
+    LUA_DAILY_MANTRA_MANIFEST_FILE, LUA_DAILY_MANTRA_MANTRAS_FILE,
+    LUA_DAILY_MANTRA_SD_RUNTIME_MARKER, LuaDailyMantraScreen,
+};
+use crate::vaachak_x4::lua::panchang_script::{
+    LUA_PANCHANG_APP_FOLDER, LUA_PANCHANG_APP_MARKER, LUA_PANCHANG_DATA_FILE,
+    LUA_PANCHANG_ENTRY_FILE, LUA_PANCHANG_MANIFEST_FILE, LUA_PANCHANG_SD_RUNTIME_MARKER,
+    LuaPanchangScreen, build_panchang_sd_runtime,
+};
+
 pub const HOME_DASHBOARD_MARKER: &str = "x4-biscuit-home-dashboard-active-ok";
 pub const HOME_NAV_POLISH_MARKER: &str = "x4-biscuit-home-nav-polish-placeholder-routing-ok";
 pub const WIFI_SETTINGS_UI_EDITOR_MARKER: &str = "wifi-settings-shared-keyboard-ok";
@@ -49,6 +65,8 @@ const HOME_GRID_TOP_GAP: u16 = 10;
 const HOME_FOOTER_RESERVED_H: u16 = BUTTON_BAR_H + 8;
 const HOME_FOOTER_GAP: u16 = 10;
 const HOME_CARD_TEXT_GAP: u16 = 5;
+
+const TOOLS_CATEGORY_ITEM_COUNT: usize = 4;
 
 const MAX_ITEMS: usize = HOME_CARD_COUNT;
 const RECENT_BUF_LEN: usize = 160;
@@ -187,6 +205,9 @@ enum HomeState {
     ShowApps,
     ShowCategoryItems,
     ShowDailyMantra,
+    ShowLuaDailyMantra,
+    ShowLuaCalendar,
+    ShowLuaPanchang,
     ShowCalendar,
     ShowPanchangLite,
     ShowBookmarks,
@@ -266,6 +287,13 @@ pub struct HomeApp {
     panchang_mantra_found: bool,
     needs_load_panchang_mantra: bool,
 
+    lua_daily_mantra_screen: LuaDailyMantraScreen,
+    needs_load_lua_daily_mantra: bool,
+    lua_panchang_screen: LuaPanchangScreen,
+    needs_load_lua_panchang: bool,
+    lua_calendar_screen: LuaCalendarScreen,
+    needs_load_lua_calendar: bool,
+
     recent_book: [u8; RECENT_BUF_LEN],
     recent_book_len: usize,
     recent_record: Option<reader_state::RecentBookRecord>,
@@ -337,6 +365,12 @@ impl HomeApp {
             panchang_mantra_file_found: false,
             panchang_mantra_found: false,
             needs_load_panchang_mantra: false,
+            lua_daily_mantra_screen: LuaDailyMantraScreen::default(),
+            needs_load_lua_daily_mantra: false,
+            lua_panchang_screen: LuaPanchangScreen::default(),
+            needs_load_lua_panchang: false,
+            lua_calendar_screen: LuaCalendarScreen::default(),
+            needs_load_lua_calendar: false,
             recent_book: [0u8; RECENT_BUF_LEN],
             recent_book_len: 0,
             recent_record: None,
@@ -365,6 +399,8 @@ impl HomeApp {
             HomeState::Menu => 0,
             HomeState::ShowApps => 1,
             HomeState::ShowDailyMantra => 2,
+            HomeState::ShowLuaDailyMantra => 11,
+            HomeState::ShowLuaCalendar => 12,
             HomeState::ShowBookmarks => 3,
             HomeState::ShowCategoryItems => 4,
             HomeState::ShowPlaceholder => 5,
@@ -373,6 +409,7 @@ impl HomeApp {
             HomeState::ShowDateTime => 8,
             HomeState::ShowCalendar => 9,
             HomeState::ShowPanchangLite => 10,
+            HomeState::ShowLuaPanchang => 10,
         }
     }
 
@@ -402,6 +439,8 @@ impl HomeApp {
         self.state = match state_id {
             1 => HomeState::ShowApps,
             2 => HomeState::ShowDailyMantra,
+            11 => HomeState::ShowLuaDailyMantra,
+            12 => HomeState::ShowLuaCalendar,
             3 => HomeState::ShowBookmarks,
             4 => HomeState::ShowCategoryItems,
             5 => HomeState::ShowPlaceholder,
@@ -435,6 +474,12 @@ impl HomeApp {
         ) {
             self.time_status_loaded = false;
             self.needs_load_time_status = true;
+        }
+        if self.state == HomeState::ShowLuaDailyMantra {
+            self.needs_load_lua_daily_mantra = true;
+        }
+        if self.state == HomeState::ShowLuaCalendar {
+            self.needs_load_lua_calendar = true;
         }
         log::info!(
             "home: restore_state state={:?} selected={}",
@@ -1294,6 +1339,248 @@ impl HomeApp {
             .filter(|s| !s.trim().is_empty())
     }
 
+    fn load_lua_daily_mantra(&mut self, k: &mut KernelHandle<'_>) {
+        let mut manifest_buf = [0u8; 1024];
+        let mut script_buf = [0u8; 4096];
+        let mut mantras_buf = [0u8; 2048];
+
+        self.lua_daily_mantra_screen = match k.read_lua_app_file_start(
+            LUA_DAILY_MANTRA_APP_FOLDER,
+            LUA_DAILY_MANTRA_MANIFEST_FILE,
+            &mut manifest_buf,
+        ) {
+            Ok((_size, manifest_n)) if manifest_n > 0 => {
+                let manifest = match core::str::from_utf8(&manifest_buf[..manifest_n]) {
+                    Ok(text) => text,
+                    Err(_) => {
+                        self.needs_load_lua_daily_mantra = false;
+                        self.lua_daily_mantra_screen =
+                            LuaDailyMantraScreen::invalid_manifest_utf8();
+                        log::info!(
+                            "lua-app marker={} app=daily_mantra source={}",
+                            LUA_DAILY_MANTRA_APP_MARKER,
+                            self.lua_daily_mantra_screen.source.label()
+                        );
+                        return;
+                    }
+                };
+
+                match k.read_lua_app_file_start(
+                    LUA_DAILY_MANTRA_APP_FOLDER,
+                    LUA_DAILY_MANTRA_ENTRY_FILE,
+                    &mut script_buf,
+                ) {
+                    Ok((_size, script_n)) if script_n > 0 => {
+                        let script = match core::str::from_utf8(&script_buf[..script_n]) {
+                            Ok(text) => text,
+                            Err(_) => {
+                                self.needs_load_lua_daily_mantra = false;
+                                self.lua_daily_mantra_screen =
+                                    LuaDailyMantraScreen::invalid_script_utf8();
+                                log::info!(
+                                    "lua-app marker={} app=daily_mantra source={}",
+                                    LUA_DAILY_MANTRA_APP_MARKER,
+                                    self.lua_daily_mantra_screen.source.label()
+                                );
+                                return;
+                            }
+                        };
+
+                        match k.read_lua_app_file_start(
+                            LUA_DAILY_MANTRA_APP_FOLDER,
+                            LUA_DAILY_MANTRA_MANTRAS_FILE,
+                            &mut mantras_buf,
+                        ) {
+                            Ok((_size, mantras_n)) if mantras_n > 0 => {
+                                match core::str::from_utf8(&mantras_buf[..mantras_n]) {
+                                    Ok(mantras) => {
+                                        #[cfg(feature = "lua-vm")]
+                                        {
+                                            crate::vaachak_x4::lua::daily_mantra_vm_bridge::build_daily_mantra_vm_sd_runtime(
+                                                    manifest, script, mantras,
+                                                )
+                                        }
+                                        #[cfg(not(feature = "lua-vm"))]
+                                        {
+                                            crate::vaachak_x4::lua::daily_mantra_script::build_daily_mantra_sd_runtime(
+                                                    manifest, script, mantras,
+                                                )
+                                        }
+                                    }
+                                    Err(_) => LuaDailyMantraScreen::invalid_mantras_utf8(),
+                                }
+                            }
+                            _ => LuaDailyMantraScreen::missing_mantras(),
+                        }
+                    }
+                    _ => LuaDailyMantraScreen::missing_entry(),
+                }
+            }
+            _ => LuaDailyMantraScreen::missing_manifest(),
+        };
+        self.needs_load_lua_daily_mantra = false;
+        log::info!(
+            "lua-app marker={} sd_runtime_marker={} app=daily_mantra source={}",
+            LUA_DAILY_MANTRA_APP_MARKER,
+            LUA_DAILY_MANTRA_SD_RUNTIME_MARKER,
+            self.lua_daily_mantra_screen.source.label()
+        );
+    }
+
+    fn load_lua_panchang(&mut self, k: &mut KernelHandle<'_>) {
+        let mut manifest_buf = [0u8; 1024];
+        let mut script_buf = [0u8; 4096];
+        let mut data_buf = [0u8; 2048];
+
+        self.lua_panchang_screen = match k.read_lua_app_file_start(
+            LUA_PANCHANG_APP_FOLDER,
+            LUA_PANCHANG_MANIFEST_FILE,
+            &mut manifest_buf,
+        ) {
+            Ok((_size, manifest_n)) if manifest_n > 0 => {
+                let manifest = match core::str::from_utf8(&manifest_buf[..manifest_n]) {
+                    Ok(text) => text,
+                    Err(_) => {
+                        self.lua_panchang_screen = LuaPanchangScreen::invalid_manifest_utf8();
+                        self.needs_load_lua_panchang = false;
+                        return;
+                    }
+                };
+
+                match k.read_lua_app_file_start(
+                    LUA_PANCHANG_APP_FOLDER,
+                    LUA_PANCHANG_ENTRY_FILE,
+                    &mut script_buf,
+                ) {
+                    Ok((_size, script_n)) if script_n > 0 => {
+                        let script = match core::str::from_utf8(&script_buf[..script_n]) {
+                            Ok(text) => text,
+                            Err(_) => {
+                                self.lua_panchang_screen = LuaPanchangScreen::invalid_script_utf8();
+                                self.needs_load_lua_panchang = false;
+                                return;
+                            }
+                        };
+
+                        match k.read_lua_panchang_y2026_start(&mut data_buf) {
+                            Ok((_size, data_n)) if data_n > 0 => {
+                                match core::str::from_utf8(&data_buf[..data_n]) {
+                                    Ok(data) => build_panchang_sd_runtime(manifest, script, data),
+                                    Err(_) => LuaPanchangScreen::invalid_data_utf8(),
+                                }
+                            }
+                            _ => {
+                                // Compatibility fallback for emergency/manual recovery: if the
+                                // nested DATA folder cannot be opened, allow a flat app-root copy
+                                // at `/VAACHAK/APPS/PANCHANG/Y2026.TXT`. The canonical contract
+                                // remains `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT`.
+                                match k.read_lua_app_file_start(
+                                    LUA_PANCHANG_APP_FOLDER,
+                                    LUA_PANCHANG_DATA_FILE,
+                                    &mut data_buf,
+                                ) {
+                                    Ok((_size, data_n)) if data_n > 0 => {
+                                        match core::str::from_utf8(&data_buf[..data_n]) {
+                                            Ok(data) => {
+                                                build_panchang_sd_runtime(manifest, script, data)
+                                            }
+                                            Err(_) => LuaPanchangScreen::invalid_data_utf8(),
+                                        }
+                                    }
+                                    _ => LuaPanchangScreen::missing_data(),
+                                }
+                            }
+                        }
+                    }
+                    _ => LuaPanchangScreen::missing_entry(),
+                }
+            }
+            _ => LuaPanchangScreen::missing_manifest(),
+        };
+        self.needs_load_lua_panchang = false;
+        log::info!(
+            "lua-app marker={} sd_runtime_marker={} app=panchang source={}",
+            LUA_PANCHANG_APP_MARKER,
+            LUA_PANCHANG_SD_RUNTIME_MARKER,
+            self.lua_panchang_screen.source.label()
+        );
+    }
+
+    fn load_lua_calendar(&mut self, k: &mut KernelHandle<'_>) {
+        let mut manifest_buf = [0u8; 1024];
+        let mut script_buf = [0u8; 4096];
+        let mut events_buf = [0u8; 2048];
+
+        self.lua_calendar_screen = match k.read_lua_app_file_start(
+            LUA_CALENDAR_APP_FOLDER,
+            LUA_CALENDAR_MANIFEST_FILE,
+            &mut manifest_buf,
+        ) {
+            Ok((_size, manifest_n)) if manifest_n > 0 => {
+                let manifest = match core::str::from_utf8(&manifest_buf[..manifest_n]) {
+                    Ok(text) => text,
+                    Err(_) => {
+                        self.needs_load_lua_calendar = false;
+                        self.lua_calendar_screen = LuaCalendarScreen::invalid_manifest_utf8();
+                        log::info!(
+                            "lua-app marker={} app=calendar source={}",
+                            LUA_CALENDAR_APP_MARKER,
+                            self.lua_calendar_screen.source.label()
+                        );
+                        return;
+                    }
+                };
+
+                match k.read_lua_app_file_start(
+                    LUA_CALENDAR_APP_FOLDER,
+                    LUA_CALENDAR_ENTRY_FILE,
+                    &mut script_buf,
+                ) {
+                    Ok((_size, script_n)) if script_n > 0 => {
+                        let script = match core::str::from_utf8(&script_buf[..script_n]) {
+                            Ok(text) => text,
+                            Err(_) => {
+                                self.needs_load_lua_calendar = false;
+                                self.lua_calendar_screen = LuaCalendarScreen::invalid_script_utf8();
+                                log::info!(
+                                    "lua-app marker={} app=calendar source={}",
+                                    LUA_CALENDAR_APP_MARKER,
+                                    self.lua_calendar_screen.source.label()
+                                );
+                                return;
+                            }
+                        };
+
+                        match k.read_lua_app_file_start(
+                            LUA_CALENDAR_APP_FOLDER,
+                            LUA_CALENDAR_EVENTS_FILE,
+                            &mut events_buf,
+                        ) {
+                            Ok((_size, events_n)) if events_n > 0 => {
+                                match core::str::from_utf8(&events_buf[..events_n]) {
+                                    Ok(events) => {
+                                        build_calendar_sd_runtime(manifest, script, events)
+                                    }
+                                    Err(_) => LuaCalendarScreen::invalid_events_utf8(),
+                                }
+                            }
+                            _ => LuaCalendarScreen::missing_events(),
+                        }
+                    }
+                    _ => LuaCalendarScreen::missing_entry(),
+                }
+            }
+            _ => LuaCalendarScreen::missing_manifest(),
+        };
+        self.needs_load_lua_calendar = false;
+        log::info!(
+            "lua-app marker={} sd_runtime_marker={} app=calendar source={}",
+            LUA_CALENDAR_APP_MARKER,
+            LUA_CALENDAR_SD_RUNTIME_MARKER,
+            self.lua_calendar_screen.source.label()
+        );
+    }
+
     fn load_time_status(&mut self, k: &mut KernelHandle<'_>) {
         self.time_uptime_secs = k.uptime_secs();
         self.home_battery_mv = k.battery_mv();
@@ -1646,6 +1933,27 @@ impl App<AppId> for HomeApp {
             }
         }
 
+        if self.needs_load_lua_daily_mantra {
+            self.load_lua_daily_mantra(k);
+            if self.state == HomeState::ShowLuaDailyMantra {
+                ctx.request_full_redraw();
+            }
+        }
+
+        if self.needs_load_lua_calendar {
+            self.load_lua_calendar(k);
+            if self.state == HomeState::ShowLuaCalendar {
+                ctx.request_full_redraw();
+            }
+        }
+
+        if self.needs_load_lua_panchang {
+            self.load_lua_panchang(k);
+            if self.state == HomeState::ShowLuaPanchang {
+                ctx.request_full_redraw();
+            }
+        }
+
         if self.needs_load_bookmarks {
             let mut buf = [0u8; 4096];
             self.bm_entries.clear();
@@ -1697,6 +2005,9 @@ impl App<AppId> for HomeApp {
             HomeState::ShowApps => self.on_event_apps(event, ctx),
             HomeState::ShowCategoryItems => self.on_event_category_items(event, ctx),
             HomeState::ShowDailyMantra => self.on_event_daily_mantra(event, ctx),
+            HomeState::ShowLuaDailyMantra => self.on_event_lua_daily_mantra(event, ctx),
+            HomeState::ShowLuaPanchang => self.on_event_lua_panchang(event, ctx),
+            HomeState::ShowLuaCalendar => self.on_event_lua_calendar(event, ctx),
             HomeState::ShowCalendar => self.on_event_calendar(event, ctx),
             HomeState::ShowPanchangLite => self.on_event_panchang_lite(event, ctx),
             HomeState::ShowBookmarks => self.on_event_bookmarks(event, ctx),
@@ -1713,6 +2024,9 @@ impl App<AppId> for HomeApp {
             HomeState::ShowApps => self.draw_apps(strip),
             HomeState::ShowCategoryItems => self.draw_category_items(strip),
             HomeState::ShowDailyMantra => self.draw_daily_mantra(strip),
+            HomeState::ShowLuaDailyMantra => self.draw_lua_daily_mantra(strip),
+            HomeState::ShowLuaPanchang => self.draw_lua_panchang(strip),
+            HomeState::ShowLuaCalendar => self.draw_lua_calendar(strip),
             HomeState::ShowCalendar => self.draw_calendar(strip),
             HomeState::ShowPanchangLite => self.draw_panchang_lite(strip),
             HomeState::ShowBookmarks => self.draw_bookmarks(strip),
@@ -1785,6 +2099,26 @@ impl HomeApp {
     }
 
     #[allow(dead_code)]
+    fn open_lua_panchang(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.needs_load_lua_panchang = true;
+        self.state = HomeState::ShowLuaPanchang;
+        ctx.request_full_redraw();
+    }
+
+    fn open_lua_daily_mantra(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.needs_load_lua_daily_mantra = true;
+        self.state = HomeState::ShowLuaDailyMantra;
+        ctx.request_full_redraw();
+    }
+
+    fn open_lua_calendar(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.needs_load_lua_calendar = true;
+        self.state = HomeState::ShowLuaCalendar;
+        ctx.request_full_redraw();
+    }
 
     fn open_panchang_lite(&mut self, ctx: &mut AppContext) {
         self.return_target = ReturnTarget::CategoryItems;
@@ -1961,8 +2295,12 @@ impl HomeApp {
                 self.open_calendar(ctx);
                 Transition::None
             }
-            (1, _) => {
+            (1, 2) => {
                 self.open_panchang_lite(ctx);
+                Transition::None
+            }
+            (1, _) => {
+                self.open_lua_calendar(ctx);
                 Transition::None
             }
 
@@ -2012,6 +2350,14 @@ impl HomeApp {
 
             // Tools
             (5, 0) => Transition::Push(AppId::Files),
+            (5, 1) => {
+                self.open_lua_daily_mantra(ctx);
+                Transition::None
+            }
+            (5, 2) => {
+                self.open_lua_panchang(ctx);
+                Transition::None
+            }
             (5, _) => {
                 self.open_placeholder(
                     "QR Generator",
@@ -2034,7 +2380,38 @@ impl HomeApp {
         }
     }
 
+    fn on_event_lua_daily_mantra(
+        &mut self,
+        event: ActionEvent,
+        ctx: &mut AppContext,
+    ) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back)
+            | ActionEvent::LongPress(Action::Back)
+            | ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            _ => Transition::None,
+        }
+    }
+
+    fn on_event_lua_panchang(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back)
+            | ActionEvent::LongPress(Action::Back)
+            | ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            _ => Transition::None,
+        }
+    }
+
     fn on_event_panchang_lite(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back)
+            | ActionEvent::LongPress(Action::Back)
+            | ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            _ => Transition::None,
+        }
+    }
+
+    fn on_event_lua_calendar(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
             ActionEvent::Press(Action::Back)
             | ActionEvent::LongPress(Action::Back)
@@ -2564,11 +2941,11 @@ impl HomeApp {
     const fn category_item_count(category: usize) -> usize {
         match category {
             0 => 3,
-            1 => 3,
+            1 => 4,
             2 => 1,
             3 => 3,
             4 => 4,
-            5 => 2,
+            5 => TOOLS_CATEGORY_ITEM_COUNT,
             _ => 0,
         }
     }
@@ -2581,6 +2958,7 @@ impl HomeApp {
             (1, 0) => "Daily Mantra",
             (1, 1) => "Calendar",
             (1, 2) => "Panchang Lite",
+            (1, 3) => "Lua Calendar",
             (2, 0) => "Coming soon",
             (3, 0) => "Continue Reading",
             (3, 1) => "Library",
@@ -2590,7 +2968,9 @@ impl HomeApp {
             (4, 2) => "Sleep Image",
             (4, 3) => "Device Info",
             (5, 0) => "File Browser",
-            (5, 1) => "QR Generator",
+            (5, 1) => "Lua Daily Mantra",
+            (5, 2) => "Lua Panchang",
+            (5, 3) => "QR Generator",
             _ => "",
         }
     }
@@ -2603,6 +2983,7 @@ impl HomeApp {
             (1, 0) => "Uses Date & Time",
             (1, 1) => "Offline monthly view",
             (1, 2) => "Tithi, Paksha, Month",
+            (1, 3) => "Run SD Lua calendar",
             (2, 0) => "Placeholder",
             (3, 0) => "Resume last book",
             (3, 1) => "Open file library",
@@ -2612,7 +2993,8 @@ impl HomeApp {
             (4, 2) => "Placeholder",
             (4, 3) => "Placeholder",
             (5, 0) => "Open file library",
-            (5, 1) => "Placeholder",
+            (5, 1) => "Run SD Lua proof app",
+            (5, 2) => "Placeholder",
             _ => "",
         }
     }
@@ -3269,6 +3651,179 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(x, y, w, meta_font.line_height),
             "Back returns to category",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_lua_daily_mantra(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, self.lua_daily_mantra_screen.title(), "Lua");
+
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, title_font.line_height),
+            self.lua_daily_mantra_screen.subtitle(),
+            title_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        for line in [
+            self.lua_daily_mantra_screen.line1(),
+            self.lua_daily_mantra_screen.line2(),
+            self.lua_daily_mantra_screen.line3(),
+        ] {
+            BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
+                .alignment(Alignment::CenterLeft)
+                .draw(strip)
+                .unwrap();
+            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+        }
+
+        let mut source_line =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            source_line,
+            "Source: {}  Marker: {}",
+            self.lua_daily_mantra_screen.source.label(),
+            if self.lua_daily_mantra_screen.source.is_sd_loaded() {
+                LUA_DAILY_MANTRA_SD_RUNTIME_MARKER
+            } else {
+                LUA_DAILY_MANTRA_APP_MARKER
+            }
+        );
+        source_line.draw(strip).unwrap();
+        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_daily_mantra_screen.footer(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            "Back returns to Tools",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_lua_panchang(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, self.lua_panchang_screen.title(), "Lua");
+
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+
+        for line in [
+            self.lua_panchang_screen.subtitle(),
+            self.lua_panchang_screen.line1(),
+            self.lua_panchang_screen.line2(),
+            self.lua_panchang_screen.line3(),
+        ] {
+            if !line.is_empty() {
+                BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
+                    .alignment(Alignment::CenterLeft)
+                    .draw(strip)
+                    .unwrap();
+                y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+            }
+        }
+
+        let mut source_line =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            source_line,
+            "Source: {}  Marker: {}",
+            self.lua_panchang_screen.source.label(),
+            if self.lua_panchang_screen.source.is_sd_loaded() {
+                LUA_PANCHANG_SD_RUNTIME_MARKER
+            } else {
+                LUA_PANCHANG_APP_MARKER
+            }
+        );
+        source_line.draw(strip).unwrap();
+    }
+
+    fn draw_lua_calendar(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, self.lua_calendar_screen.title(), "Lua");
+
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, title_font.line_height),
+            self.lua_calendar_screen.subtitle(),
+            title_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        for line in [
+            self.lua_calendar_screen.line1(),
+            self.lua_calendar_screen.line2(),
+            self.lua_calendar_screen.line3(),
+        ] {
+            BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
+                .alignment(Alignment::CenterLeft)
+                .draw(strip)
+                .unwrap();
+            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+        }
+
+        let mut source_line =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            source_line,
+            "Source: {}  Marker: {}",
+            self.lua_calendar_screen.source.label(),
+            if self.lua_calendar_screen.source.is_sd_loaded() {
+                LUA_CALENDAR_SD_RUNTIME_MARKER
+            } else {
+                LUA_CALENDAR_APP_MARKER
+            }
+        );
+        source_line.draw(strip).unwrap();
+        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_calendar_screen.footer(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            "Back returns to Productivity",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)

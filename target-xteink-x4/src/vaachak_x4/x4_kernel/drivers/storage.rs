@@ -9,7 +9,7 @@
 
 use core::ops::ControlFlow;
 
-use embedded_sdmmc::Mode;
+use embedded_sdmmc::{Mode, RawDirectory};
 
 use crate::vaachak_x4::x4_kernel::drivers::sdcard::{SdStorage, SdStorageInner, poll_once};
 use crate::vaachak_x4::x4_kernel::error::{Error, ErrorKind};
@@ -17,6 +17,7 @@ use crate::vaachak_x4::x4_kernel::error::{Error, ErrorKind};
 pub const X4_DIR: &str = "_x4";
 pub const TITLES_FILE: &str = "TITLES.BIN";
 pub const TITLE_CAP: usize = 64;
+pub const MAX_NESTED_STORAGE_PATH_COMPONENTS: usize = 8;
 
 // backward-compatible alias
 pub type StorageError = Error;
@@ -287,6 +288,77 @@ macro_rules! in_subdir {
 fn borrow(sd: &SdStorage) -> core::result::Result<core::cell::RefMut<'_, SdStorageInner>, Error> {
     sd.borrow_inner()
         .ok_or(Error::new(ErrorKind::NoCard, "storage::borrow"))
+}
+
+fn validate_nested_storage_path(path: &str) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
+    if path.starts_with('/') || path.ends_with('/') || path.contains("//") {
+        return Err(Error::new(ErrorKind::InvalidData, "nested_path_shape"));
+    }
+
+    let mut count = 0usize;
+    for component in path.split('/') {
+        if component.is_empty()
+            || component == "."
+            || component == ".."
+            || component
+                .as_bytes()
+                .iter()
+                .any(|&b| b == b'\\' || b == b':')
+        {
+            return Err(Error::new(ErrorKind::InvalidData, "nested_path_component"));
+        }
+        count += 1;
+        if count > MAX_NESTED_STORAGE_PATH_COMPONENTS {
+            return Err(Error::new(ErrorKind::InvalidData, "nested_path_depth"));
+        }
+    }
+
+    Ok(())
+}
+
+async fn open_nested_storage_dir(
+    inner: &mut SdStorageInner,
+    path: &str,
+) -> crate::vaachak_x4::x4_kernel::error::Result<(RawDirectory, bool)> {
+    if path.is_empty() {
+        return Ok((inner.root, false));
+    }
+    validate_nested_storage_path(path)?;
+
+    let mut current = inner.root;
+    let mut current_is_child = false;
+    let mut depth = 0usize;
+
+    for component in path.split('/') {
+        if depth >= MAX_NESTED_STORAGE_PATH_COMPONENTS {
+            close_nested_storage_dir(inner, current, current_is_child);
+            return Err(Error::new(
+                ErrorKind::OpenDir,
+                "open_nested_storage_dir_depth",
+            ));
+        }
+
+        match inner.mgr.open_dir(current, component).await {
+            Ok(next) => {
+                close_nested_storage_dir(inner, current, current_is_child);
+                current = next;
+                current_is_child = true;
+                depth += 1;
+            }
+            Err(_) => {
+                close_nested_storage_dir(inner, current, current_is_child);
+                return Err(Error::new(ErrorKind::OpenDir, "open_nested_storage_dir"));
+            }
+        }
+    }
+
+    Ok((current, current_is_child))
+}
+
+fn close_nested_storage_dir(inner: &mut SdStorageInner, dir: RawDirectory, should_close: bool) {
+    if should_close {
+        let _ = inner.mgr.close_dir(dir);
+    }
 }
 
 // root file operations
@@ -617,6 +689,212 @@ pub fn list_subdir_entries(
     })
 }
 
+pub fn list_path_entries(
+    sd: &SdStorage,
+    path: &str,
+    buf: &mut [DirEntry],
+) -> crate::vaachak_x4::x4_kernel::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+
+        let mut count = 0usize;
+        let mut total = 0usize;
+        let result = inner
+            .mgr
+            .iterate_dir(dir, |entry| {
+                if entry.attributes.is_volume() {
+                    return ControlFlow::Continue(());
+                }
+
+                let mut name_buf = [0u8; 13];
+                let name_len = sfn_to_bytes(&entry.name, &mut name_buf);
+                let sfn = &name_buf[..name_len as usize];
+                if sfn.is_empty() || sfn[0] == b'.' {
+                    return ControlFlow::Continue(());
+                }
+
+                total += 1;
+                if count < buf.len() {
+                    buf[count] = DirEntry {
+                        name: name_buf,
+                        name_len,
+                        is_dir: entry.attributes.is_directory(),
+                        size: entry.size,
+                        title: [0u8; TITLE_CAP],
+                        title_len: 0,
+                    };
+                    count += 1;
+                }
+
+                ControlFlow::Continue(())
+            })
+            .await
+            .map_err(|_| Error::new(ErrorKind::ReadFailed, "list_path_entries"))
+            .map(|_| count);
+
+        close_nested_storage_dir(inner, dir, should_close);
+
+        if result.is_ok() && total > count {
+            log::warn!(
+                "sd-manager: {} entries in {}, only {} fit in buffer",
+                total,
+                path,
+                count
+            );
+        }
+
+        result
+    })
+}
+
+pub fn ensure_path(sd: &SdStorage, path: &str) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
+    let path = path.trim_matches('/');
+    if path.is_empty() {
+        return Ok(());
+    }
+    validate_nested_storage_path(path)?;
+
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let mut current = inner.root;
+        let mut current_is_child = false;
+        let mut depth = 0usize;
+
+        for component in path.split('/') {
+            if depth >= MAX_NESTED_STORAGE_PATH_COMPONENTS {
+                close_nested_storage_dir(inner, current, current_is_child);
+                return Err(Error::new(ErrorKind::WriteFailed, "ensure_path_depth"));
+            }
+
+            let child = match inner.mgr.open_dir(current, component).await {
+                Ok(child) => child,
+                Err(_) => {
+                    match inner.mgr.make_dir_in_dir(current, component).await {
+                        Ok(()) | Err(embedded_sdmmc::Error::DirAlreadyExists) => {}
+                        Err(_) => {
+                            close_nested_storage_dir(inner, current, current_is_child);
+                            return Err(Error::new(ErrorKind::WriteFailed, "ensure_path"));
+                        }
+                    }
+                    match inner.mgr.open_dir(current, component).await {
+                        Ok(child) => child,
+                        Err(_) => {
+                            close_nested_storage_dir(inner, current, current_is_child);
+                            return Err(Error::new(ErrorKind::OpenDir, "ensure_path_open"));
+                        }
+                    }
+                }
+            };
+
+            close_nested_storage_dir(inner, current, current_is_child);
+            current = child;
+            current_is_child = true;
+            depth += 1;
+        }
+
+        close_nested_storage_dir(inner, current, current_is_child);
+        Ok(())
+    })
+}
+
+pub fn file_size_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+) -> crate::vaachak_x4::x4_kernel::error::Result<u32> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_file_size!(inner, dir, name);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
+pub fn read_file_start_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_read_start!(inner, dir, name, buf);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
+pub fn read_file_chunk_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+    offset: u32,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<usize> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_read_chunk!(inner, dir, name, offset, buf);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
+pub fn write_file_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+    data: &[u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_write!(inner, dir, name, data);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
+pub fn append_file_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+    data: &[u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_append!(inner, dir, name, data);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
+pub fn delete_file_in_path(
+    sd: &SdStorage,
+    path: &str,
+    name: &str,
+) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let (dir, should_close) = open_nested_storage_dir(inner, path).await?;
+        let result = op_delete!(inner, dir, name);
+        close_nested_storage_dir(inner, dir, should_close);
+        result
+    })
+}
+
 // directory management
 
 pub fn ensure_dir(sd: &SdStorage, name: &str) -> crate::vaachak_x4::x4_kernel::error::Result<()> {
@@ -763,6 +1041,243 @@ pub fn read_file_start_in_subdir(
         in_subdir!(inner, dir, subdir, |dir_h| op_read_start!(
             inner, dir_h, name, buf
         ))
+    })
+}
+
+/// Read the start of a file under a fixed three-level directory path.
+///
+/// This is used by the first Lua app proof to read
+/// `/VAACHAK/APPS/<app_id>/MAIN.LUA` without adding recursive SD scanning or
+/// changing raw SD/FAT/SPI behavior.
+pub fn read_file_start_in_three_subdir(
+    sd: &SdStorage,
+    dir1: &str,
+    dir2: &str,
+    dir3: &str,
+    name: &str,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let d1 = inner
+            .mgr
+            .open_dir(inner.root, dir1)
+            .await
+            .map_err(|_| Error::new(ErrorKind::OpenDir, "read_file_start_in_three_subdir"))?;
+        let d2 = match inner.mgr.open_dir(d1, dir2).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(d1);
+                return Err(Error::new(
+                    ErrorKind::OpenDir,
+                    "read_file_start_in_three_subdir",
+                ));
+            }
+        };
+        let d3 = match inner.mgr.open_dir(d2, dir3).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(d2);
+                let _ = inner.mgr.close_dir(d1);
+                return Err(Error::new(
+                    ErrorKind::OpenDir,
+                    "read_file_start_in_three_subdir",
+                ));
+            }
+        };
+
+        let result = op_read_start!(inner, d3, name, buf);
+        let _ = inner.mgr.close_dir(d3);
+        let _ = inner.mgr.close_dir(d2);
+        let _ = inner.mgr.close_dir(d1);
+        result
+    })
+}
+
+/// Read the start of a file under a fixed four-level directory path.
+///
+/// This is used by SD-loaded Lua apps that keep app data one level below
+/// the physical app folder, for example:
+/// `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT`.
+///
+/// It intentionally opens a fixed-depth path and does not add recursive SD
+/// scanning or change raw SD/FAT/SPI behavior.
+pub fn read_file_start_in_four_subdir(
+    sd: &SdStorage,
+    dir1: &str,
+    dir2: &str,
+    dir3: &str,
+    dir4: &str,
+    name: &str,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+        let d1 = inner
+            .mgr
+            .open_dir(inner.root, dir1)
+            .await
+            .map_err(|_| Error::new(ErrorKind::OpenDir, "read_file_start_in_four_subdir"))?;
+        let d2 = match inner.mgr.open_dir(d1, dir2).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(d1);
+                return Err(Error::new(
+                    ErrorKind::OpenDir,
+                    "read_file_start_in_four_subdir",
+                ));
+            }
+        };
+        let d3 = match inner.mgr.open_dir(d2, dir3).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(d2);
+                let _ = inner.mgr.close_dir(d1);
+                return Err(Error::new(
+                    ErrorKind::OpenDir,
+                    "read_file_start_in_four_subdir",
+                ));
+            }
+        };
+        let d4 = match inner.mgr.open_dir(d3, dir4).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(d3);
+                let _ = inner.mgr.close_dir(d2);
+                let _ = inner.mgr.close_dir(d1);
+                return Err(Error::new(
+                    ErrorKind::OpenDir,
+                    "read_file_start_in_four_subdir",
+                ));
+            }
+        };
+
+        let result = op_read_start!(inner, d4, name, buf);
+        let _ = inner.mgr.close_dir(d4);
+        let _ = inner.mgr.close_dir(d3);
+        let _ = inner.mgr.close_dir(d2);
+        let _ = inner.mgr.close_dir(d1);
+        result
+    })
+}
+
+/// Read the start of a file under the canonical Lua app data path:
+/// `/VAACHAK/APPS/<APP>/DATA/<NAME>`.
+///
+/// This helper is intentionally fixed-depth and read-only. It does not add
+/// recursive SD scanning, does not change raw SD/FAT/SPI behavior, and exists
+/// only to avoid treating `DATA/Y2026.TXT` as a single 8.3 filename.
+pub fn read_file_start_in_vaachak_lua_app_data_file(
+    sd: &SdStorage,
+    app_folder: &str,
+    data_dir: &str,
+    name: &str,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        let vaachak = inner
+            .mgr
+            .open_dir(inner.root, "VAACHAK")
+            .await
+            .map_err(|_| Error::new(ErrorKind::OpenDir, "lua_app_data:VAACHAK"))?;
+
+        let apps = match inner.mgr.open_dir(vaachak, "APPS").await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "lua_app_data:APPS"));
+            }
+        };
+
+        let app = match inner.mgr.open_dir(apps, app_folder).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(apps);
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "lua_app_data:APP"));
+            }
+        };
+
+        let data = match inner.mgr.open_dir(app, data_dir).await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(app);
+                let _ = inner.mgr.close_dir(apps);
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "lua_app_data:DATA"));
+            }
+        };
+
+        let result = op_read_start!(inner, data, name, buf);
+
+        let _ = inner.mgr.close_dir(data);
+        let _ = inner.mgr.close_dir(app);
+        let _ = inner.mgr.close_dir(apps);
+        let _ = inner.mgr.close_dir(vaachak);
+
+        result
+    })
+}
+
+/// Read `/VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT` using explicit path segments.
+///
+/// This intentionally avoids generic slash-containing file names and avoids
+/// recursive scanning. It mirrors the path that Wi-Fi Transfer lists on the SD
+/// card and is used only by the Lua Panchang runtime app.
+pub fn read_vaachak_apps_panchang_y2026_start(
+    sd: &SdStorage,
+    buf: &mut [u8],
+) -> crate::vaachak_x4::x4_kernel::error::Result<(u32, usize)> {
+    poll_once(async {
+        let mut guard = borrow(sd)?;
+        let inner = &mut *guard;
+
+        let vaachak = inner
+            .mgr
+            .open_dir(inner.root, "VAACHAK")
+            .await
+            .map_err(|_| Error::new(ErrorKind::OpenDir, "panchang_y2026:VAACHAK"))?;
+
+        let apps = match inner.mgr.open_dir(vaachak, "APPS").await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "panchang_y2026:APPS"));
+            }
+        };
+
+        let panchang = match inner.mgr.open_dir(apps, "PANCHANG").await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(apps);
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "panchang_y2026:PANCHANG"));
+            }
+        };
+
+        let data = match inner.mgr.open_dir(panchang, "DATA").await {
+            Ok(dir) => dir,
+            Err(_) => {
+                let _ = inner.mgr.close_dir(panchang);
+                let _ = inner.mgr.close_dir(apps);
+                let _ = inner.mgr.close_dir(vaachak);
+                return Err(Error::new(ErrorKind::OpenDir, "panchang_y2026:DATA"));
+            }
+        };
+
+        let result = op_read_start!(inner, data, "Y2026.TXT", buf);
+
+        let _ = inner.mgr.close_dir(data);
+        let _ = inner.mgr.close_dir(panchang);
+        let _ = inner.mgr.close_dir(apps);
+        let _ = inner.mgr.close_dir(vaachak);
+
+        result
     })
 }
 

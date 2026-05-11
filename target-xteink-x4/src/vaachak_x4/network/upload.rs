@@ -67,7 +67,8 @@ const TCP_TX_BUF_SIZE: usize = 1536;
 const HTTP_HEADER_BUF_SIZE: usize = 1024;
 
 const DIR_LIST_MAX: usize = 64;
-const MANAGER_PATH_BUF_LEN: usize = 32;
+const MANAGER_PATH_BUF_LEN: usize = 128;
+const MANAGER_MAX_PATH_COMPONENTS: usize = 8;
 const WIFI_V2_MAX_CHUNK: usize = 1536;
 
 // HTTP timing
@@ -749,8 +750,8 @@ fn normalize_v2_full_path(raw: &[u8], out: &mut [u8]) -> Result<usize, &'static 
                 return Err("invalid path separator");
             }
 
-            if component_count >= 3 {
-                return Err("path depth limited to folder/folder/file");
+            if component_count >= MANAGER_MAX_PATH_COMPONENTS {
+                return Err("path depth exceeds Wi-Fi transfer limit");
             }
 
             let mut checked = [0u8; 13];
@@ -811,6 +812,7 @@ fn v2_file_size(sd: &SdStorage, path: &[u8]) -> crate::vaachak_x4::x4_kernel::er
         ManagerPathParts::Root => storage::file_size(sd, name),
         ManagerPathParts::Dir(d) => storage::file_size_in_dir(sd, d, name),
         ManagerPathParts::Subdir(d, s) => storage::file_size_in_subdir(sd, d, s, name),
+        ManagerPathParts::Nested(path) => storage::file_size_in_path(sd, path, name),
     }
 }
 
@@ -847,6 +849,7 @@ fn v2_ensure_path(sd: &SdStorage, path: &str) -> crate::vaachak_x4::x4_kernel::e
             let _ = storage::ensure_dir(sd, d);
             storage::ensure_dir_in_dir(sd, d, s)
         }
+        ManagerPathParts::Nested(path) => storage::ensure_path(sd, path),
     }
 }
 
@@ -1462,8 +1465,8 @@ fn normalize_manager_path(raw: &[u8], out: &mut [u8]) -> Result<usize, &'static 
                 return Err("invalid path separator");
             }
 
-            if component_count >= 2 {
-                return Err("path depth limited to two folders");
+            if component_count >= MANAGER_MAX_PATH_COMPONENTS {
+                return Err("path depth exceeds Wi-Fi transfer limit");
             }
 
             let mut checked = [0u8; 13];
@@ -1538,6 +1541,7 @@ enum ManagerPathParts<'a> {
     Root,
     Dir(&'a str),
     Subdir(&'a str, &'a str),
+    Nested(&'a str),
 }
 
 fn split_manager_path(path: Option<&str>) -> ManagerPathParts<'_> {
@@ -1545,22 +1549,36 @@ fn split_manager_path(path: Option<&str>) -> ManagerPathParts<'_> {
         return ManagerPathParts::Root;
     };
 
+    let path = path.trim_matches('/');
     if path.is_empty() {
         return ManagerPathParts::Root;
     }
 
-    let bytes = path.as_bytes();
-    if let Some(pos) = bytes.iter().position(|&b| b == b'/') {
-        let first = &path[..pos];
-        let second = &path[pos + 1..];
-
-        if first.is_empty() || second.is_empty() {
-            ManagerPathParts::Root
-        } else {
-            ManagerPathParts::Subdir(first, second)
+    let mut first_slash = None;
+    let mut second_slash = None;
+    for (idx, &b) in path.as_bytes().iter().enumerate() {
+        if b == b'/' {
+            if first_slash.is_none() {
+                first_slash = Some(idx);
+            } else {
+                second_slash = Some(idx);
+                break;
+            }
         }
-    } else {
-        ManagerPathParts::Dir(path)
+    }
+
+    match (first_slash, second_slash) {
+        (None, _) => ManagerPathParts::Dir(path),
+        (Some(pos), None) => {
+            let first = &path[..pos];
+            let second = &path[pos + 1..];
+            if first.is_empty() || second.is_empty() {
+                ManagerPathParts::Root
+            } else {
+                ManagerPathParts::Subdir(first, second)
+            }
+        }
+        (Some(_), Some(_)) => ManagerPathParts::Nested(path),
     }
 }
 
@@ -1573,6 +1591,7 @@ fn manager_list_entries(
         ManagerPathParts::Root => storage::list_root_entries(sd, entries),
         ManagerPathParts::Dir(d) => storage::list_dir_entries(sd, d, entries),
         ManagerPathParts::Subdir(d, s) => storage::list_subdir_entries(sd, d, s, entries),
+        ManagerPathParts::Nested(path) => storage::list_path_entries(sd, path, entries),
     }
 }
 
@@ -1585,6 +1604,22 @@ fn manager_ensure_dir(
         ManagerPathParts::Root => storage::ensure_dir(sd, name),
         ManagerPathParts::Dir(d) => storage::ensure_dir_in_dir(sd, d, name),
         ManagerPathParts::Subdir(d, s) => storage::ensure_dir_in_subdir(sd, d, s, name),
+        ManagerPathParts::Nested(_) => {
+            let mut child_path = [0u8; MANAGER_PATH_BUF_LEN];
+            let child_len = compose_child_manager_path(dir, name, &mut child_path).ok_or(
+                crate::vaachak_x4::x4_kernel::error::Error::new(
+                    crate::vaachak_x4::x4_kernel::error::ErrorKind::WriteFailed,
+                    "mkdir_nested_path",
+                ),
+            )?;
+            let child_dir = core::str::from_utf8(&child_path[..child_len]).map_err(|_| {
+                crate::vaachak_x4::x4_kernel::error::Error::new(
+                    crate::vaachak_x4::x4_kernel::error::ErrorKind::WriteFailed,
+                    "mkdir_nested_utf8",
+                )
+            })?;
+            storage::ensure_path(sd, child_dir)
+        }
     }
 }
 
@@ -1601,6 +1636,9 @@ fn manager_read_file(
         ManagerPathParts::Subdir(d, s) => {
             storage::read_file_chunk_in_subdir(sd, d, s, name, offset, buf)
         }
+        ManagerPathParts::Nested(path) => {
+            storage::read_file_chunk_in_path(sd, path, name, offset, buf)
+        }
     }
 }
 
@@ -1614,6 +1652,7 @@ fn manager_write_file(
         ManagerPathParts::Root => storage::write_file(sd, name, data),
         ManagerPathParts::Dir(d) => storage::write_file_in_dir(sd, d, name, data),
         ManagerPathParts::Subdir(d, s) => storage::write_file_in_subdir(sd, d, s, name, data),
+        ManagerPathParts::Nested(path) => storage::write_file_in_path(sd, path, name, data),
     }
 }
 
@@ -1627,6 +1666,7 @@ fn manager_append_file(
         ManagerPathParts::Root => storage::append_root_file(sd, name, data),
         ManagerPathParts::Dir(d) => storage::append_file_in_dir(sd, d, name, data),
         ManagerPathParts::Subdir(d, s) => storage::append_file_in_subdir(sd, d, s, name, data),
+        ManagerPathParts::Nested(path) => storage::append_file_in_path(sd, path, name, data),
     }
 }
 
@@ -1706,6 +1746,7 @@ fn manager_delete_file(
         ManagerPathParts::Root => storage::delete_file(sd, name),
         ManagerPathParts::Dir(d) => storage::delete_file_in_dir(sd, d, name),
         ManagerPathParts::Subdir(d, s) => storage::delete_file_in_subdir(sd, d, s, name),
+        ManagerPathParts::Nested(path) => storage::delete_file_in_path(sd, path, name),
     }
 }
 

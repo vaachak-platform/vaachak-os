@@ -63,6 +63,12 @@ pub use prepared_cache_metadata::{
     prepared_cache_relative_book_path, prepared_cache_relative_file_path,
 };
 pub mod input_semantic_mapping;
+pub mod lua_app_catalog;
+pub mod lua_app_discovery;
+pub mod lua_app_manifest;
+pub mod lua_app_runtime;
+pub mod lua_app_storage;
+pub mod lua_host_api;
 pub use input_semantic_mapping::{
     InputActionKindModel, InputAppContextModel, InputPhysicalButtonModel, InputRepeatPolicyModel,
     InputSemanticActionModel, InputSemanticMappingModel, ReaderPageNavigationModel, context_name,
@@ -70,6 +76,54 @@ pub use input_semantic_mapping::{
     reader_action_for_physical, reader_page_navigation_for_action,
     reader_page_navigation_for_physical, repeat_policy_for_context, semantic_action_for_physical,
     wifi_transfer_action_for_physical,
+};
+
+pub use lua_app_discovery::{
+    LUA_APP_DISCOVERY_DIAGNOSTICS_MAX, LuaAppDiscoveryDiagnosticKindModel,
+    LuaAppDiscoveryDiagnosticModel, LuaAppDiscoveryInputModel, LuaAppDiscoveryOutcomeModel,
+    discover_lua_apps_from_records, is_safe_lua_app_folder_path, lua_app_absolute_dir,
+    lua_app_manifest_path,
+};
+
+pub use lua_host_api::{
+    LUA_HOST_API_FUNCTION_MAX, LUA_HOST_API_NAMESPACE_MAX, LuaHostApiCallDescriptorModel,
+    LuaHostApiErrorModel, LuaHostApiFunctionModel, LuaHostApiNamespaceModel,
+    LuaHostApiRuntimeModel, describe_lua_host_api_call, validate_lua_host_api_call,
+    validate_lua_host_api_permission, validate_lua_host_api_runtime_call,
+};
+
+pub use lua_app_runtime::{
+    LUA_APP_RUNTIME_REASON_MAX, LuaAppLifecycleEventModel, LuaAppLifecycleStateModel,
+    LuaAppRuntimeDiagnosticModel, LuaAppRuntimeErrorModel, LuaAppRuntimeStateModel,
+    LuaAppSafeReturnTargetModel, lua_app_back_event_policy, lua_app_back_exit_diagnostic,
+    lua_app_crash_diagnostic, lua_app_exit_diagnostic, lua_app_lifecycle_transition,
+    lua_app_safe_return_target_for_state,
+};
+
+pub use lua_app_catalog::{
+    LUA_APP_CATALOG_DIAGNOSTICS_MAX, LUA_APP_CATALOG_GROUP_MAX, LUA_APP_CATALOG_MAX,
+    LUA_APP_CATALOG_SORT_KEY_MAX, LuaAppCatalogCategoryGroupModel,
+    LuaAppCatalogDiagnosticKindModel, LuaAppCatalogDiagnosticModel, LuaAppCatalogEntryModel,
+    LuaAppCatalogSourceModel, LuaAppCatalogVisibilityModel, LuaAppDashboardCatalogModel,
+    LuaDashboardCategoryModel, lua_app_catalog_sort_key, lua_app_catalog_visibility_for_state,
+    native_apps_are_authoritative,
+};
+
+pub use lua_app_storage::{
+    LUA_APP_CACHE_ROOT, LUA_APP_DATA_ROOT, LUA_APP_STATE_ROOT, LUA_APP_STORAGE_ABSOLUTE_PATH_MAX,
+    LUA_APP_STORAGE_RELATIVE_PATH_MAX, LUA_APP_STORAGE_ROOT, LuaAppStorageAccessModel,
+    LuaAppStorageErrorModel, LuaAppStorageOperationModel, LuaAppStoragePathModel,
+    LuaAppStorageRequestModel, LuaAppStorageRootModel, is_safe_lua_app_storage_relative_path,
+    lua_app_storage_absolute_path, lua_app_storage_root_path, validate_lua_app_storage_operation,
+    validate_lua_app_storage_root_access,
+};
+
+pub use lua_app_manifest::{
+    LUA_APP_CAPABILITIES_MAX, LUA_APP_ENTRY_MAX, LUA_APP_ID_MAX, LUA_APP_MANIFEST_FILE,
+    LUA_APP_NAME_MAX, LUA_APP_PATH_MAX, LUA_APP_REGISTRY_MAX, LUA_APP_VERSION_MAX, LUA_APPS_ROOT,
+    LuaAppCapabilityModel, LuaAppCategoryModel, LuaAppManifestErrorModel, LuaAppManifestModel,
+    LuaAppRegistryModel, LuaAppTypeModel, LuaDiscoveredAppModel, is_safe_lua_entry_path,
+    is_valid_lua_app_id, is_valid_lua_app_version, parse_lua_app_manifest,
 };
 
 pub use storage_path_helpers::{
