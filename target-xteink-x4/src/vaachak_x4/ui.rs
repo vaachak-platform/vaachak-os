@@ -13,3 +13,5 @@ pub mod biscuit_reader;
 pub mod biscuit_home_apps;
 
 pub mod selection_flash_reduction;
+
+pub mod page_shell;

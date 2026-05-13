@@ -23,6 +23,7 @@ Current product capabilities:
 - Vaachak-owned X4 app/runtime path for Home, Files, Reader, Settings, Network, Wi-Fi Transfer, and optional Lua apps.
 - Reader support for local TXT and EPUB paths, progress/state files, bookmarks, title cache, prepared cache metadata, reader settings, Bionic Reading, Guide Dots, sunlight-fading mitigation, and SD/static font work.
 - Category dashboard with Network, Productivity, Games, Reader, System, and Tools.
+- Vaachak-owned internal UI shell foundation for larger tabbed pages such as Settings, Files, Library, Fonts, Network, and Tools.
 - Wi-Fi setup/scan, Wi-Fi Transfer, and network time integration through Vaachak-owned X4 target code.
 - Optional Lua app deployment from `/VAACHAK/APPS` using uppercase 8.3-safe physical folders.
 - Sample Lua app pack for Calendar, Panchang, Daily Mantra, Dictionary, Unit Converter, and Games.
@@ -66,6 +67,7 @@ Run these before committing:
 ```bash
 cargo fmt --all
 ./scripts/check_repo_hygiene.sh
+./scripts/validate_ui_shell_foundation.sh
 cargo test -p vaachak-core --all-targets
 cargo check -p hal-xteink-x4 --target riscv32imc-unknown-none-elf
 cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf

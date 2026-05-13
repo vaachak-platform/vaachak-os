@@ -21,6 +21,10 @@
 - `docs/operations/final-hardware-validation.md`
 - `docs/reader/on-device-reader-smoke.md`
 
+## UI
+
+- `docs/ui/ui-shell-foundation.md`
+
 ## Reader, state, and formats
 
 - `docs/roadmap/x4-reader-roadmap.md`

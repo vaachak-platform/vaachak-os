@@ -7,6 +7,7 @@ Use production checks instead of historical patch/slice validators:
 ```bash
 cargo fmt --all
 ./scripts/check_repo_hygiene.sh
+./scripts/validate_ui_shell_foundation.sh
 cargo test -p vaachak-core --all-targets
 cargo check -p hal-xteink-x4 --target riscv32imc-unknown-none-elf
 cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf
@@ -24,6 +25,7 @@ vendor_pulp_os_scope_reduction=ok
 reader-bionic=x4-reader-bionic-reading-ok
 reader-guide-dots=x4-reader-guide-dots-ok
 reader-sunlight=x4-reader-sunlight-fading-fix-ok
+ui-shell-foundation-vaachak-ok
 ```
 
 ## Flash-related validation
