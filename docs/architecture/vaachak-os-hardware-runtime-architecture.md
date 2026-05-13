@@ -1,35 +1,55 @@
 # Vaachak OS Hardware Runtime Architecture
 
-## Accepted hardware state
+## Accepted X4 state
 
 ```text
 vaachak_hardware_runtime_final_acceptance=ok
 hardware_physical_full_migration_consolidation=ok
+vendor_pulp_os_scope_reduction=ok
 ```
 
-Vaachak owns the X4 hardware runtime. Pulp hardware fallbacks are disabled from Vaachak integration.
+The active X4 runtime lives in the Vaachak target tree:
 
-| Surface | Active backend | Transport / dependency |
-| --- | --- | --- |
-| SPI physical driver | `VaachakNativeSpiPhysicalDriver` | ESP32-C3 target HAL boundary |
-| SSD1677 display driver | `VaachakNativeSsd1677PhysicalDriver` | `VaachakNativeSpiPhysicalDriver` |
-| SD/MMC physical driver | `VaachakNativeSdMmcPhysicalDriver` | `VaachakNativeSpiPhysicalDriver` |
-| FAT algorithm driver | `VaachakNativeFatAlgorithmDriver` | `VaachakNativeSdMmcPhysicalDriver` |
-| Input sampling | Vaachak native physical sampling driver | target HAL ADC/GPIO boundary |
+```text
+target-xteink-x4/src/vaachak_x4
+```
 
-## Pulp hardware status
+## Active runtime surfaces
 
-Pulp hardware references have been audited, quarantined, and removed/disabled from Vaachak integration. `vendor/pulp-os` remains present only for scoped non-hardware compatibility/import/reference surfaces.
+| Surface | Active path |
+| --- | --- |
+| Boot/runtime entrypoint | `imported/x4_reader_runtime.rs` |
+| Board/runtime helpers | `x4_kernel/**` |
+| Display/UI helpers | `x4_kernel/drivers/**`, `x4_apps/**`, `display/**`, `ui/**` |
+| Input/navigation | `x4_kernel/**`, `input/**`, `apps/manager.rs` |
+| SD/FAT/path behavior | `x4_kernel/**`, `io/**`, `state/**` |
+| Files app | `x4_apps/apps/files.rs` |
+| Reader app | `x4_apps/apps/reader/**` |
+| Settings app | `x4_apps/apps/settings.rs` |
+| Network/Wi-Fi Transfer | `network/**` |
+| Lua app host/catalog | `lua/**` |
+
+## Vendor scope
+
+`vendor/pulp-os` is retained only as scoped compatibility/reference material. New work should not be added there.
+
+`vendor/smol-epub` remains the EPUB dependency source.
+
+## Partition table rule
+
+Keep the accepted X4/CrossPoint-compatible partition table:
+
+```text
+app0    0x10000   0x640000
+app1    0x650000  0x640000
+spiffs  0xc90000  0x360000
+```
 
 ## Validation
 
 ```bash
 cargo fmt --all
-./scripts/validate_vaachak_hardware_runtime_final_acceptance.sh
-./scripts/validate_hardware_physical_full_migration_consolidation.sh
-./scripts/validate_pulp_hardware_reference_deprecation_audit.sh
-./scripts/validate_pulp_hardware_dead_path_quarantine.sh
-./scripts/validate_pulp_hardware_dead_path_removal.sh
-./scripts/validate_vendor_pulp_os_scope_reduction.sh
-cargo build
+./scripts/check_repo_hygiene.sh
+./scripts/validate_x4_standard_partition_table_compatibility.sh
+cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
 ```

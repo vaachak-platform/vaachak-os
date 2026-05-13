@@ -25,6 +25,7 @@ const MAX_GLYPHS: usize = 1024;
 
 const FONT_LATIN: u32 = 1;
 const FONT_DEVANAGARI: u32 = 2;
+const FONT_GUJARATI: u32 = 3;
 
 const VFNT_MAGIC: [u8; 4] = *b"VFNT";
 const VFNT_VERSION: u16 = 1;
@@ -91,8 +92,10 @@ pub(super) struct PreparedTxtState {
     page_files: [String; MAX_PAGES],
     latin_font_name: String,
     devanagari_font_name: String,
+    gujarati_font_name: String,
     latin_font: Vec<u8>,
     devanagari_font: Vec<u8>,
+    gujarati_font: Vec<u8>,
     glyphs: [PreparedGlyphRecord; MAX_GLYPHS],
     glyph_count: usize,
 }
@@ -106,8 +109,10 @@ impl PreparedTxtState {
             page_files: [const { String::new() }; MAX_PAGES],
             latin_font_name: String::new(),
             devanagari_font_name: String::new(),
+            gujarati_font_name: String::new(),
             latin_font: Vec::new(),
             devanagari_font: Vec::new(),
+            gujarati_font: Vec::new(),
             glyphs: [PreparedGlyphRecord::empty(); MAX_GLYPHS],
             glyph_count: 0,
         }
@@ -122,8 +127,10 @@ impl PreparedTxtState {
         }
         self.latin_font_name.clear();
         self.devanagari_font_name.clear();
+        self.gujarati_font_name.clear();
         self.latin_font.clear();
         self.devanagari_font.clear();
+        self.gujarati_font.clear();
         self.glyph_count = 0;
     }
 
@@ -168,13 +175,22 @@ impl PreparedTxtState {
 
         self.latin_font = read_cache_file(k, book_id, fonts.latin, MAX_FONT_BYTES)?;
         self.devanagari_font = read_cache_file(k, book_id, fonts.devanagari, MAX_FONT_BYTES)?;
+        if let Some(gujarati) = fonts.gujarati {
+            self.gujarati_font = read_cache_file(k, book_id, gujarati, MAX_FONT_BYTES)?;
+        }
         VfntView::parse(&self.latin_font).map_err(|_| PreparedTxtError::InvalidFont)?;
         VfntView::parse(&self.devanagari_font).map_err(|_| PreparedTxtError::InvalidFont)?;
+        if !self.gujarati_font.is_empty() {
+            VfntView::parse(&self.gujarati_font).map_err(|_| PreparedTxtError::InvalidFont)?;
+        }
 
         self.book_id.push_str(book_id);
         self.page_count = page_count;
         self.latin_font_name.push_str(fonts.latin);
         self.devanagari_font_name.push_str(fonts.devanagari);
+        if let Some(gujarati) = fonts.gujarati {
+            self.gujarati_font_name.push_str(gujarati);
+        }
         self.active = true;
 
         self.load_page(k, 0)
@@ -195,10 +211,16 @@ impl PreparedTxtState {
         let latin = VfntView::parse(&self.latin_font).map_err(|_| PreparedTxtError::InvalidFont)?;
         let devanagari =
             VfntView::parse(&self.devanagari_font).map_err(|_| PreparedTxtError::InvalidFont)?;
+        let gujarati = if !self.gujarati_font.is_empty() {
+            Some(VfntView::parse(&self.gujarati_font).map_err(|_| PreparedTxtError::InvalidFont)?)
+        } else {
+            None
+        };
         for glyph in &self.glyphs[..count] {
             let font = match glyph.font_id {
                 FONT_LATIN => latin,
                 FONT_DEVANAGARI => devanagari,
+                FONT_GUJARATI => gujarati.ok_or(PreparedTxtError::MissingFont)?,
                 _ => return Err(PreparedTxtError::MissingFont),
             };
             font.glyph(glyph.glyph_id)
@@ -219,11 +241,20 @@ impl PreparedTxtState {
         let Ok(devanagari) = VfntView::parse(&self.devanagari_font) else {
             return;
         };
+        let gujarati = if !self.gujarati_font.is_empty() {
+            VfntView::parse(&self.gujarati_font).ok()
+        } else {
+            None
+        };
 
         for glyph in &self.glyphs[..self.glyph_count] {
             let font = match glyph.font_id {
                 FONT_LATIN => latin,
                 FONT_DEVANAGARI => devanagari,
+                FONT_GUJARATI => match gujarati {
+                    Some(font) => font,
+                    None => continue,
+                },
                 _ => continue,
             };
             let Ok(bitmap) = font.glyph(glyph.glyph_id) else {
@@ -253,6 +284,7 @@ struct ParsedMeta<'a> {
 struct FontIndex<'a> {
     latin: &'a str,
     devanagari: &'a str,
+    gujarati: Option<&'a str>,
 }
 
 #[derive(Clone, Copy)]
@@ -445,18 +477,29 @@ fn parse_meta(input: &str) -> Result<ParsedMeta<'_>, PreparedTxtError> {
 fn parse_fonts_index(input: &str) -> Result<FontIndex<'_>, PreparedTxtError> {
     let mut latin = "";
     let mut devanagari = "";
+    let mut gujarati = None;
     for (key, value) in lines(input) {
-        match key {
-            "Latin" => latin = value,
-            "Devanagari" => devanagari = value,
-            _ => {}
+        if key.eq_ignore_ascii_case("Latin") {
+            latin = value;
+        } else if key.eq_ignore_ascii_case("Devanagari") {
+            devanagari = value;
+        } else if key.eq_ignore_ascii_case("Gujarati") {
+            gujarati = Some(value);
         }
     }
-    if valid_cache_file(latin) && valid_cache_file(devanagari) {
-        Ok(FontIndex { latin, devanagari })
-    } else {
-        Err(PreparedTxtError::MissingFont)
+    if !valid_cache_file(latin) || !valid_cache_file(devanagari) {
+        return Err(PreparedTxtError::MissingFont);
     }
+    if let Some(file) = gujarati {
+        if !valid_cache_file(file) {
+            return Err(PreparedTxtError::MissingFont);
+        }
+    }
+    Ok(FontIndex {
+        latin,
+        devanagari,
+        gujarati,
+    })
 }
 
 fn parse_pages_index(

@@ -26,13 +26,14 @@ const ROW_H: u16 = 34;
 const ROW_GAP: u16 = 4;
 const ROW_STRIDE: u16 = ROW_H + ROW_GAP;
 const HEADER_LIST_GAP: u16 = 8;
+const UI_FONT_SOURCE_LABELS: [&str; 3] = ["Built-in", "Inter", "Lexend"];
 
 const LABEL_X: u16 = LARGE_MARGIN;
 const VALUE_W: u16 = 156;
 const VALUE_X: u16 = SCREEN_W - LARGE_MARGIN - VALUE_W;
 const LABEL_W: u16 = FULL_CONTENT_W - VALUE_W - 8;
 
-const NUM_ROWS: usize = 25;
+const NUM_ROWS: usize = 27;
 
 const SLEEP_IMAGE_MODE_FILE: &str = "SLPMODE.TXT";
 const SLEEP_IMAGE_MODE_COUNT: u8 = 6;
@@ -72,12 +73,14 @@ enum SettingsRowKind {
     Section(&'static str),
     ReaderFont,
     ReaderTheme,
+    ReaderOrientation,
     ReaderPreparedProfile,
     ReaderFallbackPolicy,
     ReaderProgress,
     DisplayRefresh,
     DisplayInvert,
     DisplayContrast,
+    UiFontSource,
     StorageSdStatus,
     StorageBooksCount,
     StorageTitleCache,
@@ -112,6 +115,10 @@ const ROWS: [SettingsRow; NUM_ROWS] = [
         kind: SettingsRowKind::ReaderTheme,
     },
     SettingsRow {
+        label: "Orientation",
+        kind: SettingsRowKind::ReaderOrientation,
+    },
+    SettingsRow {
         label: "Prepared profile",
         kind: SettingsRowKind::ReaderPreparedProfile,
     },
@@ -126,6 +133,10 @@ const ROWS: [SettingsRow; NUM_ROWS] = [
     SettingsRow {
         label: "Display",
         kind: SettingsRowKind::Section("Display"),
+    },
+    SettingsRow {
+        label: "UI Font Source",
+        kind: SettingsRowKind::UiFontSource,
     },
     SettingsRow {
         label: "Refresh mode",
@@ -219,12 +230,14 @@ pub struct SettingsApp {
 
     reader_font: u8,
     reader_theme: u8,
+    reader_orientation: u8,
     reader_prepared_profile: u8,
     reader_fallback_policy: u8,
     reader_show_progress: bool,
     display_refresh: u8,
     display_invert: bool,
     display_contrast: bool,
+    ui_font_source: u8,
     device_sleep_timeout: u8,
     device_battery_mv: u16,
     sleep_image_mode: u8,
@@ -247,12 +260,14 @@ impl SettingsApp {
             rows_top: TITLE_Y + uf.heading.line_height + HEADER_LIST_GAP,
             reader_font: config::DEFAULT_FONT_SIZE_IDX,
             reader_theme: config::DEFAULT_READING_THEME,
+            reader_orientation: config::DEFAULT_READER_ORIENTATION,
             reader_prepared_profile: config::DEFAULT_PREPARED_FONT_PROFILE,
             reader_fallback_policy: config::DEFAULT_PREPARED_FALLBACK_POLICY,
             reader_show_progress: true,
             display_refresh: 1,
             display_invert: false,
             display_contrast: false,
+            ui_font_source: 0,
             device_sleep_timeout: 1,
             device_battery_mv: 0,
             sleep_image_mode: 0,
@@ -262,9 +277,12 @@ impl SettingsApp {
         }
     }
 
-    pub fn set_ui_font_size(&mut self, idx: u8) {
-        self.ui_fonts = fonts::UiFonts::for_size(idx);
-        self.rows_top = TITLE_Y + self.ui_fonts.heading.line_height + HEADER_LIST_GAP;
+    pub fn set_ui_font_style(&mut self, _source: u8, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
+    }
+
+    pub fn set_ui_font_size(&mut self, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
     }
 
     pub fn system_settings(&self) -> &SystemSettings {
@@ -413,9 +431,17 @@ impl SettingsApp {
             .prepared_fallback_policy
             .min(config::PREPARED_FALLBACK_POLICY_COUNT - 1);
         self.reader_show_progress = self.settings.reader_show_progress;
+        self.reader_orientation = self
+            .settings
+            .reader_orientation
+            .min(config::READER_ORIENTATION_COUNT - 1);
         self.display_refresh = self.settings.display_refresh_mode.min(2);
         self.display_invert = self.settings.display_invert_colors;
         self.display_contrast = self.settings.display_contrast_high;
+        self.ui_font_source = self
+            .settings
+            .ui_font_source
+            .min(config::UI_FONT_SOURCE_COUNT - 1);
         self.device_sleep_timeout = match self.settings.sleep_timeout {
             0 => 3,
             1..=5 => 0,
@@ -431,16 +457,33 @@ impl SettingsApp {
                 .reader_theme
                 .min(reader_theme_count().saturating_sub(1)),
             show_progress: self.reader_show_progress,
+            sunlight_fading_fix: self.settings.reader_sunlight_fading_fix,
+            reader_orientation: self
+                .reader_orientation
+                .min(config::READER_ORIENTATION_COUNT - 1),
             prepared_font_profile: self
                 .reader_prepared_profile
                 .min(config::PREPARED_FONT_PROFILE_COUNT - 1),
             prepared_fallback_policy: self
                 .reader_fallback_policy
                 .min(config::PREPARED_FALLBACK_POLICY_COUNT - 1),
+            bionic_mode: self
+                .settings
+                .reader_bionic_mode
+                .min(config::READER_BIONIC_MODE_COUNT - 1),
+            guide_dots_mode: self
+                .settings
+                .reader_guide_dots_mode
+                .min(config::READER_GUIDE_DOTS_MODE_COUNT - 1),
+            reader_font_source: self.settings.reader_font_source,
+            reader_sd_font_slot: self.settings.reader_sd_font_slot,
+            reader_sd_font_id: self.settings.reader_sd_font_id,
+            reader_sd_font_id_len: self.settings.reader_sd_font_id_len,
         });
         self.settings.display_refresh_mode = self.display_refresh.min(2);
         self.settings.display_invert_colors = self.display_invert;
         self.settings.display_contrast_high = self.display_contrast;
+        self.settings.ui_font_source = self.ui_font_source.min(config::UI_FONT_SOURCE_COUNT - 1);
         self.settings.sleep_timeout = match self.device_sleep_timeout {
             0 => 5,
             1 => 10,
@@ -554,6 +597,14 @@ impl SettingsApp {
                 self.reader_theme = cycle_index(self.reader_theme, reader_theme_count(), delta);
                 true
             }
+            SettingsRowKind::ReaderOrientation => {
+                self.reader_orientation = cycle_index(
+                    self.reader_orientation,
+                    config::READER_ORIENTATION_COUNT,
+                    delta,
+                );
+                true
+            }
             SettingsRowKind::ReaderPreparedProfile => {
                 self.reader_prepared_profile = cycle_index(
                     self.reader_prepared_profile,
@@ -584,6 +635,11 @@ impl SettingsApp {
             }
             SettingsRowKind::DisplayContrast => {
                 self.display_contrast = !self.display_contrast;
+                true
+            }
+            SettingsRowKind::UiFontSource => {
+                self.ui_font_source =
+                    cycle_index(self.ui_font_source, config::UI_FONT_SOURCE_COUNT, delta);
                 true
             }
             SettingsRowKind::DeviceSleepTimeout => {
@@ -632,6 +688,12 @@ impl SettingsApp {
             SettingsRowKind::ReaderTheme => {
                 let _ = write!(buf, "{}", reader_theme_name(self.reader_theme));
             }
+            SettingsRowKind::ReaderOrientation => {
+                let idx = self
+                    .reader_orientation
+                    .min(config::READER_ORIENTATION_COUNT - 1) as usize;
+                let _ = write!(buf, "{}", config::READER_ORIENTATION_LABELS[idx]);
+            }
             SettingsRowKind::ReaderPreparedProfile => {
                 let idx =
                     self.reader_prepared_profile
@@ -657,6 +719,10 @@ impl SettingsApp {
             }
             SettingsRowKind::DisplayInvert => {
                 let _ = write!(buf, "{}", on_off(self.display_invert));
+            }
+            SettingsRowKind::UiFontSource => {
+                let idx = self.ui_font_source.min(config::UI_FONT_SOURCE_COUNT - 1) as usize;
+                let _ = write!(buf, "{}", UI_FONT_SOURCE_LABELS[idx]);
             }
             SettingsRowKind::DisplayContrast => {
                 let _ = write!(
@@ -848,8 +914,11 @@ impl App<AppId> for SettingsApp {
             let is_section = matches!(row.kind, SettingsRowKind::Section(_));
 
             if is_section {
-                let section_font = fonts::FontSet::for_size(self.settings.ui_font_size_idx)
-                    .font(fonts::Style::Bold);
+                let section_font = fonts::FontSet::for_source_size(
+                    self.settings.ui_font_source,
+                    self.settings.ui_font_size_idx,
+                )
+                .font(fonts::Style::Bold);
                 BitmapLabel::new(self.row_region(vi), row.label, section_font)
                     .alignment(Alignment::CenterLeft)
                     .inverted(selected)

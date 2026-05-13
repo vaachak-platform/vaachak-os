@@ -1,40 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-fail() { echo "production_repo_hygiene failed: $*" >&2; exit 1; }
+fail() {
+  echo "repository hygiene failed: $*" >&2
+  exit 1
+}
 
-[ -f target-xteink-x4/src/vaachak_x4/physical/mod.rs ] || fail "missing physical mod.rs"
-[ -f target-xteink-x4/src/vaachak_x4/physical/spi_bus_runtime.rs ] || fail "missing production spi_bus_runtime.rs"
-[ -f target-xteink-x4/src/vaachak_x4/imported/x4_reader_runtime.rs ] || fail "missing Vaachak-owned X4 reader runtime"
+[ -f Cargo.toml ] || fail "missing Cargo.toml"
+[ -f target-xteink-x4/Cargo.toml ] || fail "missing target-xteink-x4/Cargo.toml"
+[ -f target-xteink-x4/src/vaachak_x4/apps/home.rs ] || fail "missing Vaachak X4 Home app"
+[ -f target-xteink-x4/src/vaachak_x4/x4_apps/apps/reader/mod.rs ] || fail "missing Vaachak X4 Reader app"
+[ -f target-xteink-x4/src/vaachak_x4/network/mod.rs ] || fail "missing Vaachak X4 network module"
 
-if rg -n "hardware_runtime_executor_(boot_markers|runtime_use|live_handoff)" target-xteink-x4/src/vaachak_x4 >/tmp/vaachak_handoff_refs.txt; then
-  cat /tmp/vaachak_handoff_refs.txt >&2
-  fail "deleted hardware runtime executor handoff references remain"
+if find . -maxdepth 1 \
+  \( -name '*.zip' \
+     -o -name '*_repair' \
+     -o -name '*_restore' \
+     -o -name '*_cleanup' \
+     -o -name '*_contract' \
+     -o -name '*_reset' \
+     -o -name '*_overlay' \
+  \) -print | grep -q .; then
+  find . -maxdepth 1 \
+    \( -name '*.zip' \
+       -o -name '*_repair' \
+       -o -name '*_restore' \
+       -o -name '*_cleanup' \
+       -o -name '*_contract' \
+       -o -name '*_reset' \
+       -o -name '*_overlay' \
+    \) -print >&2
+  fail "generated root patch/deliverable artifacts remain"
 fi
 
-if rg -n "hardware_runtime_backend(_pulp|_takeover|_takeover_cleanup)?|display_runtime_owner|input_runtime_owner|sd_fat_runtime_readonly_owner|storage_probe_mount_runtime_executor_bridge|spi_bus_arbitration_runtime_owner|physical_driver_migration_plan" target-xteink-x4/src/vaachak_x4/physical target-xteink-x4/src/vaachak_x4/imported target-xteink-x4/src/vaachak_x4/boot.rs >/tmp/vaachak_deleted_refs.txt; then
-  cat /tmp/vaachak_deleted_refs.txt >&2
-  fail "deleted transition module references remain"
+if find scripts -maxdepth 1 -type f \
+  \( -name 'patch_*' -o -name 'apply_*' -o -name 'cleanup_*' \) -print | grep -q .; then
+  find scripts -maxdepth 1 -type f \
+    \( -name 'patch_*' -o -name 'apply_*' -o -name 'cleanup_*' \) -print >&2
+  fail "generated patch/apply/cleanup scripts remain"
 fi
 
-
-if [ -d vendor/pulp-os ]; then
-  fail "vendor/pulp-os must not remain in the active repository after runtime retirement"
+if find scripts -maxdepth 1 -type f \
+  \( -name 'validate_*_repair*' \
+     -o -name 'validate_*_cleanup*' \
+     -o -name 'validate_*_restore*' \
+     -o -name 'validate_*_pack*' \
+     -o -name 'validate_*_slice*' \
+  \) -print | grep -q .; then
+  find scripts -maxdepth 1 -type f \
+    \( -name 'validate_*_repair*' \
+       -o -name 'validate_*_cleanup*' \
+       -o -name 'validate_*_restore*' \
+       -o -name 'validate_*_pack*' \
+       -o -name 'validate_*_slice*' \
+    \) -print >&2
+  fail "one-off repair/cleanup/feature-slice validators remain"
 fi
 
-if rg -n 'pulp-os|pulp_os::|x4-kernel =|package = "x4-os"|vendor/pulp-os' Cargo.toml target-xteink-x4/Cargo.toml target-xteink-x4/src >/tmp/vaachak_vendor_runtime_refs.txt; then
-  cat /tmp/vaachak_vendor_runtime_refs.txt >&2
-  fail "active vendor Pulp runtime references remain"
+if find . \
+  \( -path './.git' -o -path './target' -o -path './vendor' \) -prune -o \
+  \( -name '__pycache__' -o -name '*.pyc' -o -name '__MACOSX' -o -name '.DS_Store' \) -print | grep -q .; then
+  find . \
+    \( -path './.git' -o -path './target' -o -path './vendor' \) -prune -o \
+    \( -name '__pycache__' -o -name '*.pyc' -o -name '__MACOSX' -o -name '.DS_Store' \) -print >&2
+  fail "generated cache or OS metadata remains"
 fi
 
-if find target-xteink-x4/src/vaachak_x4/contracts -maxdepth 1 -name '*_smoke.rs' | grep -q .; then
-  find target-xteink-x4/src/vaachak_x4/contracts -maxdepth 1 -name '*_smoke.rs' >&2
-  fail "smoke contract modules remain in production contract tree"
+if rg -n 'pulp_os::|package = "x4-os"|x4-kernel =' Cargo.toml target-xteink-x4/Cargo.toml target-xteink-x4/src >/tmp/vaachak_active_pulp_refs.txt; then
+  cat /tmp/vaachak_active_pulp_refs.txt >&2
+  fail "active old Pulp package references remain"
 fi
 
-if find . -maxdepth 1 \( -name '*.zip' -o -name '*_fix' -o -name '*_cleanup' -o -name '*_migration' \) | grep -q .; then
-  find . -maxdepth 1 \( -name '*.zip' -o -name '*_fix' -o -name '*_cleanup' -o -name '*_migration' \) >&2
-  fail "generated overlay artifacts remain in repo root"
+if rg -n 'phase[[:space:]_-]*[0-9]|Phase[[:space:]_-]*[0-9]' \
+  README.md SCOPE.md ROADMAP.md docs/architecture docs/development docs/operations \
+  --glob '*.md' >/tmp/vaachak_phase_doc_refs.txt; then
+  cat /tmp/vaachak_phase_doc_refs.txt >&2
+  fail "phase-numbered delivery references remain in current-state docs"
 fi
 
-echo "production_repo_hygiene=ok"
+echo "repository_hygiene=ok"

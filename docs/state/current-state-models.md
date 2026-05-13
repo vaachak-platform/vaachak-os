@@ -1,29 +1,20 @@
 # Current State Models
 
-This document records Vaachak-owned state models and the imported runtime boundary.
+This document records current Vaachak-owned state models and compatibility paths.
 
-## Ownership boundary
-
-Vaachak-owned model surfaces:
+## Vaachak-owned model surfaces
 
 - reader preferences
 - sleep image mode
-- Date & Time cached status
+- Date & Time cached/live/unsynced state
 - Wi-Fi Transfer configuration shape
 - reader progress records
 - bookmark records
 - title-cache records
 - prepared-cache metadata
 - storage/path helper constants
-
-Still owned by the active imported runtime:
-
-- actual SD reads/writes
-- actual Settings UI behavior
-- actual Reader behavior
-- actual Wi-Fi server/upload handlers
-- actual display drawing/refresh
-- actual input scan/debounce
+- SD font catalog/selection state
+- reader viewport state
 
 ## Compatibility paths
 
@@ -31,13 +22,15 @@ Current runtime compatibility paths include:
 
 ```text
 /_X4/SETTINGS.TXT
-SLPMODE.TXT
-TIME.TXT
+/SLPMODE.TXT
+/TIME.TXT
 /FCACHE/<BOOKID>
 state/<BOOKID>.PRG
 state/<BOOKID>.BKM
 state/BMIDX.TXT
 /_X4/TITLES.BIN
+/VAACHAK/APPS
+/VAACHAK/FONTS
 ```
 
 ## Reader preferences
@@ -66,6 +59,7 @@ Use repository-level validation:
 
 ```bash
 cargo fmt --all
-cargo build
-./scripts/validate_documentation_refresh.sh
+./scripts/check_repo_hygiene.sh
+cargo test -p vaachak-core --all-targets
+cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
 ```

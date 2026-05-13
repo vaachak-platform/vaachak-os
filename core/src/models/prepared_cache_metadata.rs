@@ -3,6 +3,9 @@ use core::fmt::Write as _;
 use heapless::{String, Vec};
 use serde::{Deserialize, Serialize};
 
+use super::reader_viewport::ReaderViewportModel;
+use super::state::ReaderOrientationModel;
+
 pub const PREPARED_CACHE_ROOT_DIR: &str = "FCACHE";
 pub const PREPARED_CACHE_ROOT_PATH: &str = "/FCACHE";
 pub const PREPARED_META_FILE: &str = "META.TXT";
@@ -150,6 +153,12 @@ pub struct PreparedCacheManifestModel {
     pub source: String<PREPARED_SOURCE_MAX>,
     pub page_count: u16,
     pub kind: PreparedCacheKindModel,
+    #[serde(default)]
+    pub orientation: ReaderOrientationModel,
+    #[serde(default = "default_reader_logical_width")]
+    pub logical_width: u16,
+    #[serde(default = "default_reader_logical_height")]
+    pub logical_height: u16,
 }
 
 impl PreparedCacheManifestModel {
@@ -164,6 +173,27 @@ impl PreparedCacheManifestModel {
                 0
             },
             total_pages: self.page_count,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreparedCacheLayoutKeyModel {
+    pub orientation: ReaderOrientationModel,
+    pub logical_width: u16,
+    pub logical_height: u16,
+    pub content_width: u16,
+    pub content_height: u16,
+}
+
+impl PreparedCacheLayoutKeyModel {
+    pub const fn from_viewport(viewport: ReaderViewportModel) -> Self {
+        Self {
+            orientation: viewport.orientation,
+            logical_width: viewport.logical_width,
+            logical_height: viewport.logical_height,
+            content_width: viewport.content_region.width,
+            content_height: viewport.content_region.height,
         }
     }
 }
@@ -283,6 +313,9 @@ pub fn parse_prepared_meta(input: &str) -> PreparedCacheResult<PreparedCacheMani
     let mut source = "";
     let mut page_count = None;
     let mut kind = PreparedCacheKindModel::Unknown;
+    let mut orientation = ReaderOrientationModel::Portrait;
+    let mut logical_width = None;
+    let mut logical_height = None;
 
     for (key, value) in key_value_lines(input) {
         match key {
@@ -290,6 +323,13 @@ pub fn parse_prepared_meta(input: &str) -> PreparedCacheResult<PreparedCacheMani
             "source" => source = value,
             "page_count" => page_count = parse_u16(value),
             "kind" => kind = parse_kind(value),
+            "orientation" | "reader_orientation" => {
+                if let Some(value) = parse_reader_orientation(value) {
+                    orientation = value;
+                }
+            }
+            "logical_width" => logical_width = parse_u16(value),
+            "logical_height" => logical_height = parse_u16(value),
             _ => {}
         }
     }
@@ -306,12 +346,18 @@ pub fn parse_prepared_meta(input: &str) -> PreparedCacheResult<PreparedCacheMani
     if matches!(kind, PreparedCacheKindModel::Unknown) {
         kind = PreparedCacheKindModel::from_source_path(source);
     }
+    let viewport = ReaderViewportModel::for_orientation(orientation);
+    let logical_width = logical_width.unwrap_or(viewport.logical_width);
+    let logical_height = logical_height.unwrap_or(viewport.logical_height);
 
     Ok(PreparedCacheManifestModel {
         book_id,
         source: source_out,
         page_count,
         kind,
+        orientation,
+        logical_width,
+        logical_height,
     })
 }
 
@@ -421,6 +467,36 @@ fn key_value_lines(input: &str) -> impl Iterator<Item = (&str, &str)> {
         let (key, value) = line.split_once('=')?;
         Some((key.trim(), value.trim()))
     })
+}
+
+fn default_reader_logical_width() -> u16 {
+    ReaderViewportModel::for_orientation(ReaderOrientationModel::Portrait).logical_width
+}
+
+fn default_reader_logical_height() -> u16 {
+    ReaderViewportModel::for_orientation(ReaderOrientationModel::Portrait).logical_height
+}
+
+fn parse_reader_orientation(input: &str) -> Option<ReaderOrientationModel> {
+    if input == "0" || eq_ascii_ignore_case(input, "portrait") {
+        Some(ReaderOrientationModel::Portrait)
+    } else if input == "1" || eq_ascii_ignore_case(input, "inverted") {
+        Some(ReaderOrientationModel::Inverted)
+    } else if input == "2"
+        || eq_ascii_ignore_case(input, "landscape_cw")
+        || eq_ascii_ignore_case(input, "landscape-cw")
+        || eq_ascii_ignore_case(input, "landscape cw")
+    {
+        Some(ReaderOrientationModel::LandscapeCw)
+    } else if input == "3"
+        || eq_ascii_ignore_case(input, "landscape_ccw")
+        || eq_ascii_ignore_case(input, "landscape-ccw")
+        || eq_ascii_ignore_case(input, "landscape ccw")
+    {
+        Some(ReaderOrientationModel::LandscapeCcw)
+    } else {
+        None
+    }
 }
 
 fn parse_kind(input: &str) -> PreparedCacheKindModel {
@@ -611,5 +687,32 @@ mod tests {
         let err = parse_prepared_page_record(0, "00000000.VRN", b"bad").unwrap_err();
         assert_eq!(err, PreparedCacheErrorClassModel::InvalidPage);
         assert!(PreparedCacheStatusModel::from_error(err).should_show_diagnostic());
+    }
+
+    #[test]
+    fn prepared_meta_defaults_to_portrait_viewport_key_fields() {
+        let meta = "book_id=15D1296A\nsource=/YEARLY_H.TXT\npage_count=17\n";
+        let manifest = parse_prepared_meta(meta).unwrap();
+        assert_eq!(manifest.orientation, ReaderOrientationModel::Portrait);
+        assert_eq!(manifest.logical_width, 480);
+        assert_eq!(manifest.logical_height, 800);
+    }
+
+    #[test]
+    fn prepared_meta_accepts_landscape_viewport_key_fields_without_enabling_ui() {
+        let meta =
+            "book_id=15D1296A\nsource=/YEARLY_H.TXT\npage_count=17\norientation=landscape_cw\n";
+        let manifest = parse_prepared_meta(meta).unwrap();
+        assert_eq!(manifest.orientation, ReaderOrientationModel::LandscapeCw);
+        assert_eq!(manifest.logical_width, 800);
+        assert_eq!(manifest.logical_height, 480);
+
+        let key = PreparedCacheLayoutKeyModel::from_viewport(ReaderViewportModel::for_orientation(
+            manifest.orientation,
+        ));
+        assert_eq!(key.orientation, ReaderOrientationModel::LandscapeCw);
+        assert_eq!(key.logical_width, 800);
+        assert_eq!(key.logical_height, 480);
+        assert_eq!(key.content_width, 768);
     }
 }

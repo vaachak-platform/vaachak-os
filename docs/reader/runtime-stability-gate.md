@@ -1,6 +1,6 @@
 # Reader Runtime Stability Gate
 
-This gate validates the current reader-first X4 runtime without claiming that hardware drivers have been migrated out of the imported runtime.
+This gate validates the current reader-first X4 runtime.
 
 ## Scope
 
@@ -17,8 +17,10 @@ This gate validates the current reader-first X4 runtime without claiming that ha
 
 ```bash
 cargo fmt --all
-cargo build
-./scripts/validate_documentation_refresh.sh
+./scripts/check_repo_hygiene.sh
+cargo test -p vaachak-core --all-targets
+cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf
+cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
 ```
 
 ## Device gate
@@ -27,4 +29,4 @@ Use `docs/reader/on-device-reader-smoke.md` after flashing.
 
 ## Notes
 
-The root Cargo config intentionally avoids adding embedded linker flags globally. Keep embedded linker setup package-local so nested `vendor/pulp-os` builds are not polluted by parent Cargo config.
+The root Cargo config intentionally avoids adding embedded linker flags globally. Keep embedded linker setup package-local so nested or host-side builds are not polluted by parent Cargo config.

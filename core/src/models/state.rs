@@ -141,11 +141,60 @@ impl PreparedFallbackPolicyModel {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReaderOrientationModel {
+    #[default]
+    Portrait,
+    Inverted,
+    LandscapeCw,
+    LandscapeCcw,
+}
+
+impl ReaderOrientationModel {
+    pub const MODEL_COUNT: u8 = 4;
+    pub const SELECTABLE_READER_UI_COUNT: u8 = 4;
+
+    pub const fn from_index(idx: u8) -> Self {
+        match idx {
+            1 => Self::Inverted,
+            2 => Self::LandscapeCw,
+            3 => Self::LandscapeCcw,
+            _ => Self::Portrait,
+        }
+    }
+
+    pub const fn index(self) -> u8 {
+        match self {
+            Self::Portrait => 0,
+            Self::Inverted => 1,
+            Self::LandscapeCw => 2,
+            Self::LandscapeCcw => 3,
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Portrait => "Portrait",
+            Self::Inverted => "Inverted",
+            Self::LandscapeCw => "Landscape CW",
+            Self::LandscapeCcw => "Landscape CCW",
+        }
+    }
+
+    pub const fn is_selectable_in_reader_ui(self) -> bool {
+        matches!(
+            self,
+            Self::Portrait | Self::Inverted | Self::LandscapeCw | Self::LandscapeCcw
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReaderPreferencesModel {
     pub book_font: u8,
     pub reading_theme: u8,
     pub show_progress: bool,
+    pub reader_orientation: u8,
     pub prepared_font_profile: u8,
     pub prepared_fallback_policy: u8,
 }
@@ -156,6 +205,7 @@ impl Default for ReaderPreferencesModel {
             book_font: DEFAULT_FONT_SIZE_IDX,
             reading_theme: DEFAULT_READING_THEME_IDX,
             show_progress: true,
+            reader_orientation: 0,
             prepared_font_profile: DEFAULT_PREPARED_FONT_PROFILE,
             prepared_fallback_policy: DEFAULT_PREPARED_FALLBACK_POLICY,
         }
@@ -166,6 +216,9 @@ impl ReaderPreferencesModel {
     pub fn sanitize(&mut self) {
         self.book_font = self.book_font.min(MAX_FONT_SIZE_IDX);
         self.reading_theme = self.reading_theme.min(READING_THEME_COUNT - 1);
+        self.reader_orientation = self
+            .reader_orientation
+            .min(ReaderOrientationModel::MODEL_COUNT - 1);
         self.prepared_font_profile = self
             .prepared_font_profile
             .min(PREPARED_FONT_PROFILE_COUNT - 1);
@@ -176,6 +229,10 @@ impl ReaderPreferencesModel {
 
     pub const fn theme(self) -> ReadingThemeModel {
         ReadingThemeModel::from_index(self.reading_theme)
+    }
+
+    pub const fn orientation(self) -> ReaderOrientationModel {
+        ReaderOrientationModel::from_index(self.reader_orientation)
     }
 
     pub const fn prepared_profile(self) -> PreparedFontProfileModel {
@@ -550,6 +607,11 @@ pub fn parse_settings_txt(data: &[u8]) -> SystemSettingsModel {
                     settings.reader.show_progress = v;
                 }
             }
+            "reader_orientation" | "reading_orientation" => {
+                if let Some(v) = parse_u16(value) {
+                    settings.reader.reader_orientation = v as u8;
+                }
+            }
             "prepared_font_profile" => {
                 if let Some(v) = parse_u16(value) {
                     settings.reader.prepared_font_profile = v as u8;
@@ -610,6 +672,7 @@ pub fn write_reader_preferences_txt(prefs: &ReaderPreferencesModel, out: &mut [u
         "show_progress={}",
         if prefs.show_progress { 1 } else { 0 }
     );
+    let _ = writeln!(writer, "reader_orientation={}", prefs.reader_orientation);
     let _ = writeln!(
         writer,
         "prepared_font_profile={}",
@@ -845,6 +908,7 @@ wifi_pass=secret\n";
             show_progress: false,
             prepared_font_profile: 1,
             prepared_fallback_policy: 2,
+            reader_orientation: 1,
         };
         let mut buf = [0u8; 160];
         let n = write_reader_preferences_txt(&prefs, &mut buf);
@@ -854,6 +918,7 @@ wifi_pass=secret\n";
         assert!(text.contains("show_progress=0"));
         assert!(text.contains("prepared_font_profile=1"));
         assert!(text.contains("prepared_fallback_policy=2"));
+        assert!(text.contains("reader_orientation=1"));
     }
 
     #[test]

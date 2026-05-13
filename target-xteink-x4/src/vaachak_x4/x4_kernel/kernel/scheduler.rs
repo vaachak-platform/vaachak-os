@@ -172,6 +172,15 @@ impl super::Kernel {
                 continue;
             }
 
+            if self.epd.rotation() != app_mgr.desired_display_rotation() {
+                let _ = app_mgr.take_redraw();
+                if self.render(app_mgr, Redraw::Full).await {
+                    self.sleep_with_session(app_mgr, "power held").await;
+                    continue;
+                }
+                continue;
+            }
+
             if app_mgr.ctx_mut().render_ready() {
                 let redraw = app_mgr.take_redraw();
                 if self.render(app_mgr, redraw).await {
@@ -265,7 +274,14 @@ impl super::Kernel {
     //
     // returns true if power-long-press arrived during the waveform and
     // the caller should enter sleep
-    async fn render<A: AppLayer>(&mut self, app_mgr: &mut A, redraw: Redraw) -> bool {
+    async fn render<A: AppLayer>(&mut self, app_mgr: &mut A, mut redraw: Redraw) -> bool {
+        let desired_rotation = app_mgr.desired_display_rotation();
+        if self.epd.rotation() != desired_rotation {
+            self.epd.set_rotation(desired_rotation);
+            esp_println::println!("reader-orientation=x4-reader-landscape-render-ok");
+            redraw = Redraw::Full;
+        }
+
         let mut sleep_requested = false;
 
         'render: {
@@ -353,6 +369,11 @@ impl super::Kernel {
                         Redraw::Partial(_) | Redraw::Full => {
                             info!("display: coalesced transition redraw into full frame");
                         }
+                    }
+
+                    let desired_rotation = app_mgr.desired_display_rotation();
+                    if self.epd.rotation() != desired_rotation {
+                        self.epd.set_rotation(desired_rotation);
                     }
                 }
 

@@ -2,9 +2,22 @@
 
 ## Baseline
 
-Vaachak-native hardware runtime is accepted. The next roadmap is product/runtime work, not hardware migration.
+Vaachak OS is now in a cleaned X4 reader/runtime baseline. Hardware cleanup is not the main roadmap path; the next work should improve reader product behavior without reintroducing patch artifacts.
 
-## Next deliverables
+## Current accepted reader features
+
+- TXT and EPUB reader path.
+- Progress/state/cache persistence.
+- Bookmarks where supported.
+- Title cache and long filename work.
+- Prepared cache metadata and large-cache transfer notes.
+- Bionic Reading.
+- Guide Dots.
+- Sunlight-fading mitigation.
+- Reader settings sync between Settings and Reader-visible behavior.
+- SD/static font work.
+
+## Next milestones
 
 ### 1. Reader Home + Resume Foundation
 

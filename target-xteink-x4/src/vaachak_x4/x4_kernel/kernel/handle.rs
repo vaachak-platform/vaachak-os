@@ -93,6 +93,43 @@ impl<'k> KernelHandle<'k> {
     }
 
     #[inline]
+    pub fn read_sd_font_manifest_start(&mut self, buf: &mut [u8]) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/FONTS", "MANIFEST.TXT", buf)
+    }
+
+    #[inline]
+    pub fn read_sd_ui_font_manifest_start(&mut self, buf: &mut [u8]) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/FONTS", "UIFONTS.TXT", buf)
+    }
+
+    #[inline]
+    pub fn read_sd_font_file_start(&mut self, name: &str, buf: &mut [u8]) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/FONTS", name, buf)
+    }
+
+    #[inline]
+    pub fn read_lua_game_app_file_start(
+        &mut self,
+        folder: &str,
+        name: &str,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        let path = match folder {
+            "SUDOKU" => "VAACHAK/APPS/SUDOKU",
+            "MINES" => "VAACHAK/APPS/MINES",
+            "FREECELL" => "VAACHAK/APPS/FREECELL",
+            "MEMCARD" => "VAACHAK/APPS/MEMCARD",
+            "SOLITAIR" => "VAACHAK/APPS/SOLITAIR",
+            "LUDO" => "VAACHAK/APPS/LUDO",
+            "SNAKES" => "VAACHAK/APPS/SNAKES",
+            "DICT" => "VAACHAK/APPS/DICT",
+            "UNITS" => "VAACHAK/APPS/UNITS",
+            _ => "VAACHAK/APPS/SUDOKU",
+        };
+        storage::read_file_start_in_path(&self.kernel.sd, path, name, buf)
+    }
+
+    #[inline]
     pub fn write_file(&mut self, name: &str, data: &[u8]) -> Result<()> {
         storage::write_file(&self.kernel.sd, name, data)
     }
@@ -227,6 +264,50 @@ impl<'k> KernelHandle<'k> {
         storage::delete_in_x4_subdir(&self.kernel.sd, dir, name)
     }
 
+    #[inline]
+    pub fn read_lua_dictionary_fallback_json_start(
+        &mut self,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/APPS/DICT", "DICT.JSN", buf)
+    }
+
+    #[inline]
+    pub fn read_lua_dictionary_index_start(&mut self, buf: &mut [u8]) -> Result<(u32, usize)> {
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/APPS/DICT", "INDEX.TXT", buf)
+    }
+
+    #[inline]
+    pub fn read_lua_dictionary_index_chunk(
+        &mut self,
+        offset: u32,
+        buf: &mut [u8],
+    ) -> Result<usize> {
+        storage::read_file_chunk_in_path(
+            &self.kernel.sd,
+            "VAACHAK/APPS/DICT",
+            "INDEX.TXT",
+            offset,
+            buf,
+        )
+    }
+
+    #[inline]
+    pub fn read_lua_dictionary_shard_start(
+        &mut self,
+        shard_file: &str,
+        buf: &mut [u8],
+    ) -> Result<(u32, usize)> {
+        let mut name = shard_file;
+        if let Some((_, tail)) = shard_file.rsplit_once('/') {
+            name = tail;
+        }
+        if let Some((_, tail)) = name.rsplit_once('\\') {
+            name = tail;
+        }
+        storage::read_file_start_in_path(&self.kernel.sd, "VAACHAK/APPS/DICT/DATA", name, buf)
+    }
+
     // _x4/ direct file ops (v3 unified cache files)
 
     #[inline]
@@ -263,6 +344,11 @@ impl<'k> KernelHandle<'k> {
     #[inline]
     pub fn delete_file(&mut self, name: &str) -> Result<()> {
         storage::delete_file(&self.kernel.sd, name)
+    }
+
+    #[inline]
+    pub fn list_prepared_cache_dirs(&mut self, buf: &mut [DirEntry]) -> Result<usize> {
+        storage::list_dir_entries(&self.kernel.sd, "FCACHE", buf)
     }
 
     pub fn dir_page(&mut self, offset: usize, buf: &mut [DirEntry]) -> Result<DirPage> {

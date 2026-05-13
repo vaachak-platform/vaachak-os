@@ -15,6 +15,7 @@ use crate::vaachak_x4::x4_apps::apps::{
 use crate::vaachak_x4::x4_kernel::app::{AppScreen, AppShell};
 use esp_hal::delay::Delay;
 
+use crate::vaachak_x4::text::static_font_assets;
 use crate::vaachak_x4::x4_apps::apps::widgets::quick_menu::QuickMenuResult;
 use crate::vaachak_x4::x4_apps::apps::widgets::{ButtonFeedback, QuickMenu};
 use crate::vaachak_x4::x4_apps::fonts;
@@ -23,6 +24,7 @@ use crate::vaachak_x4::x4_kernel::board::action::{Action, ActionEvent, ButtonMap
 use crate::vaachak_x4::x4_kernel::board::{Epd, SCREEN_H, SCREEN_W};
 use crate::vaachak_x4::x4_kernel::drivers::input::Event;
 use crate::vaachak_x4::x4_kernel::drivers::sdcard::SdStorage;
+use crate::vaachak_x4::x4_kernel::drivers::ssd1677::Rotation;
 use crate::vaachak_x4::x4_kernel::drivers::storage;
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 use crate::vaachak_x4::x4_kernel::kernel::KernelHandle;
@@ -292,6 +294,13 @@ impl AppManager {
         }
     }
 
+    pub fn desired_display_rotation(&self) -> Rotation {
+        match self.launcher.active() {
+            AppId::Reader => self.reader.display_rotation(),
+            _ => Rotation::Deg270,
+        }
+    }
+
     pub fn load_home_recent(&mut self, k: &mut KernelHandle<'_>) {
         self.home.load_recent(k);
         self.sync_shell_home();
@@ -543,6 +552,16 @@ impl AppManager {
                 Transition::None
             }
 
+            QuickMenuResult::AppCycleChanged(_id) => {
+                let region = self.quick_menu.region();
+                self.sync_quick_menu();
+                if self.quick_menu.dirty {
+                    self.launcher.ctx.mark_dirty(region);
+                    self.quick_menu.dirty = false;
+                }
+                Transition::None
+            }
+
             QuickMenuResult::GoHome => {
                 self.sync_quick_menu();
                 Transition::Home
@@ -712,20 +731,39 @@ impl AppManager {
 
     pub fn propagate_fonts(&mut self) {
         let ss = self.settings.system_settings();
-        let ui_idx = ss.ui_font_size_idx;
+        let _ui_idx = ss.ui_font_size_idx;
+        let _ui_source = ss.ui_font_source;
+        let ui_font_source = ss.ui_font_source;
         let book_idx = ss.book_font_size_idx;
         let theme_idx = ss.reading_theme;
         let show_progress = ss.reader_show_progress;
+        let sunlight_fading_fix = ss.reader_sunlight_fading_fix;
+        let bionic_mode = ss.reader_bionic_mode;
+        let guide_dots_mode = ss.reader_guide_dots_mode;
+        let reader_orientation = ss.reader_orientation;
         let prepared_profile = ss.prepared_font_profile;
         let fallback_policy = ss.prepared_fallback_policy;
-        self.home.set_ui_font_size(ui_idx);
-        self.files.set_ui_font_size(ui_idx);
-        self.settings.set_ui_font_size(ui_idx);
+        let reader_font_source = ss.reader_font_source;
+        let reader_sd_font_slot = ss.reader_sd_font_slot;
+        let reader_sd_font_id = ss.reader_sd_font_id;
+        let _reader_sd_font_id_len = ss
+            .reader_sd_font_id_len
+            .min(config::READER_SD_FONT_ID_CAP as u8) as usize;
+        static_font_assets::set_ui_font_source(ui_font_source);
         self.reader.set_book_font_size(book_idx);
         self.reader.set_reading_theme(theme_idx);
+        self.reader.set_reader_orientation(reader_orientation);
         self.reader.set_show_progress_chrome(show_progress);
+        self.reader.set_sunlight_fading_fix(sunlight_fading_fix);
+        self.reader.set_bionic_mode(bionic_mode);
+        self.reader.set_guide_dots_mode(guide_dots_mode);
         self.reader.set_prepared_font_profile(prepared_profile);
         self.reader.set_prepared_fallback_policy(fallback_policy);
+        self.reader.set_sd_font_selection(
+            reader_font_source,
+            reader_sd_font_slot,
+            &reader_sd_font_id,
+        );
         let chrome = fonts::chrome_font();
         self.reader.set_chrome_font(chrome);
         self.quick_menu.set_chrome_font(chrome);
@@ -761,6 +799,7 @@ impl AppManager {
 
     fn sync_quick_menu(&mut self) {
         let active = self.launcher.active();
+        let rotation_before = self.desired_display_rotation();
 
         for id in 0..=u8::MAX {
             if let Some(value) = self.quick_menu.app_cycle_value(id) {
@@ -771,6 +810,14 @@ impl AppManager {
         }
 
         self.sync_active_pending_setting();
+
+        if active == AppId::Reader {
+            self.propagate_fonts();
+            let rotation_after = self.desired_display_rotation();
+            if rotation_before != rotation_after {
+                self.launcher.ctx.request_full_redraw();
+            }
+        }
     }
 
     fn wifi_config_for_special_mode(&self, sd: &SdStorage) -> WifiConfig {
@@ -813,11 +860,21 @@ impl AppManager {
         self.settings.wifi_config()
     }
 
+    #[inline]
+    pub fn reader_sunlight_fading_fix_active(&self) -> bool {
+        self.launcher.active() == AppId::Reader && self.reader.sunlight_fading_fix_enabled()
+    }
     pub fn ghost_clear_every(&self) -> u32 {
-        if self.settings.is_loaded() {
+        let configured = if self.settings.is_loaded() {
             self.settings.system_settings().ghost_clear_every as u32
         } else {
             crate::vaachak_x4::x4_kernel::kernel::DEFAULT_GHOST_CLEAR_EVERY
+        };
+
+        if self.reader_sunlight_fading_fix_active() {
+            configured.min(2)
+        } else {
+            configured
         }
     }
 }
@@ -848,6 +905,10 @@ impl AppLayer for AppManager {
 
     fn draw(&self, strip: &mut StripBuffer) {
         AppManager::draw(self, strip);
+    }
+
+    fn desired_display_rotation(&self) -> Rotation {
+        AppManager::desired_display_rotation(self)
     }
 
     #[inline]

@@ -44,12 +44,41 @@ pub const DEFAULT_READING_THEME: u8 = 1;
 
 pub const DEFAULT_READER_SHOW_PROGRESS: bool = true;
 
+pub const READER_BIONIC_MODE_COUNT: u8 = 3;
+pub const DEFAULT_READER_BIONIC_MODE: u8 = 0;
+pub const READER_BIONIC_MODE_LABELS: [&str; READER_BIONIC_MODE_COUNT as usize] =
+    ["Off", "Light", "Medium"];
+
+pub const READER_GUIDE_DOTS_MODE_COUNT: u8 = 3;
+pub const DEFAULT_READER_GUIDE_DOTS_MODE: u8 = 0;
+pub const READER_GUIDE_DOTS_MODE_LABELS: [&str; READER_GUIDE_DOTS_MODE_COUNT as usize] =
+    ["Off", "Small", "Medium"];
+
+pub const READER_ORIENTATION_COUNT: u8 = 4;
+pub const DEFAULT_READER_ORIENTATION: u8 = 0;
+pub const READER_ORIENTATION_LABELS: [&str; READER_ORIENTATION_COUNT as usize] =
+    ["Portrait", "Inverted", "Landscape CW", "Landscape CCW"];
+
+pub const fn reader_orientation_label(idx: u8) -> &'static str {
+    match idx {
+        1 => "Inverted",
+        2 => "Landscape CW",
+        3 => "Landscape CCW",
+        _ => "Portrait",
+    }
+}
+
+pub const DEFAULT_READER_SUNLIGHT_FADING_FIX: bool = false;
+
 pub const PREPARED_FONT_PROFILE_COUNT: u8 = 3;
 pub const DEFAULT_PREPARED_FONT_PROFILE: u8 = 1;
 pub const PREPARED_FONT_PROFILE_LABELS: [&str; PREPARED_FONT_PROFILE_COUNT as usize] =
     ["Compact", "Balanced", "Large"];
 
 pub const PREPARED_FALLBACK_POLICY_COUNT: u8 = 3;
+pub const READER_FONT_SOURCE_COUNT: u8 = 4;
+pub const READER_SD_FONT_ID_CAP: usize = 8;
+pub const UI_FONT_SOURCE_COUNT: u8 = 3;
 pub const DEFAULT_PREPARED_FALLBACK_POLICY: u8 = 0;
 pub const PREPARED_FALLBACK_POLICY_LABELS: [&str; PREPARED_FALLBACK_POLICY_COUNT as usize] =
     ["Visible", "Latin", "Reject"];
@@ -106,13 +135,22 @@ pub struct SystemSettings {
 
     // font settings
     pub book_font_size_idx: u8, // 0 = XSmall, 1 = Small, 2 = Medium, 3 = Large, 4 = XLarge
-    pub ui_font_size_idx: u8,   // 0 = XSmall, 1 = Small, 2 = Medium, 3 = Large, 4 = XLarge
+    pub ui_font_size_idx: u8,
+    pub ui_font_source: u8, // 0 = Built-in, 1 = Inter, 2 = Lexend
 
     // reading settings
     pub reading_theme: u8, // index into READING_THEMES
     pub reader_show_progress: bool,
+    pub reader_sunlight_fading_fix: bool,
+    pub reader_bionic_mode: u8,
+    pub reader_guide_dots_mode: u8,
+    pub reader_orientation: u8,
     pub prepared_font_profile: u8,
     pub prepared_fallback_policy: u8,
+    pub reader_font_source: u8,
+    pub reader_sd_font_slot: u8,
+    pub reader_sd_font_id: [u8; READER_SD_FONT_ID_CAP],
+    pub reader_sd_font_id_len: u8,
 
     // display preference preview settings; persisted, not applied to hardware
     pub display_refresh_mode: u8, // 0 = Full, 1 = Balanced, 2 = Fast
@@ -128,8 +166,16 @@ pub struct ReaderPreferences {
     pub book_font: u8,
     pub reading_theme: u8,
     pub show_progress: bool,
+    pub sunlight_fading_fix: bool,
+    pub bionic_mode: u8,
+    pub guide_dots_mode: u8,
+    pub reader_orientation: u8,
     pub prepared_font_profile: u8,
     pub prepared_fallback_policy: u8,
+    pub reader_font_source: u8,
+    pub reader_sd_font_slot: u8,
+    pub reader_sd_font_id: [u8; READER_SD_FONT_ID_CAP],
+    pub reader_sd_font_id_len: u8,
 }
 
 impl Default for SystemSettings {
@@ -147,8 +193,17 @@ impl SystemSettings {
             ui_font_size_idx: DEFAULT_FONT_SIZE_IDX,
             reading_theme: DEFAULT_READING_THEME,
             reader_show_progress: DEFAULT_READER_SHOW_PROGRESS,
+            reader_sunlight_fading_fix: DEFAULT_READER_SUNLIGHT_FADING_FIX,
+            reader_bionic_mode: DEFAULT_READER_BIONIC_MODE,
+            reader_guide_dots_mode: DEFAULT_READER_GUIDE_DOTS_MODE,
+            reader_orientation: DEFAULT_READER_ORIENTATION,
             prepared_font_profile: DEFAULT_PREPARED_FONT_PROFILE,
             prepared_fallback_policy: DEFAULT_PREPARED_FALLBACK_POLICY,
+            reader_font_source: 0,
+            ui_font_source: 0,
+            reader_sd_font_slot: 0,
+            reader_sd_font_id: [0; READER_SD_FONT_ID_CAP],
+            reader_sd_font_id_len: 0,
             display_refresh_mode: DEFAULT_DISPLAY_REFRESH_MODE,
             display_invert_colors: DEFAULT_DISPLAY_INVERT_COLORS,
             display_contrast_high: DEFAULT_DISPLAY_CONTRAST_HIGH,
@@ -168,12 +223,19 @@ impl SystemSettings {
         self.book_font_size_idx = self.book_font_size_idx.min(max_font);
         self.ui_font_size_idx = self.ui_font_size_idx.min(max_font);
         self.reading_theme = self.reading_theme.min(NUM_READING_THEMES - 1);
+        self.reader_bionic_mode = self.reader_bionic_mode.min(READER_BIONIC_MODE_COUNT - 1);
+        self.reader_guide_dots_mode = self
+            .reader_guide_dots_mode
+            .min(READER_GUIDE_DOTS_MODE_COUNT - 1);
+        self.reader_orientation = self.reader_orientation.min(READER_ORIENTATION_COUNT - 1);
         self.prepared_font_profile = self
             .prepared_font_profile
             .min(PREPARED_FONT_PROFILE_COUNT - 1);
         self.prepared_fallback_policy = self
             .prepared_fallback_policy
             .min(PREPARED_FALLBACK_POLICY_COUNT - 1);
+        self.reader_font_source = self.reader_font_source.min(READER_FONT_SOURCE_COUNT - 1);
+        self.reader_sd_font_slot = self.reader_sd_font_slot.min(READER_FONT_SOURCE_COUNT - 2);
         self.display_refresh_mode = self.display_refresh_mode.min(2);
     }
 
@@ -182,8 +244,16 @@ impl SystemSettings {
             book_font: self.book_font_size_idx,
             reading_theme: self.reading_theme,
             show_progress: self.reader_show_progress,
+            sunlight_fading_fix: self.reader_sunlight_fading_fix,
+            bionic_mode: self.reader_bionic_mode,
+            guide_dots_mode: self.reader_guide_dots_mode,
+            reader_orientation: self.reader_orientation,
             prepared_font_profile: self.prepared_font_profile,
             prepared_fallback_policy: self.prepared_fallback_policy,
+            reader_font_source: self.reader_font_source,
+            reader_sd_font_slot: self.reader_sd_font_slot,
+            reader_sd_font_id: self.reader_sd_font_id,
+            reader_sd_font_id_len: self.reader_sd_font_id_len,
         }
     }
 
@@ -191,12 +261,42 @@ impl SystemSettings {
         self.book_font_size_idx = prefs.book_font.min(Self::DEFAULT_MAX_FONT_IDX);
         self.reading_theme = prefs.reading_theme.min(NUM_READING_THEMES - 1);
         self.reader_show_progress = prefs.show_progress;
+        self.reader_sunlight_fading_fix = prefs.sunlight_fading_fix;
+        self.reader_bionic_mode = prefs.bionic_mode.min(READER_BIONIC_MODE_COUNT - 1);
+        self.reader_guide_dots_mode = prefs.guide_dots_mode.min(READER_GUIDE_DOTS_MODE_COUNT - 1);
+        self.reader_guide_dots_mode = prefs.guide_dots_mode.min(READER_GUIDE_DOTS_MODE_COUNT - 1);
+        self.reader_guide_dots_mode = prefs.guide_dots_mode.min(READER_GUIDE_DOTS_MODE_COUNT - 1);
+        self.reader_orientation = prefs.reader_orientation.min(READER_ORIENTATION_COUNT - 1);
         self.prepared_font_profile = prefs
             .prepared_font_profile
             .min(PREPARED_FONT_PROFILE_COUNT - 1);
         self.prepared_fallback_policy = prefs
             .prepared_fallback_policy
             .min(PREPARED_FALLBACK_POLICY_COUNT - 1);
+        self.reader_font_source = prefs.reader_font_source.min(READER_FONT_SOURCE_COUNT - 1);
+        self.reader_sd_font_slot = prefs.reader_sd_font_slot.min(READER_FONT_SOURCE_COUNT - 2);
+        self.reader_sd_font_id = prefs.reader_sd_font_id;
+        self.reader_sd_font_id_len = prefs.reader_sd_font_id_len.min(READER_SD_FONT_ID_CAP as u8);
+    }
+
+    pub fn reader_sd_font_id(&self) -> &[u8] {
+        &self.reader_sd_font_id[..self.reader_sd_font_id_len as usize]
+    }
+
+    pub fn set_reader_sd_font_id(&mut self, value: &[u8]) {
+        self.reader_sd_font_id = [0; READER_SD_FONT_ID_CAP];
+        let mut n = 0usize;
+        for b in value.iter().copied() {
+            if n >= READER_SD_FONT_ID_CAP {
+                break;
+            }
+            let up = b.to_ascii_uppercase();
+            if up.is_ascii_uppercase() || up.is_ascii_digit() || up == b'_' {
+                self.reader_sd_font_id[n] = up;
+                n += 1;
+            }
+        }
+        self.reader_sd_font_id_len = n as u8;
     }
 
     // reasonable default - override via sanitize_with_max_font
@@ -560,6 +660,11 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
                 s.ui_font_size_idx = v as u8;
             }
         }
+        b"ui_font_source" => {
+            if let Some(v) = parse_u16(val) {
+                s.ui_font_source = (v as u8).min(UI_FONT_SOURCE_COUNT - 1);
+            }
+        }
         b"reading_theme" => {
             if let Some(v) = parse_u16(val) {
                 s.reading_theme = v as u8;
@@ -568,6 +673,26 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
         b"reader_show_progress" => {
             if let Some(v) = parse_bool(val) {
                 s.reader_show_progress = v;
+            }
+        }
+        b"bionic_reading" | b"reader_bionic_mode" => {
+            if let Some(v) = parse_u16(val) {
+                s.reader_bionic_mode = v as u8;
+            }
+        }
+        b"guide_dots" | b"reader_guide_dots_mode" => {
+            if let Some(v) = parse_u16(val) {
+                s.reader_guide_dots_mode = v as u8;
+            }
+        }
+        b"sunlight_fading_fix" | b"reader_sunlight_fading_fix" => {
+            if let Some(v) = parse_bool(val) {
+                s.reader_sunlight_fading_fix = v;
+            }
+        }
+        b"reader_orientation" | b"reading_orientation" => {
+            if let Some(v) = parse_u16(val) {
+                s.reader_orientation = v as u8;
             }
         }
         b"prepared_font_profile" => {
@@ -580,6 +705,17 @@ fn apply_setting(key: &[u8], val: &[u8], s: &mut SystemSettings, w: &mut WifiCon
                 s.prepared_fallback_policy = v as u8;
             }
         }
+        b"reader_font_source" => {
+            if let Some(v) = parse_u16(val) {
+                s.reader_font_source = (v as u8).min(READER_FONT_SOURCE_COUNT - 1);
+            }
+        }
+        b"reader_sd_font_slot" => {
+            if let Some(v) = parse_u16(val) {
+                s.reader_sd_font_slot = (v as u8).min(READER_FONT_SOURCE_COUNT - 2);
+            }
+        }
+        b"reader_sd_font_id" => s.set_reader_sd_font_id(val),
         b"show_progress" => {
             if let Some(v) = parse_bool(val) {
                 s.reader_show_progress = v;
@@ -730,13 +866,24 @@ pub fn write_settings_txt(s: &SystemSettings, w: &WifiConfig, buf: &mut [u8]) ->
 
     wr.put(b"\n# reader preferences\n");
     wr.kv_num(b"show_progress", if s.reader_show_progress { 1 } else { 0 });
+    wr.kv_num(b"bionic_reading", s.reader_bionic_mode as u16);
+    wr.kv_num(b"guide_dots", s.reader_guide_dots_mode as u16);
+    wr.kv_num(
+        b"sunlight_fading_fix",
+        if s.reader_sunlight_fading_fix { 1 } else { 0 },
+    );
+    wr.kv_num(b"reader_orientation", s.reader_orientation as u16);
     wr.kv_num(b"prepared_font_profile", s.prepared_font_profile as u16);
     wr.kv_num(
         b"prepared_fallback_policy",
         s.prepared_fallback_policy as u16,
     );
+    wr.kv_num(b"reader_font_source", s.reader_font_source as u16);
+    wr.kv_num(b"reader_sd_font_slot", s.reader_sd_font_slot as u16);
+    wr.kv_str(b"reader_sd_font_id", s.reader_sd_font_id());
 
     wr.put(b"\n# display preferences (persisted only)\n");
+    wr.kv_num(b"ui_font_source", s.ui_font_source as u16);
     wr.kv_num(b"display_refresh_mode", s.display_refresh_mode as u16);
     wr.kv_num(
         b"display_invert_colors",

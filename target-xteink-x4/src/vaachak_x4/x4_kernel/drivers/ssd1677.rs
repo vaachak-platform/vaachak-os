@@ -94,6 +94,17 @@ where
         }
     }
 
+    pub fn set_rotation(&mut self, rotation: Rotation) {
+        if self.rotation != rotation {
+            self.rotation = rotation;
+            self.initial_refresh = true;
+        }
+    }
+
+    pub const fn rotation(&self) -> Rotation {
+        self.rotation
+    }
+
     pub fn reset(&mut self, delay: &mut Delay) {
         let _ = self.rst.set_high();
         delay.delay_millis(20);

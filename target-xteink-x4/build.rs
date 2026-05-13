@@ -405,6 +405,127 @@ fn generate_bitmap_fonts() {
             emit_stub(&mut out, &format!("ITALIC_BODY_{suffix}"));
         }
     }
+    // Optional CrossInk-style firmware-static font families.
+    // These are generated at build time from local TTFs installed under
+    // target-xteink-x4/assets/fonts-static/* by tools/install_static_font_families_from_zips.py.
+    // When a family is missing, zero-width stubs are emitted so runtime safely falls back.
+    emit_optional_font_family(
+        &mut out,
+        "CHARIS",
+        Path::new("assets/fonts-static/charis"),
+        &ext_codepoints,
+    );
+    emit_optional_font_family(
+        &mut out,
+        "BITTER",
+        Path::new("assets/fonts-static/bitter"),
+        &ext_codepoints,
+    );
+    emit_optional_font_family(
+        &mut out,
+        "LEXEND",
+        Path::new("assets/fonts-static/lexend"),
+        &ext_codepoints,
+    );
+    emit_optional_font_family(
+        &mut out,
+        "INTER",
+        Path::new("assets/fonts-static/inter"),
+        &ext_codepoints,
+    );
+    emit_optional_font_family(
+        &mut out,
+        "LEXUI",
+        Path::new("assets/fonts-static/lexend"),
+        &ext_codepoints,
+    );
+}
+
+fn emit_optional_font_family(
+    out: &mut fs::File,
+    prefix: &str,
+    font_dir: &Path,
+    ext_codepoints: &[u32],
+) {
+    println!("cargo:rerun-if-changed={}", font_dir.display());
+
+    let regular = find_ttf(font_dir, &["Regular"]).or_else(|| find_ttf(font_dir, &[]));
+    let bold = find_ttf(font_dir, &["Bold"]);
+    let italic = find_ttf(font_dir, &["Italic"]);
+
+    if let Some(path) = regular {
+        let data = fs::read(&path).unwrap();
+        let font = fontdue::Font::from_bytes(data.as_slice(), fontdue::FontSettings::default())
+            .unwrap_or_else(|_| panic!("failed to parse static font {}", path.display()));
+        eprintln!(
+            "cargo:warning=font: rasterising optional family {} from {}",
+            prefix,
+            path.file_name().unwrap().to_string_lossy()
+        );
+        for (px, suffix) in &BODY_PX {
+            emit_font(
+                out,
+                &font,
+                &format!("{prefix}_REGULAR_BODY_{suffix}"),
+                *px,
+                ext_codepoints,
+            );
+        }
+        for (px, suffix) in &HEADING_PX {
+            emit_font(
+                out,
+                &font,
+                &format!("{prefix}_REGULAR_HEADING_{suffix}"),
+                *px,
+                ext_codepoints,
+            );
+        }
+    } else {
+        for (_px, suffix) in &BODY_PX {
+            emit_stub(out, &format!("{prefix}_REGULAR_BODY_{suffix}"));
+        }
+        for (_px, suffix) in &HEADING_PX {
+            emit_stub(out, &format!("{prefix}_REGULAR_HEADING_{suffix}"));
+        }
+    }
+
+    if let Some(path) = bold {
+        let data = fs::read(&path).unwrap();
+        let font = fontdue::Font::from_bytes(data.as_slice(), fontdue::FontSettings::default())
+            .unwrap_or_else(|_| panic!("failed to parse static bold font {}", path.display()));
+        for (px, suffix) in &BODY_PX {
+            emit_font(
+                out,
+                &font,
+                &format!("{prefix}_BOLD_BODY_{suffix}"),
+                *px,
+                ext_codepoints,
+            );
+        }
+    } else {
+        for (_px, suffix) in &BODY_PX {
+            emit_stub(out, &format!("{prefix}_BOLD_BODY_{suffix}"));
+        }
+    }
+
+    if let Some(path) = italic {
+        let data = fs::read(&path).unwrap();
+        let font = fontdue::Font::from_bytes(data.as_slice(), fontdue::FontSettings::default())
+            .unwrap_or_else(|_| panic!("failed to parse static italic font {}", path.display()));
+        for (px, suffix) in &BODY_PX {
+            emit_font(
+                out,
+                &font,
+                &format!("{prefix}_ITALIC_BODY_{suffix}"),
+                *px,
+                ext_codepoints,
+            );
+        }
+    } else {
+        for (_px, suffix) in &BODY_PX {
+            emit_stub(out, &format!("{prefix}_ITALIC_BODY_{suffix}"));
+        }
+    }
 }
 
 struct RasterGlyph {

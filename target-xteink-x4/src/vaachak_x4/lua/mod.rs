@@ -9,8 +9,15 @@ pub mod daily_mantra_script;
 pub mod runtime_probe;
 pub mod sd_manifest_reader_bridge;
 
+pub mod board_games;
+pub mod card_games;
 #[cfg(feature = "lua-vm")]
 pub mod daily_mantra_vm_bridge;
+pub mod dictionary;
+pub mod game_stub_script;
+pub mod grid_games;
 pub mod panchang_script;
+pub mod tool_stub_script;
+pub mod unit_converter;
 #[cfg(feature = "lua-vm")]
 pub mod vm_feature_gate;

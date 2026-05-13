@@ -12,6 +12,7 @@ use crate::vaachak_x4::x4_apps::ui::Region;
 use crate::vaachak_x4::x4_kernel::board::Epd;
 use crate::vaachak_x4::x4_kernel::drivers::input::Event;
 use crate::vaachak_x4::x4_kernel::drivers::sdcard::SdStorage;
+use crate::vaachak_x4::x4_kernel::drivers::ssd1677::Rotation;
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 use crate::vaachak_x4::x4_kernel::kernel::BookmarkCache;
 use crate::vaachak_x4::x4_kernel::kernel::KernelHandle;
@@ -237,6 +238,11 @@ impl AppLayer for VaachakRedrawPolicyAppLayer {
 
     fn draw(&self, strip: &mut StripBuffer) {
         self.inner.draw(strip);
+    }
+
+    #[inline]
+    fn desired_display_rotation(&self) -> Rotation {
+        self.inner.desired_display_rotation()
     }
 
     #[inline]

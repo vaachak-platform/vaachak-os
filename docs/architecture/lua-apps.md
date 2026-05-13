@@ -342,7 +342,7 @@ Recommended sequence:
 Run:
 
 ```bash
-./scripts/validate_lua_app_architecture_scaffold.sh
+./scripts/check_repo_hygiene.sh
 ```
 
 The validator checks docs, sample manifests, sample entry files, capability declarations, and that no Lua VM dependency has been added to active Cargo manifests.
@@ -977,3 +977,20 @@ The accepted physical sample layout is:
 
 Native apps remain authoritative. Lua apps append to existing dashboard categories and must keep Back as a safe exit path.
 <!-- VAACHAK:LUA_DEPLOYMENT_CONTRACT:END -->
+
+## Lua Games Catalog + Stub Pack
+
+Games are optional SD-loaded Lua apps appended to the native Games category. The current stub pack proves deployment and launcher routing before playable logic is added.
+
+```text
+/VAACHAK/APPS/SUDOKU/APP.TOM
+/VAACHAK/APPS/MINES/APP.TOM
+/VAACHAK/APPS/FREECELL/APP.TOM
+/VAACHAK/APPS/MEMCARD/APP.TOM
+/VAACHAK/APPS/SOLITAIR/APP.TOM
+/VAACHAK/APPS/LUDO/APP.TOM
+/VAACHAK/APPS/SNAKES/APP.TOM
+```
+
+All physical folder/file names remain uppercase 8.3-safe. Logical ids remain snake_case in manifests.
+

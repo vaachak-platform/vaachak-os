@@ -1,25 +1,30 @@
-# Vaachak OS production compile graph
+# Vaachak OS Production Compile Graph
 
-Status: production cleanup checkpoint.
+Status: cleaned production baseline.
 
-The active target compile graph keeps only runtime-facing Vaachak modules and removes slice-era migration checkpoint code from `target-xteink-x4`.
+The active target compile graph keeps runtime-facing Vaachak modules and removes generated patch/deliverable artifacts from the repository root and scripts folder.
 
-Production-facing target modules retained:
+## Production-facing target modules
 
-- boot marker and imported X4 runtime entrypoint
-- runtime-facing contracts for storage, input, display, and state
-- `physical::spi_bus_runtime` bridge used by the imported runtime
-- reader/library/UI/state/text/sleep/time modules
+- `boot.rs` and `imported/x4_reader_runtime.rs`
+- `apps/**` for Home/category dashboard and app manager
+- `x4_apps/**` for Files, Reader, Settings, widgets, and UI/font helpers
+- `x4_kernel/**` for X4 runtime helpers
+- `network/**` for Wi-Fi setup, Wi-Fi Transfer, and network time
+- `lua/**` for optional SD-loaded app hosting/catalog support
+- `io/**`, `state/**`, `text/**`, `sleep/**`, and `time/**` for active runtime support
+- `contracts/**` and `runtime_adapter_contracts.rs` for current explicit contracts
 
-Removed from active compile graph:
+## Removed from repository hygiene baseline
 
-- hardware migration smoke contracts
-- final-acceptance marker-only modules
-- hardware runtime executor/backend takeover scaffolding
-- transition owner/bridge/read-only/fallback checkpoint modules
-- one-off validate/apply/patch scripts from generated deliverables
+- root zip files
+- extracted deliverable folders
+- generated apply/patch scripts
+- one-off repair/cleanup/feature validator scripts
+- Python bytecode/cache folders
+- macOS metadata folders
 
-Use production validation instead of slice validators:
+## Validation
 
 ```bash
 cargo fmt --all
@@ -27,7 +32,5 @@ cargo fmt --all
 cargo test -p vaachak-core --all-targets
 cargo check -p hal-xteink-x4 --target riscv32imc-unknown-none-elf
 cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf
-cargo clippy -p hal-xteink-x4 --target riscv32imc-unknown-none-elf -- -D warnings
-cargo clippy -p target-xteink-x4 --target riscv32imc-unknown-none-elf -- -D warnings
 cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
 ```

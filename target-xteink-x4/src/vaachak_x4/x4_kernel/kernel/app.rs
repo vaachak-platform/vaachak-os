@@ -20,6 +20,7 @@ use crate::vaachak_x4::x4_kernel::board::Epd;
 use crate::vaachak_x4::x4_kernel::board::action::ActionEvent;
 use crate::vaachak_x4::x4_kernel::drivers::input::Event;
 use crate::vaachak_x4::x4_kernel::drivers::sdcard::SdStorage;
+use crate::vaachak_x4::x4_kernel::drivers::ssd1677::Rotation;
 #[allow(unused_imports)]
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 use crate::vaachak_x4::x4_kernel::ui::Region;
@@ -28,7 +29,7 @@ use super::KernelHandle;
 use super::bookmarks::BookmarkCache;
 use super::config::{ReaderPreferences, SystemSettings, WifiConfig};
 
-pub const MAX_APP_ACTIONS: usize = 8;
+pub const MAX_APP_ACTIONS: usize = 9;
 
 #[derive(Debug, Clone, Copy)]
 pub enum QuickActionKind {
@@ -465,6 +466,10 @@ pub trait AppLayer {
 
     // rendering
     fn draw(&self, strip: &mut StripBuffer);
+    fn desired_display_rotation(&self) -> Rotation {
+        Rotation::Deg270
+    }
+
     fn has_redraw(&self) -> bool;
     fn take_redraw(&mut self) -> Redraw;
     fn request_full_redraw(&mut self);

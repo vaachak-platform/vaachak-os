@@ -27,10 +27,13 @@ use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{PrimitiveStyle, Rectangle};
 use embedded_graphics::text::Text;
 
+use crate::vaachak_x4::text::sd_font_selection;
+use crate::vaachak_x4::text::sd_vfn_runtime;
 use crate::vaachak_x4::x4_apps::apps::{App, AppContext, AppId, Transition};
 use crate::vaachak_x4::x4_apps::fonts;
 use crate::vaachak_x4::x4_kernel::board::action::{Action, ActionEvent};
 use crate::vaachak_x4::x4_kernel::board::{SCREEN_H, SCREEN_W};
+use crate::vaachak_x4::x4_kernel::drivers::ssd1677::Rotation;
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 use crate::vaachak_x4::x4_kernel::error::{Error, ErrorKind};
 use crate::vaachak_x4::x4_kernel::kernel::KernelHandle;
@@ -49,6 +52,7 @@ use smol_epub::html_strip::{
     BOLD_OFF, BOLD_ON, HEADING_OFF, HEADING_ON, ITALIC_OFF, ITALIC_ON, MARKER,
 };
 use smol_epub::zip::{self, ZipIndex};
+use vaachak_core::models::{reader_viewport::ReaderViewportModel, state::ReaderOrientationModel};
 
 // chrome margin: used for header, status, progress bar, loading indicator.
 // this never changes; only the text content area responds to the reading theme.
@@ -71,18 +75,25 @@ pub(super) const MAX_PAGES: usize = 512;
 
 const PROGRESS_RECORD_BUF: usize = 256;
 
+#[allow(dead_code)]
 pub(super) const HEADER_REGION: Region = Region::new(MARGIN, HEADER_Y, HEADER_W, HEADER_H);
 
+#[allow(dead_code)]
 const STATUS_X: u16 = MARGIN + HEADER_W + 8;
+#[allow(dead_code)]
 const STATUS_W: u16 = SCREEN_W - STATUS_X - MARGIN;
+#[allow(dead_code)]
 pub(super) const STATUS_REGION: Region = Region::new(STATUS_X, HEADER_Y, STATUS_W, HEADER_H);
 
+#[allow(dead_code)]
 pub(super) const PAGE_REGION: Region = Region::new(0, HEADER_Y, SCREEN_W, SCREEN_H - HEADER_Y);
 
 pub(super) const NO_PREFETCH: usize = usize::MAX;
 
+#[allow(dead_code)]
 pub(super) const TEXT_W: u32 = (SCREEN_W - 2 * MARGIN) as u32;
 
+#[allow(dead_code)]
 pub(super) const TEXT_AREA_H: u16 = SCREEN_H - TEXT_Y - 4;
 
 pub(super) const EOCD_TAIL: usize = 512;
@@ -123,21 +134,36 @@ pub(super) const POSITION_OVERLAY: Region = Region::new(
     POSITION_OVERLAY_H,
 );
 
+#[allow(dead_code)]
 const LOADING_W: u16 = SCREEN_W - 2 * MARGIN - 16;
 const LOADING_H: u16 = 24;
+#[allow(dead_code)]
 pub(super) const LOADING_REGION: Region = Region::new(MARGIN, TEXT_Y, LOADING_W, LOADING_H);
 
 pub const QA_FONT_SIZE: u8 = 1;
 pub(super) const QA_THEME: u8 = 2;
+pub(super) const QA_ORIENTATION: u8 = 9;
 pub(super) const QA_SHOW_PROGRESS: u8 = 3;
+pub(super) const QA_BIONIC_READING: u8 = 10;
+pub(super) const QA_GUIDE_DOTS: u8 = 11;
+pub(super) const QA_SUNLIGHT_FADING_FIX: u8 = 12;
 pub(super) const QA_PREV_CHAPTER: u8 = 4;
 pub(super) const QA_NEXT_CHAPTER: u8 = 5;
 pub(super) const QA_TOC: u8 = 6;
 pub(super) const QA_BOOKMARKS: u8 = 7;
 pub(super) const QA_BOOKMARK_TOGGLE: u8 = 8;
+pub(super) const QA_SD_FONT_SOURCE: u8 = 13;
 
-pub(super) const QA_MAX: usize = 8;
+pub(super) const QA_MAX: usize = 16;
 const SHOW_PROGRESS_OPTIONS: &[&str] = &["Off", "On"];
+const SD_FONT_SOURCE_OPTIONS: &[&str] = fonts::READER_FONT_SOURCE_NAMES;
+const BIONIC_READING_OPTIONS: &[&str] = &["Off", "Light", "Medium"];
+const GUIDE_DOTS_OPTIONS: &[&str] = &["Off", "Small", "Medium"];
+const SUNLIGHT_FADING_OPTIONS: &[&str] = &["Off", "On"];
+const READER_SUNLIGHT_FADING_FIX_MARKER: &str = "reader-sunlight=x4-reader-sunlight-fading-fix-ok";
+const READER_ACCESSIBILITY_MARKER: &str = "reader-accessibility=x4-reader-bionic-guide-dots-ok";
+const READER_ORIENTATION_OPTIONS: &[&str] =
+    &crate::vaachak_x4::x4_kernel::kernel::config::READER_ORIENTATION_LABELS;
 
 // reader state machine:
 // NeedBookmark -> NeedInit -> NeedOpf -> NeedToc -> NeedCache -> NeedIndex -> NeedPage -> Ready
@@ -379,6 +405,7 @@ pub struct ReaderApp {
     pub(super) text_w: u32,      // text content width (SCREEN_W - 2 * text_margin)
     pub(super) text_area_h: u16, // height of text area (SCREEN_H - text_y - bottom_pad)
     pub(super) reading_theme_idx: u8,
+    pub(super) reader_orientation_idx: u8,
 
     // pre-scanned image heights for the current page buffer;
     // populated before wrapping so the pager can reserve the exact
@@ -391,8 +418,20 @@ pub struct ReaderApp {
 
     pub(super) chrome_font: Option<&'static BitmapFont>,
     pub(super) show_progress_chrome: bool,
+    pub(super) sunlight_fading_fix: bool,
+    pub(super) bionic_mode: u8,
+    pub(super) guide_dots_mode: u8,
+    reader_accessibility_marker_emitted: bool,
+    reader_sunlight_marker_emitted: bool,
     pub(super) prepared_font_profile: u8,
     pub(super) prepared_fallback_policy: u8,
+    pub(super) reader_font_source: u8,
+    pub(super) reader_sd_font_slot: u8,
+    pub(super) reader_sd_font_id: [u8; sd_font_selection::SD_FONT_ID_CAP],
+    pub(super) reader_sd_font_id_len: u8,
+    pub(super) sd_font_catalog_checked: bool,
+    pub(super) sd_font_available: bool,
+    pub(super) sd_font_data: Vec<u8>,
     pub(super) prepared_cache_debug_id: Option<[u8; 8]>,
     pub(super) prepared_cache_debug_err: Option<&'static str>,
     pub(super) prepared_cache_active_id: Option<[u8; 8]>,
@@ -444,6 +483,8 @@ impl ReaderApp {
             text_w: TEXT_W,
             text_area_h: TEXT_AREA_H,
             reading_theme_idx: 0,
+            reader_orientation_idx:
+                crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_READER_ORIENTATION,
 
             img_heights: [0u16; MAX_IMAGES_PER_PAGE],
             img_height_count: 0,
@@ -453,10 +494,24 @@ impl ReaderApp {
 
             chrome_font: None,
             show_progress_chrome: true,
+            sunlight_fading_fix:
+                crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_READER_SUNLIGHT_FADING_FIX,
+            bionic_mode: crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_READER_BIONIC_MODE,
+            reader_accessibility_marker_emitted: false,
+            reader_sunlight_marker_emitted: false,
+            guide_dots_mode:
+                crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_READER_GUIDE_DOTS_MODE,
             prepared_font_profile:
                 crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_PREPARED_FONT_PROFILE,
             prepared_fallback_policy:
                 crate::vaachak_x4::x4_kernel::kernel::config::DEFAULT_PREPARED_FALLBACK_POLICY,
+            reader_font_source: 0,
+            reader_sd_font_slot: 0,
+            reader_sd_font_id: [0; sd_font_selection::SD_FONT_ID_CAP],
+            reader_sd_font_id_len: 0,
+            sd_font_catalog_checked: false,
+            sd_font_available: false,
+            sd_font_data: Vec::new(),
             prepared_cache_debug_id: None,
             prepared_cache_debug_err: None,
             prepared_cache_active_id: None,
@@ -490,13 +545,108 @@ impl ReaderApp {
         self.rebuild_quick_actions();
     }
 
+    pub fn set_reader_orientation(&mut self, idx: u8) {
+        let next_orientation =
+            idx.min(crate::vaachak_x4::x4_kernel::kernel::config::READER_ORIENTATION_COUNT - 1);
+        if self.reader_orientation_idx != next_orientation {
+            self.reader_orientation_idx = next_orientation;
+            self.apply_theme_layout();
+            self.apply_font_metrics();
+            self.prepared_txt.clear();
+            self.clear_prepared_cache_active_id();
+            if self.state == State::Ready {
+                self.state = State::NeedPage;
+            }
+        }
+        self.rebuild_quick_actions();
+    }
+
+    pub fn display_rotation(&self) -> Rotation {
+        match ReaderOrientationModel::from_index(self.reader_orientation_idx) {
+            ReaderOrientationModel::Portrait => Rotation::Deg270,
+            ReaderOrientationModel::Inverted => Rotation::Deg90,
+            ReaderOrientationModel::LandscapeCw => Rotation::Deg0,
+            ReaderOrientationModel::LandscapeCcw => Rotation::Deg180,
+        }
+    }
+
+    fn reader_viewport(&self) -> ReaderViewportModel {
+        ReaderViewportModel::for_orientation(ReaderOrientationModel::from_index(
+            self.reader_orientation_idx,
+        ))
+    }
+
+    fn reader_logical_width(&self) -> u16 {
+        self.reader_viewport().logical_width
+    }
+
+    fn reader_logical_height(&self) -> u16 {
+        self.reader_viewport().logical_height
+    }
+
+    fn reader_page_region(&self) -> Region {
+        Region::new(
+            0,
+            HEADER_Y,
+            self.reader_logical_width(),
+            self.reader_logical_height().saturating_sub(HEADER_Y),
+        )
+    }
+
+    fn reader_loading_region(&self) -> Region {
+        Region::new(
+            self.text_margin,
+            self.text_y,
+            self.text_w.min(u16::MAX as u32) as u16,
+            LOADING_H,
+        )
+    }
+
+    fn reader_header_region(&self) -> Region {
+        Region::new(
+            MARGIN,
+            HEADER_Y,
+            self.reader_logical_width()
+                .saturating_sub(MARGIN.saturating_mul(2)),
+            HEADER_H,
+        )
+    }
+
+    fn reader_status_region(&self) -> Region {
+        let status_w = (self.reader_logical_width() / 3).max(120);
+        Region::new(
+            self.reader_logical_width()
+                .saturating_sub(MARGIN)
+                .saturating_sub(status_w),
+            HEADER_Y,
+            status_w,
+            HEADER_H,
+        )
+    }
+
+    fn reader_position_overlay_region(&self) -> Region {
+        Region::new(
+            self.reader_logical_width()
+                .saturating_sub(POSITION_OVERLAY_W)
+                / 2,
+            self.reader_logical_height()
+                .saturating_sub(POSITION_OVERLAY_H)
+                / 2,
+            POSITION_OVERLAY_W,
+            POSITION_OVERLAY_H,
+        )
+    }
+
     fn apply_theme_layout(&mut self) {
         let theme =
             crate::vaachak_x4::x4_kernel::kernel::config::reading_theme(self.reading_theme_idx);
+        let viewport = self.reader_viewport();
         self.text_margin = theme.margin_h;
         self.text_y = TEXT_Y + theme.margin_v;
-        self.text_w = (SCREEN_W - 2 * self.text_margin) as u32;
-        self.text_area_h = SCREEN_H.saturating_sub(self.text_y + 4);
+        self.text_w = viewport
+            .logical_width
+            .saturating_sub(self.text_margin.saturating_mul(2)) as u32;
+        self.text_area_h = viewport.logical_height.saturating_sub(self.text_y + 4);
     }
 
     pub fn set_chrome_font(&mut self, font: &'static BitmapFont) {
@@ -508,6 +658,92 @@ impl ReaderApp {
         self.rebuild_quick_actions();
     }
 
+    fn emit_reader_accessibility_marker(&mut self) {
+        if self.reader_accessibility_marker_emitted {
+            return;
+        }
+        self.reader_accessibility_marker_emitted = true;
+        esp_println::println!("{}", READER_ACCESSIBILITY_MARKER);
+    }
+
+    #[inline]
+    fn sunlight_force_full_redraw_for_quick_action(id: u8) -> bool {
+        matches!(
+            id,
+            QA_FONT_SIZE
+                | QA_THEME
+                | QA_SHOW_PROGRESS
+                | QA_ORIENTATION
+                | QA_BIONIC_READING
+                | QA_GUIDE_DOTS
+                | QA_SUNLIGHT_FADING_FIX
+        )
+    }
+
+    fn emit_reader_sunlight_marker(&mut self) {
+        if self.reader_sunlight_marker_emitted {
+            return;
+        }
+        self.reader_sunlight_marker_emitted = true;
+        esp_println::println!("{}", READER_SUNLIGHT_FADING_FIX_MARKER);
+    }
+
+    #[inline]
+    pub fn sunlight_fading_fix_enabled(&self) -> bool {
+        self.sunlight_fading_fix
+    }
+
+    pub fn set_sunlight_fading_fix(&mut self, enabled: bool) {
+        if self.sunlight_fading_fix == enabled {
+            return;
+        }
+        self.sunlight_fading_fix = enabled;
+        self.rebuild_quick_actions();
+        if enabled {
+            self.emit_reader_sunlight_marker();
+        }
+    }
+
+    pub fn set_bionic_mode(&mut self, idx: u8) {
+        let next =
+            idx.min(crate::vaachak_x4::x4_kernel::kernel::config::READER_BIONIC_MODE_COUNT - 1);
+        if self.bionic_mode == next {
+            return;
+        }
+        self.bionic_mode = next;
+        self.prepared_txt.clear();
+        self.clear_prepared_cache_active_id();
+        if self.state == State::Ready {
+            if self.is_epub && self.epub.chapters_cached {
+                self.state = State::NeedIndex;
+            } else {
+                self.state = State::NeedPage;
+            }
+        }
+        self.rebuild_quick_actions();
+        self.emit_reader_accessibility_marker();
+    }
+
+    pub fn set_guide_dots_mode(&mut self, idx: u8) {
+        let next =
+            idx.min(crate::vaachak_x4::x4_kernel::kernel::config::READER_GUIDE_DOTS_MODE_COUNT - 1);
+        if self.guide_dots_mode == next {
+            return;
+        }
+        self.guide_dots_mode = next;
+        self.prepared_txt.clear();
+        self.clear_prepared_cache_active_id();
+        if self.state == State::Ready {
+            if self.is_epub && self.epub.chapters_cached {
+                self.state = State::NeedIndex;
+            } else {
+                self.state = State::NeedPage;
+            }
+        }
+        self.rebuild_quick_actions();
+        self.emit_reader_accessibility_marker();
+    }
+
     pub fn set_prepared_font_profile(&mut self, idx: u8) {
         self.prepared_font_profile =
             idx.min(crate::vaachak_x4::x4_kernel::kernel::config::PREPARED_FONT_PROFILE_COUNT - 1);
@@ -517,283 +753,70 @@ impl ReaderApp {
         self.prepared_fallback_policy = idx
             .min(crate::vaachak_x4::x4_kernel::kernel::config::PREPARED_FALLBACK_POLICY_COUNT - 1);
     }
-
-    pub fn has_bg_work(&self) -> bool {
-        self.is_epub && self.epub.bg_cache != BgCacheState::Idle
-    }
-
-    pub(super) fn cached_chapter_count(&self) -> usize {
-        let n = self.epub.spine.len().min(cache::MAX_CACHE_CHAPTERS);
-        self.epub.ch_cached[..n].iter().filter(|&&c| c).count()
-    }
-
-    // update the kernel loading indicator with current caching progress.
-    // uses a unified percentage: chapters contribute 0-80%, images 80-100%.
-    fn set_cache_loading(&self, ctx: &mut AppContext) {
-        let cached_ch = self.cached_chapter_count();
-        let total_ch = self.epub.spine.len();
-        let img_found = self.epub.img_found_count as usize;
-        let img_cached = self.epub.img_cached_count as usize;
-
-        let mut lbuf = StackFmt::<28>::new();
-
-        let in_chapter_phase = matches!(
-            self.epub.bg_cache,
-            BgCacheState::CacheChapter | BgCacheState::WaitNearbyImage
-        ) && cached_ch < total_ch;
-
-        let pct = if in_chapter_phase {
-            let _ = write!(lbuf, "Caching {}/{}", cached_ch, total_ch);
-            // chapters: 0% to 80%
-            if total_ch > 0 {
-                ((cached_ch * 80) / total_ch).min(80) as u8
-            } else {
-                80
-            }
-        } else {
-            // image loading: 80% to 100%
-            if img_found > 0 {
-                let _ = write!(lbuf, "Caching images {}/{}", img_cached, img_found);
-                (80 + (img_cached * 20) / img_found).min(100) as u8
-            } else {
-                let _ = write!(lbuf, "Caching images");
-                80
-            }
-        };
-
-        ctx.set_loading(LOADING_REGION, lbuf.as_str(), pct);
-    }
-
-    // transition to error state with consistent handling
-    fn enter_error(&mut self, ctx: &mut AppContext, e: Error) {
-        self.error = Some(e);
-        self.state = State::Error;
-        ctx.clear_loading();
-        ctx.mark_dirty(PAGE_REGION);
-    }
-
-    // run one step of image work queue polling while suspended;
-    // chapter caching is async and only runs during active background,
-    // so this only handles the sync image recv states
-    pub fn bg_work_tick(&mut self, k: &mut KernelHandle<'_>) {
-        match self.epub.bg_cache {
-            BgCacheState::WaitNearbyImage => match self.epub_recv_image_result(k) {
-                Ok(Some(_)) => {
-                    if !self.try_dispatch_nearby_image(k) {
-                        self.epub.bg_cache = BgCacheState::CacheChapter;
-                    }
-                }
-                Ok(None) if work_queue::is_idle() => {
-                    log::warn!("bg: worker idle with no result (suspended), recovering");
-                    self.epub.bg_cache = BgCacheState::CacheChapter;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("bg: nearby image error (suspended): {}", e);
-                    self.epub.bg_cache = BgCacheState::CacheChapter;
-                }
-            },
-            BgCacheState::WaitImage => match self.epub_recv_image_result(k) {
-                Ok(Some(_)) => self.epub.bg_cache = BgCacheState::CacheImage,
-                Ok(None) if work_queue::is_idle() => {
-                    log::warn!("bg: worker idle with no result (suspended), recovering");
-                    self.epub.bg_cache = BgCacheState::CacheImage;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    log::warn!("bg: image recv error (suspended): {}", e);
-                    self.epub.bg_cache = BgCacheState::CacheImage;
-                }
-            },
-            _ => {}
-        }
-    }
-
-    fn rebuild_quick_actions(&mut self) {
+    pub fn set_sd_font_selection(&mut self, source: u8, slot: u8, id: &[u8]) {
+        self.reader_font_source = source.min(fonts::READER_FONT_SOURCE_COUNT.saturating_sub(1));
+        self.reader_sd_font_slot = slot;
+        self.reader_sd_font_id = [0; sd_font_selection::SD_FONT_ID_CAP];
         let mut n = 0usize;
-
-        // Reader UX model:
-        // - core actions first and shared by TXT/EPUB
-        // - EPUB-only navigation actions after the shared reader actions
-        // - labels are short enough for the bottom quick-action chrome
-        self.qa_buf[n] = QuickAction::trigger(QA_BOOKMARK_TOGGLE, "Add or Remove Bookmark", "Mark");
-        n += 1;
-
-        self.qa_buf[n] = QuickAction::trigger(QA_BOOKMARKS, "Bookmarks", "List");
-        n += 1;
-
-        self.qa_buf[n] = QuickAction::cycle(
-            QA_THEME,
-            "Reading Theme",
-            self.reading_theme_idx,
-            reader_state::THEME_NAMES,
-        );
-        n += 1;
-
-        self.qa_buf[n] = QuickAction::cycle(
-            QA_FONT_SIZE,
-            "Book Font",
-            self.book_font_size_idx,
-            fonts::FONT_SIZE_NAMES,
-        );
-        n += 1;
-
-        self.qa_buf[n] = QuickAction::cycle(
-            QA_SHOW_PROGRESS,
-            "Show Progress",
-            self.show_progress_chrome as u8,
-            SHOW_PROGRESS_OPTIONS,
-        );
-        n += 1;
-
-        if self.is_epub && self.epub.toc.as_ref().map_or(false, |t| !t.is_empty()) {
-            self.qa_buf[n] = QuickAction::trigger(QA_TOC, "Table of Contents", "TOC");
-            n += 1;
+        for b in id.iter().copied() {
+            if n >= self.reader_sd_font_id.len() {
+                break;
+            }
+            let up = b.to_ascii_uppercase();
+            if up.is_ascii_uppercase() || up.is_ascii_digit() || up == b'_' {
+                self.reader_sd_font_id[n] = up;
+                n += 1;
+            }
         }
+        self.reader_sd_font_id_len = n as u8;
+        self.sd_font_catalog_checked = true;
+        self.sd_font_available = false;
+        self.sd_font_data.clear();
+        self.rebuild_quick_actions();
+    }
 
-        if self.is_epub && self.epub.spine.len() > 1 {
-            self.qa_buf[n] = QuickAction::trigger(QA_PREV_CHAPTER, "Previous Chapter", "Ch-");
-            n += 1;
-            self.qa_buf[n] = QuickAction::trigger(QA_NEXT_CHAPTER, "Next Chapter", "Ch+");
-            n += 1;
+    fn sd_font_cycle_value(&self) -> u8 {
+        if self.reader_font_source == 0 {
+            0
+        } else {
+            self.reader_sd_font_slot
+                .saturating_add(1)
+                .min(sd_font_selection::SD_FONT_SLOT_COUNT)
         }
-
-        self.qa_count = n as u8;
     }
 
-    fn prepared_cache_id_bytes(cache_book_id: &str) -> [u8; 8] {
-        let mut debug_id = [0u8; 8];
-        let bytes = cache_book_id.as_bytes();
-        let n = bytes.len().min(debug_id.len());
-        debug_id[..n].copy_from_slice(&bytes[..n]);
-        debug_id
+    fn disable_sd_font_runtime_for_epub(&mut self) {
+        self.sd_font_catalog_checked = true;
+        self.sd_font_available = false;
+        self.sd_font_data.clear();
     }
 
-    fn clear_prepared_cache_error(&mut self) {
-        self.prepared_cache_debug_id = None;
-        self.prepared_cache_debug_err = None;
+    fn refresh_sd_font_selection(&mut self, _k: &mut KernelHandle<'_>) {
+        self.sd_font_catalog_checked = true;
+        self.sd_font_available = false;
+        self.sd_font_data.clear();
     }
 
-    fn clear_prepared_cache_active_id(&mut self) {
-        self.prepared_cache_active_id = None;
+    fn ensure_sd_font_runtime_applied(&mut self, _ctx: &mut AppContext, _k: &mut KernelHandle<'_>) {
+        self.sd_font_catalog_checked = true;
+        self.sd_font_available = false;
+        self.sd_font_data.clear();
     }
 
-    fn record_prepared_cache_error(
-        &mut self,
-        cache_book_id: &str,
-        err: prepared_txt::PreparedTxtError,
+    fn push_prepared_cache_id_for_orientation(
+        candidates: &mut Vec<String>,
+        id: String,
+        orientation: ReaderOrientationModel,
     ) {
-        self.prepared_cache_debug_id = Some(Self::prepared_cache_id_bytes(cache_book_id));
-        self.prepared_cache_debug_err = Some(err.code());
-    }
-
-    fn record_prepared_cache_page_error(&mut self) {
-        self.prepared_cache_debug_id = self.prepared_cache_active_id;
-        if self.prepared_cache_debug_id.is_none() {
-            if let Some(book_id) = self.current_book_id() {
-                let id = reader_state::book_id_hex8(&book_id);
-                self.prepared_cache_debug_id = Some(Self::prepared_cache_id_bytes(id.as_str()));
-            }
-        }
-        self.prepared_cache_debug_err = Some("PAGE");
-        self.clear_prepared_cache_active_id();
-    }
-
-    fn try_open_prepared_book_cache(
-        &mut self,
-        k: &mut KernelHandle<'_>,
-        source_path: &str,
-    ) -> bool {
-        self.clear_prepared_cache_error();
-        self.clear_prepared_cache_active_id();
-
-        let mut candidate_ids: Vec<String> = Vec::new();
-
-        if let Some(book_id) = self.current_book_id() {
-            Self::push_prepared_cache_id(&mut candidate_ids, reader_state::book_id_hex8(&book_id));
-        }
-
-        Self::push_prepared_cache_id_for_path(&mut candidate_ids, source_path);
-
-        let stripped = source_path.trim_start_matches(|ch| ch == '/' || ch == '\\');
-        if stripped != source_path {
-            Self::push_prepared_cache_id_for_path(&mut candidate_ids, stripped);
-        }
-
-        let basename = Self::prepared_cache_basename(source_path);
-        if basename != source_path && basename != stripped {
-            Self::push_prepared_cache_id_for_path(&mut candidate_ids, basename);
-        }
-
-        let source_variants = [source_path, stripped, basename];
-
-        for cache_book_id in candidate_ids {
-            for candidate_source in source_variants {
-                if candidate_source.is_empty() {
-                    continue;
-                }
-
-                match self
-                    .prepared_txt
-                    .try_open(k, cache_book_id.as_str(), candidate_source)
-                {
-                    Ok(()) => {
-                        self.clear_prepared_cache_error();
-                        self.record_prepared_cache_id(cache_book_id.as_str());
-                        self.prepared_cache_active_id =
-                            Some(Self::prepared_cache_id_bytes(cache_book_id.as_str()));
-                        let prepared_page_count = self.prepared_txt.page_count();
-                        let restored_prepared_page = self
-                            .restore_offset
-                            .take()
-                            .map(|offset| offset as usize)
-                            .unwrap_or(self.pg.page);
-                        self.pg.page =
-                            restored_prepared_page.min(prepared_page_count.saturating_sub(1));
-                        self.pg.total_pages = prepared_page_count;
-                        self.pg.fully_indexed = true;
-                        self.pg.buf_len = 0;
-                        self.pg.line_count = 0;
-                        self.pg.prefetch_page = NO_PREFETCH;
-                        self.pg.prefetch_len = 0;
-
-                        for i in 0..self.pg.total_pages.min(MAX_PAGES) {
-                            self.pg.offsets[i] = i as u32;
-                        }
-
-                        self.epub.bg_cache = BgCacheState::Idle;
-                        self.epub.chapters_cached = false;
-                        self.goto_last_page = false;
-
-                        log::info!(
-                            "reader: prepared cache opened cache_id={} source={} pages={}",
-                            cache_book_id.as_str(),
-                            candidate_source,
-                            self.pg.total_pages
-                        );
-
-                        return true;
-                    }
-                    Err(err) => {
-                        if !matches!(err, prepared_txt::PreparedTxtError::Missing) {
-                            self.record_prepared_cache_error(cache_book_id.as_str(), err);
-                        }
-                        log::info!(
-                            "reader: prepared cache miss cache_id={} source={} err={:?}",
-                            cache_book_id.as_str(),
-                            candidate_source,
-                            err
-                        );
-                    }
-                }
-            }
-        }
-
-        false
-    }
-
-    fn push_prepared_cache_id_for_path(candidates: &mut Vec<String>, source_path: &str) {
-        let id = reader_state::book_id_hex8(&BookId::from_path(source_path));
+        let mut oriented = id.clone();
+        oriented.push('_');
+        oriented.push_str(match orientation {
+            ReaderOrientationModel::Portrait => "POR",
+            ReaderOrientationModel::Inverted => "INV",
+            ReaderOrientationModel::LandscapeCw => "LCW",
+            ReaderOrientationModel::LandscapeCcw => "LCC",
+        });
+        Self::push_prepared_cache_id(candidates, oriented);
         Self::push_prepared_cache_id(candidates, id);
     }
 
@@ -824,7 +847,8 @@ impl ReaderApp {
         let spacing_pct = theme.line_spacing_pct;
 
         if fonts::font_data::HAS_REGULAR {
-            let fs = fonts::FontSet::for_size(self.book_font_size_idx);
+            let fs =
+                fonts::FontSet::for_source_size(self.reader_font_source, self.book_font_size_idx);
             let native_h = fs.line_height(fonts::Style::Regular).max(1);
             // apply line spacing: scale native line height by theme percentage
             self.font_line_h = ((native_h as u32 * spacing_pct as u32) / 100).max(1) as u16;
@@ -1647,9 +1671,9 @@ impl ReaderApp {
             byte_offset,
             self.page() + 1
         );
-        ctx.set_loading(LOADING_REGION, toast, 100);
-        ctx.mark_dirty(LOADING_REGION);
-        ctx.mark_dirty(PAGE_REGION);
+        ctx.set_loading(self.reader_loading_region(), toast, 100);
+        ctx.mark_dirty(self.reader_loading_region());
+        ctx.mark_dirty(self.reader_page_region());
     }
 
     fn select_nearest_bookmark_for_current_position(&mut self) {
@@ -1699,7 +1723,7 @@ impl ReaderApp {
             self.bookmark_selected,
             self.bookmarks.len()
         );
-        ctx.mark_dirty(PAGE_REGION);
+        ctx.mark_dirty(self.reader_page_region());
     }
 
     fn jump_to_bookmark(&mut self, idx: usize, ctx: &mut AppContext) {
@@ -1723,7 +1747,7 @@ impl ReaderApp {
             } else {
                 State::NeedPage
             };
-            ctx.mark_dirty(PAGE_REGION);
+            ctx.mark_dirty(self.reader_page_region());
         }
     }
 
@@ -1938,6 +1962,366 @@ impl ReaderApp {
         self.prepared_cache_debug_id = Some(debug_id);
     }
 
+    fn clear_prepared_cache_error(&mut self) {
+        self.prepared_cache_debug_err = None;
+    }
+
+    fn clear_prepared_cache_active_id(&mut self) {
+        self.prepared_cache_active_id = None;
+    }
+
+    fn record_prepared_cache_active_id(&mut self, cache_book_id: &str) {
+        let mut debug_id = [0u8; 8];
+        let bytes = cache_book_id.as_bytes();
+        let n = bytes.len().min(debug_id.len());
+        debug_id[..n].copy_from_slice(&bytes[..n]);
+        self.prepared_cache_active_id = Some(debug_id);
+    }
+
+    fn record_prepared_cache_page_error(&mut self) {
+        self.prepared_cache_debug_err = Some("page");
+    }
+    fn try_open_prepared_book_cache(
+        &mut self,
+        k: &mut KernelHandle<'_>,
+        source_path: &str,
+    ) -> bool {
+        self.clear_prepared_cache_error();
+        self.clear_prepared_cache_active_id();
+
+        let source_variants = Self::prepared_cache_source_variants(source_path);
+        let mut candidate_ids: Vec<String> = Vec::new();
+
+        if let Some(book_id) = self.current_book_id() {
+            Self::push_prepared_cache_id(&mut candidate_ids, reader_state::book_id_hex8(&book_id));
+        }
+
+        for source in &source_variants {
+            Self::push_prepared_cache_id_for_path(&mut candidate_ids, source.as_str());
+        }
+
+        for cache_book_id in candidate_ids {
+            if self.try_open_prepared_cache_candidate(k, cache_book_id.as_str(), &source_variants) {
+                return true;
+            }
+        }
+
+        // Prepared cache folders on SD are authoritative 8-char book IDs, for example
+        // /FCACHE/15D1296A.  Do not guess from MIXED.TXT or PREPARED.EPU names; scan the
+        // FCACHE directory and match META.TXT source before opening the cache.
+        let mut entries = [crate::vaachak_x4::x4_kernel::drivers::storage::DirEntry::EMPTY; 32];
+        let count = k.list_prepared_cache_dirs(&mut entries).unwrap_or(0);
+        for entry in entries.iter().take(count) {
+            if !entry.is_dir {
+                continue;
+            }
+            let Ok(cache_book_id) = core::str::from_utf8(&entry.name[..entry.name_len as usize])
+            else {
+                continue;
+            };
+            if !Self::is_prepared_cache_book_id(cache_book_id) {
+                continue;
+            }
+            if !Self::prepared_cache_meta_matches_source(k, cache_book_id, &source_variants) {
+                continue;
+            }
+            if self.try_open_prepared_cache_candidate(k, cache_book_id, &source_variants) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn try_open_prepared_cache_candidate(
+        &mut self,
+        k: &mut KernelHandle<'_>,
+        cache_book_id: &str,
+        source_variants: &[String],
+    ) -> bool {
+        for candidate_source in source_variants {
+            if candidate_source.is_empty() {
+                continue;
+            }
+
+            match self
+                .prepared_txt
+                .try_open(k, cache_book_id, candidate_source.as_str())
+            {
+                Ok(()) => {
+                    self.clear_prepared_cache_error();
+                    self.record_prepared_cache_id(cache_book_id);
+                    self.prepared_cache_active_id =
+                        Some(Self::prepared_cache_id_bytes(cache_book_id));
+                    let prepared_page_count = self.prepared_txt.page_count();
+                    let restored_prepared_page = self
+                        .restore_offset
+                        .take()
+                        .map(|offset| offset as usize)
+                        .unwrap_or(self.pg.page);
+                    self.pg.page =
+                        restored_prepared_page.min(prepared_page_count.saturating_sub(1));
+                    self.pg.total_pages = prepared_page_count;
+                    self.pg.fully_indexed = true;
+                    self.pg.buf_len = 0;
+                    self.pg.line_count = 0;
+                    self.pg.prefetch_page = NO_PREFETCH;
+                    self.pg.prefetch_len = 0;
+
+                    for i in 0..self.pg.total_pages.min(MAX_PAGES) {
+                        self.pg.offsets[i] = i as u32;
+                    }
+
+                    self.epub.bg_cache = BgCacheState::Idle;
+                    self.epub.chapters_cached = false;
+                    self.goto_last_page = false;
+
+                    log::info!(
+                        "reader: prepared cache opened cache_id={} source={} pages={}",
+                        cache_book_id,
+                        candidate_source.as_str(),
+                        self.pg.total_pages
+                    );
+
+                    return true;
+                }
+                Err(err) => {
+                    if !matches!(err, prepared_txt::PreparedTxtError::Missing) {
+                        self.record_prepared_cache_error(cache_book_id, err);
+                    }
+                    log::info!(
+                        "reader: prepared cache miss cache_id={} source={} err={:?}",
+                        cache_book_id,
+                        candidate_source.as_str(),
+                        err
+                    );
+                }
+            }
+        }
+        false
+    }
+
+    fn prepared_cache_source_variants(source_path: &str) -> Vec<String> {
+        let mut variants = Vec::new();
+        Self::push_prepared_source_variant(&mut variants, source_path);
+        let stripped = source_path.trim_start_matches(|ch| ch == '/' || ch == '\\');
+        Self::push_prepared_source_variant(&mut variants, stripped);
+        Self::push_prepared_source_variant(
+            &mut variants,
+            Self::prepared_cache_basename(source_path),
+        );
+        variants
+    }
+
+    fn push_prepared_source_variant(variants: &mut Vec<String>, source: &str) {
+        if source.is_empty() {
+            return;
+        }
+        if !variants
+            .iter()
+            .any(|existing| Self::prepared_cache_source_matches(existing.as_str(), source))
+        {
+            variants.push(String::from(source));
+        }
+    }
+
+    fn is_prepared_cache_book_id(name: &str) -> bool {
+        name.len() == 8 && name.bytes().all(|b| b.is_ascii_hexdigit())
+    }
+
+    fn prepared_cache_meta_matches_source(
+        k: &mut KernelHandle<'_>,
+        cache_book_id: &str,
+        source_variants: &[String],
+    ) -> bool {
+        let mut meta = [0u8; 1024];
+        let Ok(len) = k.read_subdir_chunk("FCACHE", cache_book_id, "META.TXT", 0, &mut meta) else {
+            return false;
+        };
+        let Ok(meta) = core::str::from_utf8(&meta[..len]) else {
+            return false;
+        };
+
+        let mut meta_book_id = "";
+        let mut meta_source = "";
+        for raw in meta.lines() {
+            let line = raw.trim();
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            let value = value.trim();
+            if key.eq_ignore_ascii_case("book_id") {
+                meta_book_id = value;
+            } else if key.eq_ignore_ascii_case("source") {
+                meta_source = value;
+            }
+        }
+
+        if !meta_book_id.is_empty() && !meta_book_id.eq_ignore_ascii_case(cache_book_id) {
+            return false;
+        }
+        if meta_source.is_empty() {
+            return false;
+        }
+
+        source_variants
+            .iter()
+            .any(|source| Self::prepared_cache_source_matches(meta_source, source.as_str()))
+    }
+
+    fn prepared_cache_source_matches(a: &str, b: &str) -> bool {
+        if Self::prepared_cache_normalized_eq(a, b) {
+            return true;
+        }
+        let abase = Self::prepared_cache_basename(a);
+        let bbase = Self::prepared_cache_basename(b);
+        Self::prepared_cache_normalized_eq(abase, bbase)
+    }
+
+    fn prepared_cache_normalized_eq(a: &str, b: &str) -> bool {
+        let a = a.trim_start_matches(|ch| ch == '/' || ch == '\\');
+        let b = b.trim_start_matches(|ch| ch == '/' || ch == '\\');
+        a.bytes()
+            .filter(|b| *b != b' ')
+            .map(Self::prepared_cache_norm_byte)
+            .eq(b
+                .bytes()
+                .filter(|b| *b != b' ')
+                .map(Self::prepared_cache_norm_byte))
+    }
+
+    const fn prepared_cache_norm_byte(b: u8) -> u8 {
+        match b {
+            b'\\' => b'/',
+            b'A'..=b'Z' => b + 32,
+            _ => b,
+        }
+    }
+
+    fn cached_chapter_count(&self) -> usize {
+        self.epub.ch_cached.iter().filter(|cached| **cached).count()
+    }
+
+    fn set_cache_loading(&self, ctx: &mut AppContext) {
+        ctx.set_loading(self.reader_loading_region(), "Caching", 95);
+    }
+
+    fn enter_error(&mut self, ctx: &mut AppContext, error: Error) {
+        self.error = Some(error);
+        self.state = State::Error;
+        ctx.clear_loading();
+        ctx.mark_dirty(self.reader_page_region());
+    }
+
+    pub fn has_bg_work(&self) -> bool {
+        self.is_epub && self.epub.bg_cache != BgCacheState::Idle
+    }
+
+    pub fn bg_work_tick(&mut self, _k: &mut KernelHandle<'_>) {
+        // The real EPUB background cache step is async and runs from ReaderApp::background().
+        // This synchronous hook exists only for the app-layer suspended-background trait.
+    }
+
+    fn push_quick_action(&mut self, action: QuickAction) {
+        let idx = self.qa_count as usize;
+        if idx < self.qa_buf.len() {
+            self.qa_buf[idx] = action;
+            self.qa_count = self.qa_count.saturating_add(1);
+        }
+    }
+    fn rebuild_quick_actions(&mut self) {
+        let mut n = 0usize;
+
+        // Reader UX model:
+        // - bookmark actions must remain first and shared by TXT/EPUB
+        // - display/accessibility/font actions follow the bookmark controls
+        // - EPUB-only navigation actions remain after shared reader actions
+        self.qa_buf[n] = QuickAction::trigger(QA_BOOKMARK_TOGGLE, "Add or Remove Bookmark", "Mark");
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::trigger(QA_BOOKMARKS, "Bookmarks", "List");
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_THEME,
+            "Reading Theme",
+            self.reading_theme_idx,
+            reader_state::THEME_NAMES,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_ORIENTATION,
+            "Orientation",
+            self.reader_orientation_idx,
+            READER_ORIENTATION_OPTIONS,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_FONT_SIZE,
+            "Book Font",
+            self.book_font_size_idx,
+            fonts::FONT_SIZE_NAMES,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_SHOW_PROGRESS,
+            "Show Progress",
+            self.show_progress_chrome as u8,
+            SHOW_PROGRESS_OPTIONS,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_SD_FONT_SOURCE,
+            "Font Source",
+            self.sd_font_cycle_value(),
+            SD_FONT_SOURCE_OPTIONS,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_BIONIC_READING,
+            "Bionic Reading",
+            self.bionic_mode,
+            BIONIC_READING_OPTIONS,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_GUIDE_DOTS,
+            "Guide Dots",
+            self.guide_dots_mode,
+            GUIDE_DOTS_OPTIONS,
+        );
+        n += 1;
+
+        self.qa_buf[n] = QuickAction::cycle(
+            QA_SUNLIGHT_FADING_FIX,
+            "Sunlight Fix",
+            self.sunlight_fading_fix as u8,
+            SUNLIGHT_FADING_OPTIONS,
+        );
+        n += 1;
+
+        if self.is_epub && self.epub.toc.as_ref().map_or(false, |t| !t.is_empty()) {
+            self.qa_buf[n] = QuickAction::trigger(QA_TOC, "Table of Contents", "TOC");
+            n += 1;
+        }
+
+        if self.is_epub && self.epub.spine.len() > 1 {
+            self.qa_buf[n] = QuickAction::trigger(QA_PREV_CHAPTER, "Previous Chapter", "Ch-");
+            n += 1;
+            self.qa_buf[n] = QuickAction::trigger(QA_NEXT_CHAPTER, "Next Chapter", "Ch+");
+            n += 1;
+        }
+
+        self.qa_count = n as u8;
+    }
+
     fn draw_prepared_cache_notice(
         &self,
         strip: &mut StripBuffer,
@@ -1947,19 +2331,26 @@ impl ReaderApp {
         else {
             return;
         };
+        // reader-fonts: suppress normal missing-cache fallback notice.
+        // Missing FCACHE is expected for ordinary TXT/MD books and should not
+        // be rendered over the page. Real prepared-cache errors still display.
+        if err == "MISSING" {
+            return;
+        }
         let id_str = core::str::from_utf8(&id).unwrap_or("????????");
         let mut cbuf = StackFmt::<64>::new();
         let _ = write!(cbuf, "Read cache:{} err:{}", id_str, err);
 
-        if LOADING_REGION.intersects(strip.logical_window()) {
-            LOADING_REGION
+        let notice_region = self.reader_loading_region();
+        if notice_region.intersects(strip.logical_window()) {
+            notice_region
                 .to_rect()
                 .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
                 .draw(strip)
                 .unwrap();
             draw_chrome_text(
                 strip,
-                LOADING_REGION,
+                notice_region,
                 cbuf.as_str(),
                 Alignment::CenterLeft,
                 status_font,
@@ -2004,6 +2395,134 @@ pub(super) fn extract_zip_entry(
             .read_chunk(name, offset, buf)
             .map_err(|e: Error| -> &'static str { e.into() })
     })
+}
+
+#[inline]
+fn reader_bionic_ascii_alpha(b: u8) -> bool {
+    b.is_ascii_alphabetic()
+}
+
+fn reader_bionic_ascii_word_len(line: &[u8], start: usize) -> usize {
+    let mut idx = start;
+    let mut len = 0usize;
+    while idx < line.len() {
+        let b = line[idx];
+        if b == MARKER && idx + 1 < line.len() {
+            idx += 2;
+            continue;
+        }
+        if reader_bionic_ascii_alpha(b) {
+            len += 1;
+            idx += 1;
+            continue;
+        }
+        break;
+    }
+    len
+}
+
+fn reader_bionic_fixation_len(mode: u8, word_len: usize) -> usize {
+    if mode == 0 || word_len == 0 {
+        return 0;
+    }
+    let base = if word_len <= 3 {
+        1
+    } else if word_len <= 6 {
+        2
+    } else {
+        3
+    };
+    if mode >= 2 {
+        base.max((word_len + 2) / 3).min(4)
+    } else {
+        base.min(3)
+    }
+}
+
+#[inline]
+fn reader_bionic_style_allowed(style: fonts::Style) -> bool {
+    matches!(style, fonts::Style::Regular)
+}
+
+fn draw_reader_body_char(
+    strip: &mut StripBuffer,
+    fonts: &fonts::FontSet,
+    ch: char,
+    style: fonts::Style,
+    cx: i32,
+    baseline: i32,
+    bionic: bool,
+) -> i32 {
+    let display = reader_body_display_char(fonts, style, ch);
+    let advance = fonts.draw_char(strip, display, style, cx, baseline) as i32;
+    if bionic && reader_bionic_style_allowed(style) && display != ' ' {
+        let _ = fonts.draw_char(strip, display, style, cx + 1, baseline);
+    }
+    advance
+}
+
+fn reader_guide_next_ascii_word(line: &[u8], start: usize) -> bool {
+    let mut idx = start;
+    while idx < line.len() {
+        let b = line[idx];
+        if b == MARKER && idx + 1 < line.len() {
+            idx += 2;
+            continue;
+        }
+        if b == b' ' || b == b'\t' {
+            idx += 1;
+            continue;
+        }
+        return reader_bionic_ascii_alpha(b);
+    }
+    false
+}
+
+fn draw_reader_guide_dot(
+    strip: &mut StripBuffer,
+    mode: u8,
+    style: fonts::Style,
+    gap_x: i32,
+    gap_advance: i32,
+    baseline: i32,
+) {
+    if mode == 0 || !reader_bionic_style_allowed(style) || gap_advance < 4 {
+        return;
+    }
+    let size = if mode >= 2 { 2 } else { 1 };
+    let dot_x = gap_x + (gap_advance / 2) - ((size as i32) / 2);
+    let dot_y = baseline - 6;
+    if dot_x < 0 || dot_y < 0 {
+        return;
+    }
+    Rectangle::new(
+        Point::new(dot_x, dot_y),
+        Size::new(size as u32, size as u32),
+    )
+    .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+    .draw(strip)
+    .unwrap();
+}
+
+fn draw_reader_sd_or_builtin_char(
+    sd_font_data: &[u8],
+    strip: &mut StripBuffer,
+    fonts: &fonts::FontSet,
+    ch: char,
+    style: fonts::Style,
+    cx: i32,
+    baseline: i32,
+    bionic: bool,
+) -> i32 {
+    if style == fonts::Style::Regular && false && !sd_font_data.is_empty() && ch.is_ascii() {
+        if let Some(advance) = sd_vfn_runtime::draw_char(strip, sd_font_data, ch, cx, baseline) {
+            if bionic && ch != ' ' {
+                let _ = sd_vfn_runtime::draw_char(strip, sd_font_data, ch, cx + 1, baseline);
+            }
+            return i32::from(advance);
+        }
+    }
+    draw_reader_body_char(strip, fonts, ch, style, cx, baseline, bionic)
 }
 
 fn reader_body_display_char(fonts: &fonts::FontSet, style: fonts::Style, ch: char) -> char {
@@ -2053,8 +2572,57 @@ fn draw_chrome_text(
     }
 }
 
+impl ReaderApp {}
+
+impl ReaderApp {
+    fn prepared_cache_id_bytes(cache_book_id: &str) -> [u8; 8] {
+        let mut debug_id = [0u8; 8];
+        let bytes = cache_book_id.as_bytes();
+        let n = bytes.len().min(debug_id.len());
+        debug_id[..n].copy_from_slice(&bytes[..n]);
+        debug_id
+    }
+
+    fn push_prepared_cache_id_for_path(candidates: &mut Vec<String>, source_path: &str) {
+        let source = source_path.trim();
+        if source.is_empty() {
+            return;
+        }
+
+        Self::push_prepared_cache_id(candidates, source.to_string());
+
+        let stripped = source.trim_start_matches(|ch| ch == '/' || ch == '\\');
+        if !stripped.is_empty() && stripped != source {
+            Self::push_prepared_cache_id(candidates, stripped.to_string());
+        }
+
+        let base = stripped
+            .rsplit(|ch| ch == '/' || ch == '\\')
+            .next()
+            .unwrap_or(stripped);
+        if !base.is_empty() {
+            Self::push_prepared_cache_id(candidates, base.to_string());
+        }
+
+        if let Some((stem, _ext)) = base.rsplit_once('.') {
+            if !stem.is_empty() {
+                Self::push_prepared_cache_id(candidates, stem.to_string());
+            }
+        }
+    }
+
+    fn record_prepared_cache_error(
+        &mut self,
+        cache_book_id: &str,
+        err: prepared_txt::PreparedTxtError,
+    ) {
+        self.prepared_cache_debug_id = Some(Self::prepared_cache_id_bytes(cache_book_id));
+        self.prepared_cache_debug_err = Some(err.code());
+    }
+}
+
 impl App<AppId> for ReaderApp {
-    fn on_enter(&mut self, ctx: &mut AppContext, _k: &mut KernelHandle<'_>) {
+    fn on_enter(&mut self, ctx: &mut AppContext, k: &mut KernelHandle<'_>) {
         let msg = ctx.message_str();
         let bookmark_jump = reader_state::decode_bookmark_jump(msg);
         if let Some((path, chapter, byte_offset)) = bookmark_jump {
@@ -2097,6 +2665,7 @@ impl App<AppId> for ReaderApp {
         self.epub.skip_large_img = false;
 
         self.is_epub = epub::is_epub_filename(self.name());
+        self.disable_sd_font_runtime_for_epub();
         self.rebuild_quick_actions();
         self.apply_theme_layout();
         self.reset_paging();
@@ -2124,13 +2693,14 @@ impl App<AppId> for ReaderApp {
         self.goto_last_page = false;
 
         self.apply_font_metrics();
+        self.refresh_sd_font_selection(k);
 
         self.state = State::NeedBookmark;
 
         log::info!("reader: opening {}", self.name());
 
-        ctx.set_loading(LOADING_REGION, READER_LOADING_LABEL, 0);
-        ctx.mark_dirty(PAGE_REGION);
+        ctx.set_loading(self.reader_loading_region(), READER_LOADING_LABEL, 0);
+        ctx.mark_dirty(self.reader_page_region());
     }
 
     fn on_exit(&mut self) {
@@ -2185,7 +2755,7 @@ impl App<AppId> for ReaderApp {
                 self.state = State::NeedPage;
             }
         }
-        ctx.mark_dirty(PAGE_REGION);
+        ctx.mark_dirty(self.reader_page_region());
     }
 
     async fn background(&mut self, ctx: &mut AppContext, k: &mut KernelHandle<'_>) {
@@ -2208,6 +2778,7 @@ impl App<AppId> for ReaderApp {
                 self.pending_theme_persist = false;
                 self.persist_theme_preset(k);
             }
+            self.ensure_sd_font_runtime_applied(ctx, k);
             match self.state {
                 State::NeedBookmark => {
                     let _ = self.ensure_current_book_state_foundation(k);
@@ -2241,7 +2812,7 @@ impl App<AppId> for ReaderApp {
 
                     if self.try_open_prepared_book_cache(k, source_path) {
                         self.state = State::NeedPage;
-                        ctx.set_loading(LOADING_REGION, "Loading prepared", 70);
+                        ctx.set_loading(self.reader_loading_region(), "Loading prepared", 70);
                     } else if self.is_epub {
                         self.epub.zip.clear();
                         self.epub.meta = EpubMeta::new();
@@ -2249,10 +2820,10 @@ impl App<AppId> for ReaderApp {
                         self.epub.chapters_cached = false;
                         self.goto_last_page = false;
                         self.state = State::NeedInit;
-                        ctx.set_loading(LOADING_REGION, "Loading", 10);
+                        ctx.set_loading(self.reader_loading_region(), "Loading", 10);
                     } else {
                         self.state = State::NeedPage;
-                        ctx.set_loading(LOADING_REGION, "Loading", 50);
+                        ctx.set_loading(self.reader_loading_region(), "Loading", 50);
                     }
                     continue;
                 }
@@ -2263,7 +2834,7 @@ impl App<AppId> for ReaderApp {
                     match self.epub.init_zip(k, name, &mut self.pg.buf) {
                         Ok(()) => {
                             self.state = State::NeedOpf;
-                            ctx.set_loading(LOADING_REGION, "Loading", 25);
+                            ctx.set_loading(self.reader_loading_region(), "Loading", 25);
                         }
                         Err(e) => {
                             log::info!("reader: epub init (zip) failed: {}", e);
@@ -2282,7 +2853,7 @@ impl App<AppId> for ReaderApp {
                         self.persist_meta_record(k);
                         self.persist_recent_record(k);
                         self.state = State::NeedToc;
-                        ctx.set_loading(LOADING_REGION, "Loading", 40);
+                        ctx.set_loading(self.reader_loading_region(), "Loading", 40);
                     }
                     Err(e) => {
                         log::info!("reader: epub init (opf) failed: {}", e);
@@ -2328,13 +2899,13 @@ impl App<AppId> for ReaderApp {
                     }
                     self.rebuild_quick_actions();
                     self.state = State::NeedCache;
-                    ctx.set_loading(LOADING_REGION, "Caching", 55);
+                    ctx.set_loading(self.reader_loading_region(), "Caching", 55);
                 }
 
                 State::NeedCache => match self.epub.check_cache(k, &mut self.pg.buf) {
                     Ok(true) => {
                         self.state = State::NeedIndex;
-                        ctx.set_loading(LOADING_REGION, "Indexing", 75);
+                        ctx.set_loading(self.reader_loading_region(), "Indexing", 75);
                     }
                     Ok(false) => {
                         // cache the current chapter; async version yields
@@ -2358,7 +2929,7 @@ impl App<AppId> for ReaderApp {
                                 }
 
                                 self.state = State::NeedIndex;
-                                ctx.set_loading(LOADING_REGION, "Indexing", 75);
+                                ctx.set_loading(self.reader_loading_region(), "Indexing", 75);
                             }
                             Err(e) => {
                                 log::info!("reader: cache ch{} failed: {}", ch, e);
@@ -2406,13 +2977,13 @@ impl App<AppId> for ReaderApp {
                                 self.defer_image_decode = false;
                                 self.state = State::Ready;
                                 ctx.clear_loading();
-                                ctx.mark_dirty(PAGE_REGION);
+                                ctx.mark_dirty(self.reader_page_region());
                             }
                             Err(e) => self.enter_error(ctx, e),
                         }
                     } else {
                         self.state = State::NeedPage;
-                        ctx.set_loading(LOADING_REGION, "Loading page", 90);
+                        ctx.set_loading(self.reader_loading_region(), "Loading page", 90);
                     }
                 }
 
@@ -2423,7 +2994,7 @@ impl App<AppId> for ReaderApp {
                                 self.defer_image_decode = false;
                                 self.state = State::Ready;
                                 ctx.clear_loading();
-                                ctx.mark_dirty(PAGE_REGION);
+                                ctx.mark_dirty(self.reader_page_region());
                             }
                             Err(_) => {
                                 self.record_prepared_cache_page_error();
@@ -2442,7 +3013,7 @@ impl App<AppId> for ReaderApp {
                                         self.defer_image_decode = false;
                                         self.state = State::Ready;
                                         ctx.clear_loading();
-                                        ctx.mark_dirty(PAGE_REGION);
+                                        ctx.mark_dirty(self.reader_page_region());
                                     }
                                     Err(e) => self.enter_error(ctx, e),
                                 }
@@ -2472,7 +3043,7 @@ impl App<AppId> for ReaderApp {
                             self.defer_image_decode = false;
                             self.state = State::Ready;
                             ctx.clear_loading();
-                            ctx.mark_dirty(PAGE_REGION);
+                            ctx.mark_dirty(self.reader_page_region());
                         }
                     } else {
                         match self.load_and_prefetch(k) {
@@ -2480,7 +3051,7 @@ impl App<AppId> for ReaderApp {
                                 self.defer_image_decode = false;
                                 self.state = State::Ready;
                                 ctx.clear_loading();
-                                ctx.mark_dirty(PAGE_REGION);
+                                ctx.mark_dirty(self.reader_page_region());
                             }
                             Err(e) => {
                                 log::info!("reader: load failed: {}", e);
@@ -2533,7 +3104,7 @@ impl App<AppId> for ReaderApp {
             match event {
                 ActionEvent::Press(Action::Back) => {
                     self.state = State::Ready;
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                     return Transition::None;
                 }
                 ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
@@ -2549,7 +3120,7 @@ impl App<AppId> for ReaderApp {
                         if self.epub.toc_selected >= self.epub.toc_scroll + vis {
                             self.epub.toc_scroll = self.epub.toc_selected + 1 - vis;
                         }
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     }
                     return Transition::None;
                 }
@@ -2568,7 +3139,7 @@ impl App<AppId> for ReaderApp {
                         if self.epub.toc_selected < self.epub.toc_scroll {
                             self.epub.toc_scroll = self.epub.toc_selected;
                         }
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     }
                     return Transition::None;
                 }
@@ -2584,14 +3155,14 @@ impl App<AppId> for ReaderApp {
                         self.pg.page = 0;
                         self.goto_last_page = false;
                         self.state = State::NeedIndex;
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     } else {
                         log::warn!(
                             "toc: entry \"{}\" unresolved (spine_idx=0xFFFF), ignoring",
                             entry.title_str()
                         );
                         self.state = State::Ready;
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     }
                     return Transition::None;
                 }
@@ -2603,7 +3174,7 @@ impl App<AppId> for ReaderApp {
             match event {
                 ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
                     self.state = State::Ready;
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                     return Transition::None;
                 }
                 ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
@@ -2619,7 +3190,7 @@ impl App<AppId> for ReaderApp {
                         if self.bookmark_selected >= self.bookmark_scroll + vis {
                             self.bookmark_scroll = self.bookmark_selected + 1 - vis;
                         }
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     }
                     return Transition::None;
                 }
@@ -2638,7 +3209,7 @@ impl App<AppId> for ReaderApp {
                         if self.bookmark_selected < self.bookmark_scroll {
                             self.bookmark_scroll = self.bookmark_selected;
                         }
-                        ctx.mark_dirty(PAGE_REGION);
+                        ctx.mark_dirty(self.reader_page_region());
                     }
                     return Transition::None;
                 }
@@ -2660,7 +3231,7 @@ impl App<AppId> for ReaderApp {
                     self.show_position = true;
                 }
                 if self.page_forward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
@@ -2669,7 +3240,7 @@ impl App<AppId> for ReaderApp {
                     self.show_position = true;
                 }
                 if self.page_backward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
@@ -2677,35 +3248,35 @@ impl App<AppId> for ReaderApp {
             ActionEvent::Release(Action::Next) | ActionEvent::Release(Action::Prev) => {
                 if self.show_position {
                     self.show_position = false;
-                    ctx.mark_dirty(POSITION_OVERLAY);
+                    ctx.mark_dirty(self.reader_position_overlay_region());
                 }
                 Transition::None
             }
 
             ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
                 if self.page_forward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
 
             ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
                 if self.page_backward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
 
             ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump) => {
                 if self.jump_forward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
 
             ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump) => {
                 if self.jump_backward() {
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
@@ -2714,7 +3285,7 @@ impl App<AppId> for ReaderApp {
             ActionEvent::LongPress(Action::NextJump) => {
                 if self.state == State::Ready && self.pg.total_pages > 0 {
                     self.pg.page = self.pg.total_pages - 1;
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
@@ -2723,7 +3294,7 @@ impl App<AppId> for ReaderApp {
             ActionEvent::LongPress(Action::PrevJump) => {
                 if self.state == State::Ready {
                     self.pg.page = 0;
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
                 Transition::None
             }
@@ -2784,7 +3355,7 @@ impl App<AppId> for ReaderApp {
                         }
                     }
                     self.state = State::ShowToc;
-                    ctx.mark_dirty(PAGE_REGION);
+                    ctx.mark_dirty(self.reader_page_region());
                 }
             }
             QA_BOOKMARKS => {
@@ -2800,7 +3371,7 @@ impl App<AppId> for ReaderApp {
         }
     }
 
-    fn on_quick_cycle_update(&mut self, id: u8, value: u8, _ctx: &mut AppContext) {
+    fn on_quick_cycle_update(&mut self, id: u8, value: u8, ctx: &mut AppContext) {
         if id == QA_FONT_SIZE {
             self.book_font_size_idx = value;
             self.pending_theme_persist = true;
@@ -2826,9 +3397,83 @@ impl App<AppId> for ReaderApp {
                 }
             }
             self.rebuild_quick_actions();
+        } else if id == QA_ORIENTATION {
+            let next_orientation = value
+                .min(crate::vaachak_x4::x4_kernel::kernel::config::READER_ORIENTATION_COUNT - 1);
+            if self.reader_orientation_idx != next_orientation {
+                self.reader_orientation_idx = next_orientation;
+                self.pending_theme_persist = true;
+                self.apply_theme_layout();
+                self.apply_font_metrics();
+                self.prepared_txt.clear();
+                self.clear_prepared_cache_active_id();
+                if self.state == State::Ready {
+                    if self.is_epub && self.epub.chapters_cached {
+                        self.state = State::NeedIndex;
+                    } else {
+                        self.state = State::NeedPage;
+                    }
+                }
+                ctx.request_full_redraw();
+                self.rebuild_quick_actions();
+            }
         } else if id == QA_SHOW_PROGRESS {
             self.show_progress_chrome = value != 0;
             self.rebuild_quick_actions();
+        } else if id == QA_SD_FONT_SOURCE {
+            let next = value.min(fonts::READER_FONT_SOURCE_COUNT.saturating_sub(1));
+            self.reader_font_source = next;
+            self.reader_sd_font_slot = next.saturating_sub(1);
+            self.reader_sd_font_id = [0; sd_font_selection::SD_FONT_ID_CAP];
+            self.reader_sd_font_id_len = 0;
+            self.sd_font_catalog_checked = true;
+            self.sd_font_available = false;
+            self.sd_font_data.clear();
+            self.pending_theme_persist = true;
+            ctx.request_full_redraw();
+            self.rebuild_quick_actions();
+        } else if id == QA_BIONIC_READING {
+            self.bionic_mode = value
+                .min(crate::vaachak_x4::x4_kernel::kernel::config::READER_BIONIC_MODE_COUNT - 1);
+            self.prepared_txt.clear();
+            self.clear_prepared_cache_active_id();
+            if self.state == State::Ready {
+                if self.is_epub && self.epub.chapters_cached {
+                    self.state = State::NeedIndex;
+                } else {
+                    self.state = State::NeedPage;
+                }
+            }
+            self.rebuild_quick_actions();
+            ctx.request_full_redraw();
+            self.emit_reader_accessibility_marker();
+        } else if id == QA_GUIDE_DOTS {
+            self.guide_dots_mode = value.min(
+                crate::vaachak_x4::x4_kernel::kernel::config::READER_GUIDE_DOTS_MODE_COUNT - 1,
+            );
+            self.prepared_txt.clear();
+            self.clear_prepared_cache_active_id();
+            if self.state == State::Ready {
+                if self.is_epub && self.epub.chapters_cached {
+                    self.state = State::NeedIndex;
+                } else {
+                    self.state = State::NeedPage;
+                }
+            }
+            self.rebuild_quick_actions();
+            ctx.request_full_redraw();
+            self.emit_reader_accessibility_marker();
+        } else if id == QA_SUNLIGHT_FADING_FIX {
+            self.sunlight_fading_fix = value != 0;
+            self.rebuild_quick_actions();
+            ctx.request_full_redraw();
+            if self.sunlight_fading_fix {
+                self.emit_reader_sunlight_marker();
+            }
+        }
+
+        if self.sunlight_fading_fix && Self::sunlight_force_full_redraw_for_quick_action(id) {
+            ctx.request_full_redraw();
         }
     }
 
@@ -2838,8 +3483,16 @@ impl App<AppId> for ReaderApp {
                 book_font: self.book_font_size_idx,
                 reading_theme: self.reading_theme_idx,
                 show_progress: self.show_progress_chrome,
+                sunlight_fading_fix: self.sunlight_fading_fix,
+                bionic_mode: self.bionic_mode,
+                guide_dots_mode: self.guide_dots_mode,
+                reader_orientation: self.reader_orientation_idx,
                 prepared_font_profile: self.prepared_font_profile,
                 prepared_fallback_policy: self.prepared_fallback_policy,
+                reader_font_source: self.reader_font_source,
+                reader_sd_font_slot: self.reader_sd_font_slot,
+                reader_sd_font_id: self.reader_sd_font_id,
+                reader_sd_font_id_len: self.reader_sd_font_id_len,
             },
         ))
     }
@@ -2863,7 +3516,7 @@ impl App<AppId> for ReaderApp {
 
         draw_chrome_text(
             strip,
-            HEADER_REGION,
+            self.reader_header_region(),
             self.display_name(),
             Alignment::CenterLeft,
             header_font,
@@ -2872,7 +3525,7 @@ impl App<AppId> for ReaderApp {
         if self.state == State::ShowToc {
             draw_chrome_text(
                 strip,
-                STATUS_REGION,
+                self.reader_status_region(),
                 "Contents",
                 Alignment::CenterRight,
                 status_font,
@@ -2887,7 +3540,7 @@ impl App<AppId> for ReaderApp {
             }
             draw_chrome_text(
                 strip,
-                STATUS_REGION,
+                self.reader_status_region(),
                 sbuf.as_str(),
                 Alignment::CenterRight,
                 status_font,
@@ -2901,7 +3554,7 @@ impl App<AppId> for ReaderApp {
             self.write_reader_status_label(&mut sbuf);
             draw_chrome_text(
                 strip,
-                STATUS_REGION,
+                self.reader_status_region(),
                 sbuf.as_str(),
                 Alignment::CenterRight,
                 status_font,
@@ -2913,7 +3566,7 @@ impl App<AppId> for ReaderApp {
             let _ = write!(ebuf, "{}", e);
             draw_chrome_text(
                 strip,
-                LOADING_REGION,
+                self.reader_loading_region(),
                 ebuf.as_str(),
                 Alignment::CenterLeft,
                 status_font,
@@ -2936,7 +3589,8 @@ impl App<AppId> for ReaderApp {
             let toc_len = toc_ref.len();
             let tx = self.text_margin as i32;
             let ty = self.text_y as i32;
-            if self.fonts.is_some() {
+            if false {
+                // reader-fonts: bookmark/listing view deliberately uses built-in list font
                 let font = fonts::body_font(self.book_font_size_idx);
                 let line_h = font.line_height as i32;
                 let ascent = font.ascent as i32;
@@ -2952,7 +3606,7 @@ impl App<AppId> for ReaderApp {
                     if selected {
                         Rectangle::new(
                             Point::new(0, y_top),
-                            Size::new(SCREEN_W as u32, line_h as u32),
+                            Size::new(self.reader_logical_width() as u32, line_h as u32),
                         )
                         .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
                         .draw(strip)
@@ -2998,7 +3652,8 @@ impl App<AppId> for ReaderApp {
         if self.state == State::ShowBookmarks {
             let tx = self.text_margin as i32;
             let ty = self.text_y as i32;
-            if self.fonts.is_some() {
+            if false {
+                // reader-fonts: bookmark/listing view deliberately uses built-in list font
                 let font = fonts::body_font(self.book_font_size_idx);
                 let line_h = font.line_height as i32;
                 let ascent = font.ascent as i32;
@@ -3015,7 +3670,7 @@ impl App<AppId> for ReaderApp {
                     if selected {
                         Rectangle::new(
                             Point::new(0, y_top),
-                            Size::new(SCREEN_W as u32, line_h as u32),
+                            Size::new(self.reader_logical_width() as u32, line_h as u32),
                         )
                         .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
                         .draw(strip)
@@ -3156,6 +3811,9 @@ impl App<AppId> for ReaderApp {
                     let mut cx = self.text_margin as i32 + x_indent;
                     let mut sty = span.style();
                     let mut j = 0usize;
+                    let mut bionic_word_remaining = 0usize;
+                    let mut bionic_fix_remaining = 0usize;
+                    let mut guide_prev_word = false;
                     while j < line.len() {
                         let b = line[j];
                         if b == MARKER && j + 1 < line.len() {
@@ -3171,8 +3829,18 @@ impl App<AppId> for ReaderApp {
                         }
                         if b >= 0xC0 {
                             let (ch, seq_len) = decode_utf8_char(line, j);
-                            let ch = reader_body_display_char(&fs, sty, ch);
-                            cx += fs.draw_char(strip, ch, sty, cx, baseline) as i32;
+                            bionic_word_remaining = 0;
+                            bionic_fix_remaining = 0;
+                            cx += draw_reader_sd_or_builtin_char(
+                                &self.sd_font_data,
+                                strip,
+                                &fs,
+                                ch,
+                                sty,
+                                cx,
+                                baseline,
+                                false,
+                            );
                             j += seq_len;
                             continue;
                         }
@@ -3183,10 +3851,53 @@ impl App<AppId> for ReaderApp {
                             continue;
                         }
                         if b < bitmap::FIRST_CHAR {
+                            bionic_word_remaining = 0;
+                            bionic_fix_remaining = 0;
                             j += 1;
                             continue; // control char
                         }
-                        cx += fs.draw_char(strip, b as char, sty, cx, baseline) as i32;
+                        let is_word = reader_bionic_ascii_alpha(b);
+                        if is_word && bionic_word_remaining == 0 {
+                            let word_len = reader_bionic_ascii_word_len(line, j);
+                            bionic_word_remaining = word_len;
+                            bionic_fix_remaining =
+                                reader_bionic_fixation_len(self.bionic_mode, word_len);
+                        }
+                        let bionic = is_word && bionic_fix_remaining > 0;
+                        let guide_dot = !is_word
+                            && (b == b' ' || b == b'\t')
+                            && guide_prev_word
+                            && reader_guide_next_ascii_word(line, j + 1);
+                        let advance = draw_reader_sd_or_builtin_char(
+                            &self.sd_font_data,
+                            strip,
+                            &fs,
+                            b as char,
+                            sty,
+                            cx,
+                            baseline,
+                            bionic,
+                        );
+                        if guide_dot {
+                            draw_reader_guide_dot(
+                                strip,
+                                self.guide_dots_mode,
+                                sty,
+                                cx,
+                                advance,
+                                baseline,
+                            );
+                        }
+                        cx += advance;
+                        if is_word {
+                            guide_prev_word = true;
+                            bionic_word_remaining = bionic_word_remaining.saturating_sub(1);
+                            bionic_fix_remaining = bionic_fix_remaining.saturating_sub(1);
+                        } else {
+                            guide_prev_word = false;
+                            bionic_word_remaining = 0;
+                            bionic_fix_remaining = 0;
+                        }
                         j += 1;
                     }
                 }
@@ -3207,14 +3918,15 @@ impl App<AppId> for ReaderApp {
 
         self.draw_prepared_cache_notice(strip, status_font);
 
+        let position_overlay = self.reader_position_overlay_region();
         if self.show_position
             && self.state == State::Ready
-            && POSITION_OVERLAY.intersects(strip.logical_window())
+            && position_overlay.intersects(strip.logical_window())
         {
             let mut pbuf = StackFmt::<64>::new();
             self.write_position_label(&mut pbuf, true);
 
-            POSITION_OVERLAY
+            position_overlay
                 .to_rect()
                 .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
                 .draw(strip)
@@ -3223,14 +3935,14 @@ impl App<AppId> for ReaderApp {
             if let Some(f) = overlay_font {
                 f.draw_aligned(
                     strip,
-                    POSITION_OVERLAY,
+                    position_overlay,
                     text,
                     Alignment::Center,
                     BinaryColor::Off,
                 );
             } else {
                 let tw = text.len() as u32 * 9;
-                let pos = Alignment::Center.position(POSITION_OVERLAY, Size::new(tw, 18));
+                let pos = Alignment::Center.position(position_overlay, Size::new(tw, 18));
                 let style = MonoTextStyle::new(&FONT_9X18, BinaryColor::Off);
                 Text::new(text, Point::new(pos.x, pos.y + 18), style)
                     .draw(strip)

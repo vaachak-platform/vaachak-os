@@ -18,10 +18,8 @@ fail() {
 [ -f target-xteink-x4/src/vaachak_x4/x4_apps/apps/files.rs ] || fail "MissingFilesApp"
 [ -f target-xteink-x4/src/vaachak_x4/x4_apps/apps/reader/mod.rs ] || fail "MissingReaderApp"
 
-legacy_dir_count="$(find . -maxdepth 1 -type d -name '*_overlay' | wc -l | tr -d ' ')"
-legacy_prefix_a="pha"
-legacy_prefix_b="se"
-legacy_zip_count="$(find . -maxdepth 1 -type f -name "${legacy_prefix_a}${legacy_prefix_b}*.zip" | wc -l | tr -d ' ')"
+legacy_dir_count="$(find . -maxdepth 1 -type d \( -name '*_overlay' -o -name '*_repair' -o -name '*_restore' -o -name '*_cleanup' -o -name '*_contract' -o -name '*_reset' \) | wc -l | tr -d ' ')"
+legacy_zip_count="$(find . -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d ' ')"
 
 old_footer_count="$((rg -n 'Select.*Open.*Back.*Stay|Select.*open.*Back.*Stay' target-xteink-x4/src/vaachak_x4/x4_apps/apps hal-xteink-x4/src/display_smoke.rs target-xteink-x4/src 2>/dev/null || true) | wc -l | tr -d ' ')"
 bad_txt_body_return="$((rg -n 'TITLE_KIND_TEXT.*return Some|return Some.*TITLE_KIND_TEXT' target-xteink-x4/src/vaachak_x4/x4_kernel/kernel/dir_cache.rs 2>/dev/null || true) | wc -l | tr -d ' ')"
@@ -61,7 +59,7 @@ fi
   echo "bad_phrase_lines=$bad_phrase_lines"
   echo "old_footer_count=$old_footer_count"
   echo "bad_txt_body_return=$bad_txt_body_return"
-  echo "marker=x4-repository-cleanup-new-device-deploy-baseline-ok"
+  echo "marker=x4-repository-cleanup-current-state-ok"
 } | tee "$OUT"
 
 echo "Wrote: $OUT"

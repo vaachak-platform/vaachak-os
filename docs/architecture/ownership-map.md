@@ -1,28 +1,36 @@
 # Ownership Map
 
-## Hardware ownership
+## Active code ownership
 
-| Area | Vaachak owner | Pulp hardware fallback |
+| Area | Current owner/path | Rule |
 | --- | --- | --- |
-| SPI | `VaachakNativeSpiPhysicalDriver` | Disabled |
-| SSD1677 display | `VaachakNativeSsd1677PhysicalDriver` | Disabled |
-| SD/MMC physical storage | `VaachakNativeSdMmcPhysicalDriver` | Disabled |
-| FAT/filesystem algorithms | `VaachakNativeFatAlgorithmDriver` | Disabled |
-| Input physical sampling | Vaachak native input sampling driver | Disabled for interpretation/classification; Pulp code remains only outside active hardware ownership |
+| Shared models/contracts | `core/**` | Keep platform-neutral. |
+| X4 HAL seams | `hal-xteink-x4/**` | Keep board-facing and testable. |
+| X4 firmware target | `target-xteink-x4/**` | Active X4 runtime and app path. |
+| Optional Lua VM support | `support/vaachak-lua-vm/**` | Feature-gated support crate. |
+| SD sample assets/apps | `examples/sd-card/**` | Canonical sample deployment tree. |
+| Host asset tooling | `tools/**` | Host-only generation/smoke tools. |
+| Production helper scripts | `scripts/**` | Keep only reusable production helpers. |
+| Documentation | `docs/**` | Current-state docs plus retained design references. |
+| Pulp reference | `vendor/pulp-os/**` | Reference/compatibility only; do not add new functionality. |
+| EPUB dependency | `vendor/smol-epub/**` | Dependency source, excluded from workspace. |
 
-## Runtime and product ownership
+## Product ownership
 
-| Area | Current owner / direction |
+| Area | Current state |
 | --- | --- |
-| Reader Home | Next product work |
-| Library index | Next product work |
-| Reader state model | Must be frozen before XTC and `.vchk` work |
-| XTC | Compatibility/open path, not native long-term package |
-| `.vchk` | Long-term Vaachak-native package contract |
-| Sync | Align after local state is stable |
-| Waveshare/S3 | Future profile after X4 reader path is stable |
-| Compatibility host | Future optional layer; not a v1 X4 milestone |
+| Home/category dashboard | Active: Network, Productivity, Games, Reader, System, Tools. |
+| Files | Active local SD file browser. |
+| Reader | Active TXT/EPUB reader path with progress/bookmark/settings support. |
+| Reader display aids | Bionic Reading, Guide Dots, and sunlight-fading mitigation accepted. |
+| Wi-Fi | Vaachak-owned setup/scan/transfer/time code under the X4 target. |
+| Lua apps | Optional `/VAACHAK/APPS` path, uppercase 8.3-safe physical folders. |
+| Sleep images | Daily/Fast Daily/Static/Cached/Text/No Redraw helper path. |
+| XTC | Planned compatibility/open path. |
+| `.vchk` | Planned Vaachak-native package contract. |
+| Sync | Planned after local reader state is stable. |
+| Waveshare/S3 | Later capability profile after X4 reader path is stable. |
 
-## Vendor scope
+## New work rule
 
-`vendor/pulp-os` is retained for non-hardware compatibility/import/reference scope. Any future use must be classified before it becomes product-critical.
+New code should go into Vaachak-owned paths. Do not add new behavior to `vendor/pulp-os`.

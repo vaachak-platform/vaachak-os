@@ -10,7 +10,7 @@ All optional Lua apps are deployed under the SD-card root path:
 /VAACHAK/APPS
 ```
 
-Native Vaachak OS features remain authoritative. Lua apps are optional additions for tools, productivity, experiments, and simple network features.
+Native Vaachak OS features remain authoritative. Lua apps are optional additions for tools, productivity, experiments, and simple games.
 
 ## Physical naming rule
 
@@ -22,28 +22,41 @@ NAME.EXT
 
 where `NAME` is at most 8 characters and `EXT` is at most 3 characters. Keep folder names uppercase. Keep long logical identity inside `APP.TOM`.
 
-## Final physical-to-logical map
+## Current sample app map
 
 ```text
-/VAACHAK/APPS/MANTRA   -> id = "daily_mantra" -> Tools -> Daily Mantra
-/VAACHAK/APPS/CALENDAR -> id = "calendar"     -> Productivity -> Calendar
-/VAACHAK/APPS/PANCHANG -> id = "panchang"     -> Tools -> Panchang
+/VAACHAK/APPS/CALENDAR -> id = "calendar"      -> Productivity -> Calendar
+/VAACHAK/APPS/PANCHANG -> id = "panchang"      -> Productivity -> Panchang
+/VAACHAK/APPS/MANTRA   -> id = "daily_mantra"  -> Tools        -> Daily Mantra
+/VAACHAK/APPS/DICT     -> id = "dictionary"    -> Tools        -> Dictionary
+/VAACHAK/APPS/UNITS    -> id = "unit_converter"-> Tools        -> Unit Converter
+/VAACHAK/APPS/SUDOKU   -> id = "sudoku"        -> Games        -> Sudoku
+/VAACHAK/APPS/MINES    -> id = "minesweeper"   -> Games        -> Minesweeper
+/VAACHAK/APPS/FREECELL -> id = "freecell"      -> Games        -> FreeCell
+/VAACHAK/APPS/MEMCARD  -> id = "memory_cards"  -> Games        -> Memory Cards
+/VAACHAK/APPS/SOLITAIR -> id = "solitaire"     -> Games        -> Solitaire
+/VAACHAK/APPS/LUDO     -> id = "ludo"          -> Games        -> Ludo
+/VAACHAK/APPS/SNAKES   -> id = "snakes_ladder" -> Games        -> Snakes and Ladder
 ```
 
-## Required sample layout
+## Required sample layout pattern
+
+Each app folder should contain an `APP.TOM` manifest and a `MAIN.LUA` entry file. Apps may include bounded data files next to the entry file or under a short uppercase data folder.
+
+Examples:
 
 ```text
 /VAACHAK/APPS/MANTRA/APP.TOM
 /VAACHAK/APPS/MANTRA/MAIN.LUA
 /VAACHAK/APPS/MANTRA/MANTRAS.TXT
 
-/VAACHAK/APPS/CALENDAR/APP.TOM
-/VAACHAK/APPS/CALENDAR/MAIN.LUA
-/VAACHAK/APPS/CALENDAR/EVENTS.TXT
-
 /VAACHAK/APPS/PANCHANG/APP.TOM
 /VAACHAK/APPS/PANCHANG/MAIN.LUA
 /VAACHAK/APPS/PANCHANG/DATA/Y2026.TXT
+
+/VAACHAK/APPS/DICT/APP.TOM
+/VAACHAK/APPS/DICT/MAIN.LUA
+/VAACHAK/APPS/DICT/INDEX.TXT
 ```
 
 ## Manifest rule
@@ -76,4 +89,4 @@ Avoid uploading lower-case long-name folders such as `/VAACHAK/APPS/daily_mantra
 
 ## Commit hygiene
 
-Old overlay zip files, extracted overlay folders, and temporary generated apply/patch/validator scripts should not be committed. Keep only source files, docs, examples, and the current final validator needed for repository hygiene.
+Old patch zip files, extracted patch folders, and temporary generated apply/patch/validator scripts should not be committed. Keep only source files, docs, examples, tools, and production helper scripts.

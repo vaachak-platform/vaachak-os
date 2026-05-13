@@ -79,6 +79,8 @@ pub struct FilesApp {
     stale_cache: bool,
     error: Option<Error>,
     ui_fonts: fonts::UiFonts,
+    ui_font_size_idx: u8,
+    ui_font_source: u8,
     list_y: u16,
 
     title_scan_idx: usize,
@@ -106,6 +108,8 @@ impl FilesApp {
             stale_cache: false,
             error: None,
             ui_fonts: uf,
+            ui_font_size_idx: 0,
+            ui_font_source: 0,
             list_y,
             title_scan_idx: 0,
             title_scanning: false,
@@ -117,10 +121,12 @@ impl FilesApp {
         }
     }
 
-    pub fn set_ui_font_size(&mut self, idx: u8) {
-        self.ui_fonts = fonts::UiFonts::for_size(idx);
-        self.list_y = TITLE_Y + self.ui_fonts.heading.line_height + HEADER_LIST_GAP;
-        self.page_size = compute_page_size(self.list_y);
+    pub fn set_ui_font_style(&mut self, _source: u8, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
+    }
+
+    pub fn set_ui_font_size(&mut self, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
     }
 
     // Session state accessors for RTC persistence

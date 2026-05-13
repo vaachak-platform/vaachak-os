@@ -2,22 +2,29 @@
 
 ## Current baseline
 
-The hardware migration track is accepted. The current baseline is an X4-first reader OS with Vaachak-native hardware ownership and a retained `vendor/pulp-os` non-hardware compatibility/import/reference scope.
+The current baseline is an X4-first reader firmware with Vaachak-owned runtime code, a cleaned repository root, production helper scripts, and current-state documentation.
 
-Accepted gate:
+Accepted baseline:
 
 ```text
 vaachak_hardware_runtime_final_acceptance=ok
+hardware_physical_full_migration_consolidation=ok
+vendor_pulp_os_scope_reduction=ok
+reader-bionic=x4-reader-bionic-reading-ok
+reader-guide-dots=x4-reader-guide-dots-ok
+reader-sunlight=x4-reader-sunlight-fading-fix-ok
 ```
 
 ## Roadmap principles
 
 1. Protect the reading path.
-2. Do not add platform breadth before Reader Home, resume, and library are stable.
-3. Freeze reader data models before adding XTC or `.vchk` write behavior.
-4. Treat XTC as compatibility/import support.
-5. Treat `.vchk` as the Vaachak-native package format.
-6. Align sync semantics only after local state is stable.
+2. Keep the accepted X4/CrossPoint partition table unchanged.
+3. Do not add broad platform features before Reader Home, resume, and library are stable.
+4. Keep optional Lua apps bounded to `/VAACHAK/APPS`; do not move native features into Lua unless that is explicitly chosen.
+5. Freeze reader data models before XTC or `.vchk` write behavior.
+6. Treat XTC as compatibility/import support.
+7. Treat `.vchk` as the Vaachak-native package format.
+8. Align sync semantics only after local state is stable.
 
 ## Milestones
 
@@ -91,13 +98,8 @@ Use a hybrid anchor model: fast local page index for reopen, plus logical anchor
 ## Deferred until after the reader path is stable
 
 - OPDS.
-- OTA hardening.
+- OTA hardening beyond the current app0/partition helpers.
 - Broad app ecosystem.
 - Palm/Tern compatibility host.
-- Script/plugin runtime.
+- Plugin/runtime expansion beyond the bounded Lua app path.
 - Waveshare/S3 implementation.
-
-## XTC compatibility
-
-XTC compatibility remains a planned reader-format milestone after Reader Home, library/resume polish, and reader data model freeze. XTC should be treated as a compatibility/import format, not the long-term Vaachak-native state container.
-

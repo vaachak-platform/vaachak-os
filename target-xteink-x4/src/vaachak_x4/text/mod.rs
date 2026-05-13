@@ -19,3 +19,8 @@ pub use font_catalog::{FontDescriptor, font_for_script};
 pub use glyph_run::shape_placeholder_run;
 pub use layout::TextLayoutStyle;
 pub use script::{ScriptClass, dominant_script};
+
+pub mod sd_font_selection;
+pub mod static_font_assets;
+
+pub mod sd_vfn_runtime;

@@ -37,6 +37,7 @@ pub enum QuickMenuResult {
     RefreshScreen,
     GoHome,
     AppTrigger(u8),
+    AppCycleChanged(u8),
 }
 
 #[derive(Clone, Copy)]
@@ -185,48 +186,47 @@ impl QuickMenu {
                 QuickMenuResult::Consumed
             }
 
-            Action::NextJump => {
-                self.adjust_selected(1);
-                QuickMenuResult::Consumed
-            }
+            Action::NextJump => self.adjust_selected(1),
 
-            Action::PrevJump => {
-                self.adjust_selected(-1);
-                QuickMenuResult::Consumed
-            }
+            Action::PrevJump => self.adjust_selected(-1),
 
             Action::Select => self.activate_selected(),
         }
     }
 
-    fn adjust_selected(&mut self, delta: i8) {
+    fn adjust_selected(&mut self, delta: i8) -> QuickMenuResult {
         let item = &mut self.items[self.selected];
         if let MenuItemKind::AppCycle {
+            id,
             ref mut value,
             options,
-            ..
         } = item.kind
         {
             let max = options.len().saturating_sub(1) as u8;
             if delta > 0 && *value < max {
                 *value += 1;
                 self.dirty = true;
+                return QuickMenuResult::AppCycleChanged(id);
             } else if delta < 0 && *value > 0 {
                 *value -= 1;
                 self.dirty = true;
+                return QuickMenuResult::AppCycleChanged(id);
             }
         }
+        QuickMenuResult::Consumed
     }
 
     fn activate_selected(&mut self) -> QuickMenuResult {
         match &mut self.items[self.selected].kind {
-            MenuItemKind::AppCycle { value, options, .. } => {
+            MenuItemKind::AppCycle { id, value, options } => {
                 let len = options.len() as u8;
                 if len > 0 {
                     *value = (*value + 1) % len;
                     self.dirty = true;
+                    QuickMenuResult::AppCycleChanged(*id)
+                } else {
+                    QuickMenuResult::Consumed
                 }
-                QuickMenuResult::Consumed
             }
             MenuItemKind::AppTrigger { id, .. } => {
                 let id = *id;

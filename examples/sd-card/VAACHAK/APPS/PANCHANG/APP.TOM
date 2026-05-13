@@ -1,6 +1,6 @@
 id = "panchang"
 name = "Panchang"
-category = "Tools"
+category = "Productivity"
 type = "activity"
 version = "0.1.0"
 entry = "MAIN.LUA"

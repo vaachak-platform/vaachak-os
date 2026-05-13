@@ -4,6 +4,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 
+use crate::vaachak_x4::lua::board_games::{LudoState, SnakesState};
+use crate::vaachak_x4::lua::card_games::{FreeCellState, SolitaireState};
 use embedded_graphics::pixelcolor::BinaryColor;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::PrimitiveStyle;
@@ -14,6 +16,13 @@ pub const X4_KEYBOARD_CROSSPOINT_SESSION_REPAIR_MARKER: &str =
 pub const X4_KEYBOARD_CROSSPOINT_DIRTY_FIELD_COMPILE_REPAIR_MARKER: &str =
     "x4-keyboard-crosspoint-dirty-field-compile-repair-ok";
 
+use crate::vaachak_x4::lua::dictionary::{self, DictionaryState};
+use crate::vaachak_x4::lua::game_stub_script::{self, LuaGameStubScreen};
+use crate::vaachak_x4::lua::grid_games::{
+    GridMove, MemoryCardsState, MinesweeperState, SudokuState,
+};
+use crate::vaachak_x4::lua::tool_stub_script::{self, LuaToolStubScreen};
+use crate::vaachak_x4::lua::unit_converter::{self, UnitConverterState};
 use crate::vaachak_x4::network::{time_status, wifi_scan};
 use crate::vaachak_x4::x4_apps::apps::reader_state;
 use crate::vaachak_x4::x4_apps::apps::widgets::text_keyboard::{self, TextKeyboardAction};
@@ -66,7 +75,7 @@ const HOME_FOOTER_RESERVED_H: u16 = BUTTON_BAR_H + 8;
 const HOME_FOOTER_GAP: u16 = 10;
 const HOME_CARD_TEXT_GAP: u16 = 5;
 
-const TOOLS_CATEGORY_ITEM_COUNT: usize = 4;
+const TOOLS_CATEGORY_ITEM_COUNT: usize = 5;
 
 const MAX_ITEMS: usize = HOME_CARD_COUNT;
 const RECENT_BUF_LEN: usize = 160;
@@ -215,6 +224,9 @@ enum HomeState {
     ShowWifiConnect,
     ShowDateTime,
     ShowPlaceholder,
+    ShowLuaGameStub,
+    ShowLuaToolStub,
+    ShowLuaDictionary,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -238,12 +250,29 @@ pub struct HomeApp {
     state: HomeState,
     selected: usize,
     ui_fonts: fonts::UiFonts,
+    ui_font_size_idx: u8,
+    ui_font_source: u8,
     item_regions: [Region; MAX_ITEMS],
     item_count: usize,
     active_category: usize,
     return_target: ReturnTarget,
     placeholder_title: &'static str,
     placeholder_detail: &'static str,
+    lua_game_index: usize,
+    lua_game_screen: LuaGameStubScreen,
+    needs_load_lua_game_stub: bool,
+    lua_tool_index: usize,
+    lua_tool_screen: LuaToolStubScreen,
+    needs_load_lua_tool_stub: bool,
+    dictionary: DictionaryState,
+    unit_converter: UnitConverterState,
+    sudoku_game: SudokuState,
+    mines_game: MinesweeperState,
+    memory_game: MemoryCardsState,
+    freecell_game: FreeCellState,
+    solitaire_game: SolitaireState,
+    ludo_game: LudoState,
+    snakes_game: SnakesState,
 
     network_ssid: [u8; NETWORK_SSID_BUF_LEN],
     network_ssid_len: usize,
@@ -319,12 +348,29 @@ impl HomeApp {
             state: HomeState::Menu,
             selected: 0,
             ui_fonts: uf,
+            ui_font_size_idx: 0,
+            ui_font_source: 0,
             item_regions: compute_item_regions(fonts::heading_font(0).line_height),
             item_count: HOME_CARD_COUNT,
             active_category: 0,
             return_target: ReturnTarget::Menu,
             placeholder_title: "Coming soon",
             placeholder_detail: "Placeholder",
+            lua_game_index: 0,
+            lua_game_screen: LuaGameStubScreen::fallback_for(0),
+            needs_load_lua_game_stub: false,
+            lua_tool_index: 0,
+            lua_tool_screen: LuaToolStubScreen::fallback_for(0),
+            needs_load_lua_tool_stub: false,
+            dictionary: DictionaryState::default(),
+            unit_converter: UnitConverterState::default(),
+            sudoku_game: SudokuState::default(),
+            mines_game: MinesweeperState::default(),
+            memory_game: MemoryCardsState::default(),
+            freecell_game: FreeCellState::default(),
+            solitaire_game: SolitaireState::default(),
+            ludo_game: LudoState::default(),
+            snakes_game: SnakesState::default(),
             network_ssid: [0u8; NETWORK_SSID_BUF_LEN],
             network_ssid_len: 0,
             network_pass: [0u8; NETWORK_PASS_BUF_LEN],
@@ -383,9 +429,12 @@ impl HomeApp {
         }
     }
 
-    pub fn set_ui_font_size(&mut self, idx: u8) {
-        self.ui_fonts = fonts::UiFonts::for_size(idx);
-        self.refresh_menu_layout();
+    pub fn set_ui_font_style(&mut self, _source: u8, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
+    }
+
+    pub fn set_ui_font_size(&mut self, _idx: u8) {
+        self.ui_fonts = fonts::UiFonts::for_size(0);
     }
 
     fn refresh_menu_layout(&mut self) {
@@ -409,6 +458,9 @@ impl HomeApp {
             HomeState::ShowDateTime => 8,
             HomeState::ShowCalendar => 9,
             HomeState::ShowPanchangLite => 10,
+            HomeState::ShowLuaGameStub => 32,
+            HomeState::ShowLuaToolStub => 33,
+            HomeState::ShowLuaDictionary => 34,
             HomeState::ShowLuaPanchang => 10,
         }
     }
@@ -448,7 +500,7 @@ impl HomeApp {
             7 => HomeState::ShowWifiConnect,
             8 => HomeState::ShowDateTime,
             9 => HomeState::ShowCalendar,
-            10 => HomeState::ShowPanchangLite,
+            10 => HomeState::ShowLuaPanchang,
             _ => HomeState::Menu,
         };
         self.selected = selected.min(HOME_CARD_COUNT - 1);
@@ -480,6 +532,13 @@ impl HomeApp {
         }
         if self.state == HomeState::ShowLuaCalendar {
             self.needs_load_lua_calendar = true;
+        }
+        if self.state == HomeState::ShowLuaPanchang {
+            self.time_status_loaded = false;
+            self.panchang_mantra_loaded = false;
+            self.needs_load_time_status = true;
+            self.needs_load_panchang_mantra = true;
+            self.needs_load_lua_panchang = true;
         }
         log::info!(
             "home: restore_state state={:?} selected={}",
@@ -1498,12 +1557,83 @@ impl HomeApp {
             _ => LuaPanchangScreen::missing_manifest(),
         };
         self.needs_load_lua_panchang = false;
+        self.apply_lua_panchang_lite_context();
         log::info!(
             "lua-app marker={} sd_runtime_marker={} app=panchang source={}",
             LUA_PANCHANG_APP_MARKER,
             LUA_PANCHANG_SD_RUNTIME_MARKER,
             self.lua_panchang_screen.source.label()
         );
+    }
+
+    fn apply_lua_panchang_lite_context(&mut self) {
+        self.lua_panchang_screen.title.set("Panchang");
+
+        if !self.time_status_loaded {
+            self.lua_panchang_screen
+                .subtitle
+                .set("Date & Time cache loading");
+            self.lua_panchang_screen
+                .line1
+                .set("Reading cached Date & Time...");
+            self.lua_panchang_screen
+                .line2
+                .set("Panchang opens after cache read");
+            self.lua_panchang_screen
+                .line3
+                .set("Back returns to Productivity");
+            self.lua_panchang_screen
+                .footer
+                .set("Lua Panchang + cached Date & Time");
+            return;
+        }
+
+        let Some(panchang) = self.time_cache.display_panchang_lite(self.time_uptime_secs) else {
+            self.lua_panchang_screen
+                .subtitle
+                .set("Date & Time not synced");
+            self.lua_panchang_screen.line1.set("Sync Date & Time first");
+            self.lua_panchang_screen
+                .line2
+                .set("Panchang works offline after one successful sync");
+            self.lua_panchang_screen
+                .line3
+                .set("Back returns to Productivity");
+            self.lua_panchang_screen
+                .footer
+                .set("No network API used by Panchang");
+            return;
+        };
+
+        let source = self.lua_panchang_screen.source.label();
+
+        self.lua_panchang_screen.subtitle.set(panchang.weekday);
+        self.lua_panchang_screen.subtitle.push_str(" - ");
+        self.lua_panchang_screen
+            .subtitle
+            .push_str(panchang.location);
+
+        self.lua_panchang_screen.line1.set("Tithi: ");
+        self.lua_panchang_screen.line1.push_str(panchang.tithi);
+
+        self.lua_panchang_screen.line2.set("Paksha: ");
+        self.lua_panchang_screen.line2.push_str(panchang.paksha);
+        self.lua_panchang_screen.line2.push_str("  Month: ");
+        self.lua_panchang_screen.line2.push_str(panchang.month);
+
+        let mantra = String::from(self.panchang_mantra_status());
+        if mantra.is_empty() || mantra == "--" {
+            self.lua_panchang_screen.line3.set(panchang.note);
+        } else {
+            self.lua_panchang_screen.line3.set("Mantra: ");
+            self.lua_panchang_screen.line3.push_str(mantra.as_str());
+        }
+
+        self.lua_panchang_screen.footer.set("Source: ");
+        self.lua_panchang_screen.footer.push_str(source);
+        self.lua_panchang_screen
+            .footer
+            .push_str(" + cached Date & Time");
     }
 
     fn load_lua_calendar(&mut self, k: &mut KernelHandle<'_>) {
@@ -1874,6 +2004,25 @@ impl App<AppId> for HomeApp {
             return;
         }
 
+        if self.needs_load_lua_game_stub {
+            self.load_lua_game_stub(k);
+            self.needs_load_lua_game_stub = false;
+            if self.state == HomeState::ShowLuaGameStub {
+                ctx.request_full_redraw();
+            }
+        }
+
+        if self.needs_load_lua_tool_stub {
+            self.load_lua_tool_stub(k);
+            self.needs_load_lua_tool_stub = false;
+            if matches!(
+                self.state,
+                HomeState::ShowLuaToolStub | HomeState::ShowLuaDictionary
+            ) {
+                ctx.request_full_redraw();
+            }
+        }
+
         if self.needs_load_recent {
             let old_count = self.item_count;
             if !self.load_recent_record_from_state(k) && !self.load_recent_legacy(k) {
@@ -1919,6 +2068,7 @@ impl App<AppId> for HomeApp {
                     | HomeState::ShowDailyMantra
                     | HomeState::ShowCalendar
                     | HomeState::ShowPanchangLite
+                    | HomeState::ShowLuaPanchang
                     | HomeState::ShowNetworkStatus
                     | HomeState::ShowDateTime
             ) {
@@ -1928,7 +2078,10 @@ impl App<AppId> for HomeApp {
 
         if self.needs_load_panchang_mantra {
             self.load_panchang_mantra(k);
-            if self.state == HomeState::ShowPanchangLite {
+            if matches!(
+                self.state,
+                HomeState::ShowPanchangLite | HomeState::ShowLuaPanchang
+            ) {
                 ctx.request_full_redraw();
             }
         }
@@ -2015,6 +2168,9 @@ impl App<AppId> for HomeApp {
             HomeState::ShowWifiConnect => self.on_event_wifi_connect(event, ctx),
             HomeState::ShowDateTime => self.on_event_date_time(event, ctx),
             HomeState::ShowPlaceholder => self.on_event_placeholder(event, ctx),
+            HomeState::ShowLuaGameStub => self.on_event_lua_game_stub(event, ctx),
+            HomeState::ShowLuaToolStub => self.on_event_lua_tool_stub(event, ctx),
+            HomeState::ShowLuaDictionary => self.on_event_lua_tool_stub(event, ctx),
         }
     }
 
@@ -2034,6 +2190,9 @@ impl App<AppId> for HomeApp {
             HomeState::ShowWifiConnect => self.draw_wifi_connect(strip),
             HomeState::ShowDateTime => self.draw_date_time(strip),
             HomeState::ShowPlaceholder => self.draw_placeholder(strip),
+            HomeState::ShowLuaGameStub => self.draw_lua_game_stub(strip),
+            HomeState::ShowLuaToolStub => self.draw_lua_tool_stub(strip),
+            HomeState::ShowLuaDictionary => self.draw_dictionary_tool(strip),
         }
     }
 }
@@ -2098,9 +2257,12 @@ impl HomeApp {
         ctx.request_full_redraw();
     }
 
-    #[allow(dead_code)]
     fn open_lua_panchang(&mut self, ctx: &mut AppContext) {
         self.return_target = ReturnTarget::CategoryItems;
+        self.time_status_loaded = false;
+        self.panchang_mantra_loaded = false;
+        self.needs_load_time_status = true;
+        self.needs_load_panchang_mantra = true;
         self.needs_load_lua_panchang = true;
         self.state = HomeState::ShowLuaPanchang;
         ctx.request_full_redraw();
@@ -2178,6 +2340,433 @@ impl HomeApp {
         self.needs_load_time_status = true;
         self.state = HomeState::ShowDateTime;
         ctx.request_full_redraw();
+    }
+    fn open_lua_tool_stub(&mut self, idx: usize, ctx: &mut AppContext) {
+        self.lua_tool_index = idx.min(tool_stub_script::lua_tool_count().saturating_sub(1));
+        if self.lua_tool_index == 0 {
+            self.dictionary.reset();
+        }
+        if self.lua_tool_index == 1 {
+            self.unit_converter.reset();
+        }
+        self.lua_tool_screen = LuaToolStubScreen::fallback_for(self.lua_tool_index);
+        self.needs_load_lua_tool_stub = true;
+        self.return_target = ReturnTarget::CategoryItems;
+        self.state = HomeState::ShowLuaToolStub;
+        ctx.request_full_redraw();
+    }
+    fn load_dictionary_fallback_json(&mut self, k: &mut KernelHandle<'_>) {
+        let mut data_buf = alloc::vec::Vec::new();
+        data_buf.resize(dictionary::MAX_DICTIONARY_SHARD_BYTES, 0);
+        match k.read_lua_dictionary_fallback_json_start(&mut data_buf) {
+            Ok((size, len)) => {
+                if size as usize > dictionary::MAX_DICTIONARY_SHARD_BYTES {
+                    self.dictionary
+                        .mark_shard_too_large(dictionary::LUA_DICTIONARY_FALLBACK_JSON_FILE, size);
+                    self.lua_tool_screen
+                        .line2
+                        .set("DICT.JSN too large; use INDEX.TXT shards");
+                    return;
+                }
+                match core::str::from_utf8(&data_buf[..len]) {
+                    Ok(data) => {
+                        self.dictionary.load_dictionary_json(data);
+                        self.lua_tool_screen.footer.set("Loaded fallback DICT.JSN");
+                    }
+                    Err(_) => {
+                        self.dictionary.mark_parse_failed("DICT.JSN invalid UTF-8");
+                        self.lua_tool_screen.line2.set("DICT.JSN invalid UTF-8");
+                    }
+                }
+            }
+            Err(_) => {
+                self.dictionary.mark_missing_index();
+                self.lua_tool_screen
+                    .line2
+                    .set("Missing INDEX.TXT and DICT.JSN");
+            }
+        }
+    }
+    fn load_lua_tool_stub(&mut self, k: &mut KernelHandle<'_>) {
+        let app = tool_stub_script::lua_tool_app(self.lua_tool_index);
+        let mut manifest_buf = [0u8; 768];
+        let manifest_len =
+            match k.read_lua_game_app_file_start(app.folder, "APP.TOM", &mut manifest_buf) {
+                Ok((_size, len)) => len,
+                Err(_) => {
+                    self.lua_tool_screen = LuaToolStubScreen::diagnostic(
+                        self.lua_tool_index,
+                        tool_stub_script::LuaToolStubSource::MissingManifest,
+                        "Lua tool APP.TOM is missing",
+                        "Upload APP.TOM with Wi-Fi Transfer",
+                    );
+                    return;
+                }
+            };
+        let manifest = match core::str::from_utf8(&manifest_buf[..manifest_len]) {
+            Ok(value) => value,
+            Err(_) => {
+                self.lua_tool_screen = LuaToolStubScreen::diagnostic(
+                    self.lua_tool_index,
+                    tool_stub_script::LuaToolStubSource::ManifestInvalidUtf8,
+                    "APP.TOM is not valid UTF-8",
+                    "Re-upload the manifest file",
+                );
+                return;
+            }
+        };
+
+        let mut script_buf = [0u8; 2048];
+        let script_len =
+            match k.read_lua_game_app_file_start(app.folder, "MAIN.LUA", &mut script_buf) {
+                Ok((_size, len)) => len,
+                Err(_) => {
+                    self.lua_tool_screen = LuaToolStubScreen::diagnostic(
+                        self.lua_tool_index,
+                        tool_stub_script::LuaToolStubSource::MissingEntry,
+                        "Lua tool MAIN.LUA is missing",
+                        "Upload MAIN.LUA with Wi-Fi Transfer",
+                    );
+                    return;
+                }
+            };
+        let script = match core::str::from_utf8(&script_buf[..script_len]) {
+            Ok(value) => value,
+            Err(_) => {
+                self.lua_tool_screen = LuaToolStubScreen::diagnostic(
+                    self.lua_tool_index,
+                    tool_stub_script::LuaToolStubSource::ScriptInvalidUtf8,
+                    "MAIN.LUA is not valid UTF-8",
+                    "Re-upload the script file",
+                );
+                return;
+            }
+        };
+
+        self.lua_tool_screen =
+            tool_stub_script::build_tool_stub_runtime(self.lua_tool_index, manifest, script);
+
+        if self.lua_tool_index == 0 {
+            let mut index_buf = [0u8; 2048];
+            match k.read_lua_dictionary_index_start(&mut index_buf) {
+                Ok((_size, len)) => match core::str::from_utf8(&index_buf[..len]) {
+                    Ok(index) => {
+                        if self.dictionary.load_index(index).is_err() {
+                            self.load_dictionary_fallback_json(k);
+                            return;
+                        }
+                        let shard_file = self.dictionary.desired_shard_file();
+                        if !self.dictionary.current_shard_declared() {
+                            self.dictionary.mark_missing_shard(shard_file.as_str());
+                            self.lua_tool_screen
+                                .line2
+                                .set("INDEX.TXT missing requested shard");
+                            return;
+                        }
+                        let mut data_buf = alloc::vec::Vec::new();
+                        data_buf.resize(dictionary::MAX_DICTIONARY_SHARD_BYTES, 0);
+                        match k.read_lua_dictionary_shard_start(shard_file.as_str(), &mut data_buf)
+                        {
+                            Ok((size, data_len)) => {
+                                if size as usize > dictionary::MAX_DICTIONARY_SHARD_BYTES {
+                                    self.dictionary
+                                        .mark_shard_too_large(shard_file.as_str(), size);
+                                    self.lua_tool_screen
+                                        .line2
+                                        .set("Dictionary shard too large; split smaller");
+                                    return;
+                                }
+                                match core::str::from_utf8(&data_buf[..data_len]) {
+                                    Ok(data) => {
+                                        let _ = self.dictionary.load_shard_json(
+                                            self.dictionary.desired_shard_letter(),
+                                            data,
+                                        );
+                                        self.lua_tool_screen
+                                            .footer
+                                            .set("Loaded dictionary shard from DATA");
+                                    }
+                                    Err(_) => {
+                                        self.dictionary.mark_parse_failed("shard invalid UTF-8");
+                                        self.lua_tool_screen
+                                            .line2
+                                            .set("Dictionary shard invalid UTF-8");
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                self.dictionary.mark_missing_shard(shard_file.as_str());
+                                self.lua_tool_screen
+                                    .line2
+                                    .set("Dictionary shard missing in DATA");
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        self.dictionary.mark_parse_failed("INDEX.TXT invalid UTF-8");
+                        self.load_dictionary_fallback_json(k);
+                    }
+                },
+                Err(_) => self.load_dictionary_fallback_json(k),
+            }
+        } else if self.lua_tool_index == 1 {
+            let mut data_buf = [0u8; 2048];
+            match k.read_lua_game_app_file_start(app.folder, app.data_file, &mut data_buf) {
+                Ok((_size, len)) => match core::str::from_utf8(&data_buf[..len]) {
+                    Ok(data) => self.unit_converter.load_units(data),
+                    Err(_) => self.unit_converter.load_default(),
+                },
+                Err(_) => self.unit_converter.load_default(),
+            }
+        }
+    }
+    fn on_event_lua_tool_stub(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                self.return_to_target(ctx)
+            }
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next)
+                if self.lua_tool_index == 0 =>
+            {
+                self.dictionary.move_keyboard_down();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev)
+                if self.lua_tool_index == 0 =>
+            {
+                self.dictionary.move_keyboard_up();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump)
+                if self.lua_tool_index == 0 =>
+            {
+                self.dictionary.move_keyboard_right();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump)
+                if self.lua_tool_index == 0 =>
+            {
+                self.dictionary.move_keyboard_left();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) if self.lua_tool_index == 0 => {
+                let selected_key = self
+                    .dictionary
+                    .keyboard_key(self.dictionary.keyboard_cursor());
+                let before = self.dictionary.desired_shard_letter();
+                self.dictionary.select_keyboard_key();
+                let after = self.dictionary.desired_shard_letter();
+                if selected_key == "GO" || after != before {
+                    self.needs_load_lua_tool_stub = true;
+                }
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next)
+                if self.lua_tool_index == 1 =>
+            {
+                self.unit_converter.next_conversion();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev)
+                if self.lua_tool_index == 1 =>
+            {
+                self.unit_converter.prev_conversion();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump)
+                if self.lua_tool_index == 1 =>
+            {
+                self.unit_converter.next_amount();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump)
+                if self.lua_tool_index == 1 =>
+            {
+                self.unit_converter.prev_amount();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) if self.lua_tool_index == 1 => {
+                self.unit_converter.next_amount();
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            _ => Transition::None,
+        }
+    }
+
+    fn open_lua_game_stub(&mut self, idx: usize, ctx: &mut AppContext) {
+        self.lua_game_index = idx.min(game_stub_script::lua_game_count().saturating_sub(1));
+        self.lua_game_screen = LuaGameStubScreen::fallback_for(self.lua_game_index);
+        self.needs_load_lua_game_stub = true;
+        self.return_target = ReturnTarget::CategoryItems;
+        self.state = HomeState::ShowLuaGameStub;
+        ctx.request_full_redraw();
+    }
+
+    fn load_lua_game_stub(&mut self, k: &mut KernelHandle<'_>) {
+        let app = game_stub_script::lua_game_app(self.lua_game_index);
+        let mut manifest_buf = [0u8; 512];
+        let manifest_len =
+            match k.read_lua_game_app_file_start(app.folder, "APP.TOM", &mut manifest_buf) {
+                Ok((_size, n)) => n,
+                Err(_) => {
+                    self.lua_game_screen = LuaGameStubScreen::diagnostic(
+                        self.lua_game_index,
+                        game_stub_script::LuaGameStubSource::MissingManifest,
+                        "Missing APP.TOM",
+                        "Upload the app folder with Wi-Fi Transfer",
+                    );
+                    return;
+                }
+            };
+
+        let manifest = match core::str::from_utf8(&manifest_buf[..manifest_len]) {
+            Ok(text) => text,
+            Err(_) => {
+                self.lua_game_screen = LuaGameStubScreen::diagnostic(
+                    self.lua_game_index,
+                    game_stub_script::LuaGameStubSource::ManifestInvalidUtf8,
+                    "APP.TOM is not valid UTF-8",
+                    "Replace APP.TOM and reopen the app",
+                );
+                return;
+            }
+        };
+
+        let mut script_buf = [0u8; 1024];
+        let script_len =
+            match k.read_lua_game_app_file_start(app.folder, "MAIN.LUA", &mut script_buf) {
+                Ok((_size, n)) => n,
+                Err(_) => {
+                    self.lua_game_screen = LuaGameStubScreen::diagnostic(
+                        self.lua_game_index,
+                        game_stub_script::LuaGameStubSource::MissingEntry,
+                        "Missing MAIN.LUA",
+                        "Upload MAIN.LUA and reopen the app",
+                    );
+                    return;
+                }
+            };
+
+        let script = match core::str::from_utf8(&script_buf[..script_len]) {
+            Ok(text) => text,
+            Err(_) => {
+                self.lua_game_screen = LuaGameStubScreen::diagnostic(
+                    self.lua_game_index,
+                    game_stub_script::LuaGameStubSource::ScriptInvalidUtf8,
+                    "MAIN.LUA is not valid UTF-8",
+                    "Replace MAIN.LUA and reopen the app",
+                );
+                return;
+            }
+        };
+
+        self.lua_game_screen =
+            game_stub_script::build_game_stub_runtime(self.lua_game_index, manifest, script);
+
+        let mut data_buf = [0u8; 1024];
+        if let Ok((_size, data_len)) =
+            k.read_lua_game_app_file_start(app.folder, app.data_file, &mut data_buf)
+        {
+            if let Ok(data) = core::str::from_utf8(&data_buf[..data_len]) {
+                self.hydrate_lua_grid_game_data(self.lua_game_index, data);
+            }
+        }
+    }
+
+    fn hydrate_lua_grid_game_data(&mut self, index: usize, data: &str) {
+        match index {
+            0 => self.sudoku_game.load_puzzle_line(data),
+            1 => self.mines_game.load_board_line(data),
+            2 => self.freecell_game.load_cards_line(data),
+            3 => self.memory_game.load_cards_line(data),
+            4 => self.solitaire_game.load_cards_line(data),
+            5 => self.ludo_game.load_config_line(data),
+            6 => self.snakes_game.load_board_line(data),
+            _ => {}
+        }
+    }
+
+    fn move_lua_grid_cursor(&mut self, direction: GridMove, ctx: &mut AppContext) {
+        match self.lua_game_index {
+            0 => self.sudoku_game.move_cursor(direction),
+            1 => self.mines_game.move_cursor(direction),
+            2 => self.freecell_game.move_cursor(direction),
+            3 => self.memory_game.move_cursor(direction),
+            4 => self.solitaire_game.move_cursor(direction),
+            5 => self.ludo_game.move_cursor(direction),
+            6 => self.snakes_game.move_cursor(direction),
+            _ => {}
+        }
+        ctx.request_full_redraw();
+    }
+
+    fn select_lua_grid_cell(&mut self, ctx: &mut AppContext) {
+        match self.lua_game_index {
+            0 => self.sudoku_game.select(),
+            1 => self.mines_game.select(),
+            2 => self.freecell_game.select(),
+            3 => self.memory_game.select(),
+            4 => self.solitaire_game.select(),
+            5 => self.ludo_game.select(),
+            6 => self.snakes_game.select(),
+            _ => {}
+        }
+        ctx.request_full_redraw();
+    }
+
+    const fn is_playable_lua_grid_game(index: usize) -> bool {
+        index <= 6
+    }
+
+    fn on_event_lua_game_stub(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                self.return_to_target(ctx)
+            }
+            ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next)
+                if Self::is_playable_lua_grid_game(self.lua_game_index) =>
+            {
+                self.move_lua_grid_cursor(GridMove::Down, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev)
+                if Self::is_playable_lua_grid_game(self.lua_game_index) =>
+            {
+                self.move_lua_grid_cursor(GridMove::Up, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump)
+                if Self::is_playable_lua_grid_game(self.lua_game_index) =>
+            {
+                self.move_lua_grid_cursor(GridMove::Right, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump)
+                if Self::is_playable_lua_grid_game(self.lua_game_index) =>
+            {
+                self.move_lua_grid_cursor(GridMove::Left, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select)
+                if Self::is_playable_lua_grid_game(self.lua_game_index) =>
+            {
+                self.select_lua_grid_cell(ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            _ => Transition::None,
+        }
     }
 
     fn open_placeholder(
@@ -2296,7 +2885,7 @@ impl HomeApp {
                 Transition::None
             }
             (1, 2) => {
-                self.open_panchang_lite(ctx);
+                self.open_lua_panchang(ctx);
                 Transition::None
             }
             (1, _) => {
@@ -2306,12 +2895,7 @@ impl HomeApp {
 
             // Games
             (2, _) => {
-                self.open_placeholder(
-                    "Coming soon",
-                    "Games placeholder",
-                    ReturnTarget::CategoryItems,
-                    ctx,
-                );
+                self.open_lua_game_stub(self.selected, ctx);
                 Transition::None
             }
 
@@ -2355,16 +2939,20 @@ impl HomeApp {
                 Transition::None
             }
             (5, 2) => {
-                self.open_lua_panchang(ctx);
-                Transition::None
-            }
-            (5, _) => {
                 self.open_placeholder(
                     "QR Generator",
                     "Placeholder",
                     ReturnTarget::CategoryItems,
                     ctx,
                 );
+                Transition::None
+            }
+            (5, 3) => {
+                self.open_lua_tool_stub(0, ctx);
+                Transition::None
+            }
+            (5, _) => {
+                self.open_lua_tool_stub(1, ctx);
                 Transition::None
             }
             _ => Transition::None,
@@ -2930,7 +3518,7 @@ impl HomeApp {
         match idx {
             0 => "Connect & diagnose",
             1 => "Daily utilities",
-            2 => "Coming soon",
+            2 => "Puzzles & board games",
             3 => "Books & bookmarks",
             4 => "Device & settings",
             5 => "Files & helpers",
@@ -2942,10 +3530,11 @@ impl HomeApp {
         match category {
             0 => 3,
             1 => 4,
-            2 => 1,
+            2 => 7,
             3 => 3,
             4 => 4,
             5 => TOOLS_CATEGORY_ITEM_COUNT,
+
             _ => 0,
         }
     }
@@ -2957,9 +3546,15 @@ impl HomeApp {
             (0, 2) => "Network Status",
             (1, 0) => "Daily Mantra",
             (1, 1) => "Calendar",
-            (1, 2) => "Panchang Lite",
+            (1, 2) => "Panchang",
             (1, 3) => "Lua Calendar",
-            (2, 0) => "Coming soon",
+            (2, 0) => "Sudoku",
+            (2, 1) => "Minesweeper",
+            (2, 2) => "FreeCell",
+            (2, 3) => "Memory Cards",
+            (2, 4) => "Solitaire",
+            (2, 5) => "Ludo",
+            (2, 6) => "Snakes and Ladder",
             (3, 0) => "Continue Reading",
             (3, 1) => "Library",
             (3, 2) => "Bookmarks",
@@ -2969,8 +3564,9 @@ impl HomeApp {
             (4, 3) => "Device Info",
             (5, 0) => "File Browser",
             (5, 1) => "Lua Daily Mantra",
-            (5, 2) => "Lua Panchang",
-            (5, 3) => "QR Generator",
+            (5, 2) => "QR Generator",
+            (5, 3) => "Dictionary",
+            (5, 4) => "Unit Converter",
             _ => "",
         }
     }
@@ -2982,9 +3578,15 @@ impl HomeApp {
             (0, 2) => "Wi-Fi, SD and runtime",
             (1, 0) => "Uses Date & Time",
             (1, 1) => "Offline monthly view",
-            (1, 2) => "Tithi, Paksha, Month",
+            (1, 2) => "Lua + cached Panchang",
             (1, 3) => "Run SD Lua calendar",
-            (2, 0) => "Placeholder",
+            (2, 0) => "Playable SD Lua grid",
+            (2, 1) => "Playable SD Lua mine grid",
+            (2, 2) => "SD Lua card puzzle stub",
+            (2, 3) => "Playable SD Lua memory grid",
+            (2, 4) => "SD Lua solitaire stub",
+            (2, 5) => "SD Lua board game stub",
+            (2, 6) => "SD Lua snakes board stub",
             (3, 0) => "Resume last book",
             (3, 1) => "Open file library",
             (3, 2) => "Open bookmark list",
@@ -2994,7 +3596,9 @@ impl HomeApp {
             (4, 3) => "Placeholder",
             (5, 0) => "Open file library",
             (5, 1) => "Run SD Lua proof app",
-            (5, 2) => "Placeholder",
+            (5, 2) => "Offline QR helper",
+            (5, 3) => "Offline word lookup",
+            (5, 4) => "Offline units helper",
             _ => "",
         }
     }
@@ -3024,9 +3628,14 @@ impl HomeApp {
     }
 
     fn app_row_region(&self, idx: usize) -> Region {
-        let row_y =
-            BM_TITLE_Y + self.ui_fonts.heading.line_height + 24 + (idx as u16).saturating_mul(72);
-        Region::new(LARGE_MARGIN, row_y, FULL_CONTENT_W, 58)
+        let count = Self::category_item_count(self.active_category).max(1) as u16;
+        let row_top = BM_TITLE_Y + self.ui_fonts.heading.line_height + 16;
+        let row_bottom = SCREEN_H.saturating_sub(BUTTON_BAR_H + 8);
+        let available_h = row_bottom.saturating_sub(row_top);
+        let stride = (available_h / count).clamp(42, 56);
+        let row_h = stride.saturating_sub(4).max(38);
+        let row_y = row_top + (idx as u16).saturating_mul(stride);
+        Region::new(LARGE_MARGIN, row_y, FULL_CONTENT_W, row_h)
     }
 
     fn merged_redraw_region(first: Region, second: Region) -> Region {
@@ -3157,28 +3766,41 @@ impl HomeApp {
     }
 
     fn draw_category_item_row(&self, strip: &mut StripBuffer, idx: usize) {
-        let title_font = self.card_title_font();
-        let meta_font = self.card_meta_font();
+        // Use the same compact two-line list treatment that already worked for Games.
+        // Row geometry stays dynamic/clamped so the selected bar fully covers both
+        // title and subtitle instead of cutting through adjacent rows.
+        let compact = true;
+        let title_font = if compact {
+            self.ui_fonts.body
+        } else {
+            self.card_title_font()
+        };
+        let meta_font = if compact {
+            fonts::chrome_font()
+        } else {
+            self.card_meta_font()
+        };
         let row = self.app_row_region(idx);
         let selected = idx
             == self
                 .selected
                 .min(Self::category_item_count(self.active_category).saturating_sub(1));
 
-        let fill = if selected {
-            BinaryColor::On
-        } else {
-            BinaryColor::Off
-        };
-        row.to_rect()
-            .into_styled(PrimitiveStyle::with_fill(fill))
-            .draw(strip)
-            .unwrap();
+        if selected {
+            row.to_rect()
+                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                .draw(strip)
+                .unwrap();
+        }
 
         let text_x = row.x + HOME_CARD_PAD_X;
         let text_w = row.w.saturating_sub(HOME_CARD_PAD_X * 2);
+        let title_y = row.y + if compact { 4 } else { 7 };
+        let detail_y =
+            title_y + title_font.line_height + if compact { 1 } else { HOME_CARD_TEXT_GAP };
+
         BitmapLabel::new(
-            Region::new(text_x, row.y + 8, text_w, title_font.line_height),
+            Region::new(text_x, title_y, text_w, title_font.line_height),
             Self::category_item_title(self.active_category, idx),
             title_font,
         )
@@ -3187,20 +3809,18 @@ impl HomeApp {
         .draw(strip)
         .unwrap();
 
-        BitmapLabel::new(
-            Region::new(
-                text_x,
-                row.y + 8 + title_font.line_height + HOME_CARD_TEXT_GAP,
-                text_w,
-                meta_font.line_height,
-            ),
-            Self::category_item_detail(self.active_category, idx),
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .inverted(selected)
-        .draw(strip)
-        .unwrap();
+        let detail = Self::category_item_detail(self.active_category, idx);
+        if !detail.is_empty() {
+            BitmapLabel::new(
+                Region::new(text_x, detail_y, text_w, meta_font.line_height),
+                detail,
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .inverted(selected)
+            .draw(strip)
+            .unwrap();
+        }
     }
 
     fn draw_panchang_lite(&self, strip: &mut StripBuffer) {
@@ -3726,7 +4346,12 @@ impl HomeApp {
     }
 
     fn draw_lua_panchang(&self, strip: &mut StripBuffer) {
-        self.draw_screen_header(strip, self.lua_panchang_screen.title(), "Lua");
+        let status = if !self.time_status_loaded {
+            "Loading"
+        } else {
+            self.time_cache.freshness(self.time_uptime_secs).as_str()
+        };
+        self.draw_screen_header(strip, self.lua_panchang_screen.title(), status);
 
         let meta_font = self.card_meta_font();
         let x = LARGE_MARGIN;
@@ -3751,17 +4376,18 @@ impl HomeApp {
         let mut source_line =
             BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
                 .alignment(Alignment::CenterLeft);
-        let _ = write!(
-            source_line,
-            "Source: {}  Marker: {}",
-            self.lua_panchang_screen.source.label(),
-            if self.lua_panchang_screen.source.is_sd_loaded() {
-                LUA_PANCHANG_SD_RUNTIME_MARKER
-            } else {
-                LUA_PANCHANG_APP_MARKER
-            }
-        );
+        let _ = write!(source_line, "{}", self.lua_panchang_screen.footer(),);
         source_line.draw(strip).unwrap();
+        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            "Back returns to Productivity",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
     }
 
     fn draw_lua_calendar(&self, strip: &mut StripBuffer) {
@@ -4323,6 +4949,920 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(x, y, w, meta_font.line_height),
             prompt,
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_lua_grid_cell(
+        &self,
+        strip: &mut StripBuffer,
+        region: Region,
+        ch: char,
+        selected: bool,
+        font: &'static BitmapFont,
+    ) {
+        if selected {
+            region
+                .to_rect()
+                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                .draw(strip)
+                .unwrap();
+        }
+        region
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+            .draw(strip)
+            .unwrap();
+
+        let mut label = BitmapDynLabel::<4>::new(region, font).alignment(Alignment::Center);
+        let _ = write!(label, "{}", ch);
+        label.inverted(selected).draw(strip).unwrap();
+    }
+
+    fn draw_sudoku_game(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Sudoku", self.lua_game_screen.source.label());
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        let cell_w: u16 = 36;
+        let cell_h: u16 = 31;
+        let grid_w = cell_w * 9;
+        let grid_h = cell_h * 9;
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 16;
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..9usize {
+            for col in 0..9usize {
+                let idx = (row * 9 + col) as u8;
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.sudoku_game.cell_char(row, col),
+                    idx == self.sudoku_game.cursor(),
+                    cell_font,
+                );
+            }
+        }
+
+        for block_col in 1..3u16 {
+            let x = grid_x + block_col * cell_w * 3;
+            Region::new(x.saturating_sub(1), grid_y, 2, grid_h)
+                .to_rect()
+                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                .draw(strip)
+                .unwrap();
+        }
+        for block_row in 1..3u16 {
+            let y = grid_y + block_row * cell_h * 3;
+            Region::new(grid_x, y.saturating_sub(1), grid_w, 2)
+                .to_rect()
+                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                .draw(strip)
+                .unwrap();
+        }
+
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            "Arrows move. Select changes cell. Back exits.",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_mines_game(&self, strip: &mut StripBuffer) {
+        let status = if self.mines_game.lost() {
+            "Boom"
+        } else {
+            self.lua_game_screen.source.label()
+        };
+        self.draw_screen_header(strip, "Minesweeper", status);
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        let cell_w: u16 = 38;
+        let cell_h: u16 = 34;
+        let grid_w = cell_w * 8;
+        let grid_h = cell_h * 8;
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 18;
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..8usize {
+            for col in 0..8usize {
+                let idx = (row * 8 + col) as u8;
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.mines_game.cell_char(row, col),
+                    idx == self.mines_game.cursor(),
+                    cell_font,
+                );
+            }
+        }
+
+        let footer = if self.mines_game.lost() {
+            "Mine hit. Back exits; reopen to reset."
+        } else {
+            "Arrows move. Select reveals. Back exits."
+        };
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            footer,
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_memory_game(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Memory Cards", self.lua_game_screen.source.label());
+        let cell_font = self.ui_fonts.body;
+        let meta_font = self.card_meta_font();
+        let cell_w: u16 = 58;
+        let cell_h: u16 = 48;
+        let grid_w = cell_w * 4;
+        let grid_h = cell_h * 4;
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 24;
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..4usize {
+            for col in 0..4usize {
+                let idx = (row * 4 + col) as u8;
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.memory_game.cell_char(row, col),
+                    idx == self.memory_game.cursor(),
+                    cell_font,
+                );
+            }
+        }
+
+        let mut matched = BitmapDynLabel::<64>::new(
+            Region::new(
+                LARGE_MARGIN,
+                grid_y + grid_h + 14,
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(matched, "Matched: {}/16", self.memory_game.matched_count());
+        matched.draw(strip).unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            "Arrows move. Select flips. Back exits.",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_freecell_game(&self, strip: &mut StripBuffer) {
+        let status = if self.freecell_game.has_picked() {
+            "Picked"
+        } else {
+            "SD Lua"
+        };
+        self.draw_screen_header(strip, "FreeCell", status);
+
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 14;
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8);
+        let grid_w = FULL_CONTENT_W.saturating_sub(2);
+        let available_h = footer_y.saturating_sub(grid_y).saturating_sub(18);
+        let cell_w = grid_w / 8;
+        let mut cell_h = available_h / 7;
+        if cell_h > 48 {
+            cell_h = 48;
+        }
+        if cell_h < 30 {
+            cell_h = 30;
+        }
+        let grid_h = cell_h * 7;
+
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..7usize {
+            for col in 0..8usize {
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.freecell_game.cell_char(row, col),
+                    self.freecell_game.is_highlighted(row, col),
+                    cell_font,
+                );
+            }
+        }
+
+        let mut footer = BitmapDynLabel::<96>::new(
+            Region::new(
+                LARGE_MARGIN,
+                footer_y,
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            footer,
+            "FreeCell: arrows move. OK pick/drop. Moves: {}",
+            self.freecell_game.moves()
+        );
+        footer.draw(strip).unwrap();
+    }
+
+    fn draw_solitaire_game(&self, strip: &mut StripBuffer) {
+        let status = if self.solitaire_game.has_picked() {
+            "Picked"
+        } else {
+            "SD Lua"
+        };
+        self.draw_screen_header(strip, "Solitaire", status);
+
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 14;
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8);
+        let grid_w = FULL_CONTENT_W.saturating_sub(2);
+        let available_h = footer_y.saturating_sub(grid_y).saturating_sub(18);
+        let cell_w = grid_w / 7;
+        let mut cell_h = available_h / 7;
+        if cell_h > 48 {
+            cell_h = 48;
+        }
+        if cell_h < 30 {
+            cell_h = 30;
+        }
+        let grid_h = cell_h * 7;
+
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..7usize {
+            for col in 0..7usize {
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.solitaire_game.cell_char(row, col),
+                    self.solitaire_game.is_highlighted(row, col),
+                    cell_font,
+                );
+            }
+        }
+
+        let mut footer = BitmapDynLabel::<96>::new(
+            Region::new(
+                LARGE_MARGIN,
+                footer_y,
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            footer,
+            "Solitaire: arrows move. OK pick/drop. Moves: {}",
+            self.solitaire_game.moves()
+        );
+        footer.draw(strip).unwrap();
+    }
+
+    fn draw_ludo_game(&self, strip: &mut StripBuffer) {
+        let status = if self.ludo_game.finished() {
+            "Done"
+        } else {
+            "SD Lua"
+        };
+        self.draw_screen_header(strip, "Ludo", status);
+
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        const TRACK_CELLS: usize = 14;
+        const TOKEN_LABELS: [char; 4] = ['A', 'B', 'C', 'D'];
+
+        let label_w: u16 = 36;
+        let cell_w: u16 = 27;
+        let cell_h: u16 = 31;
+        let lane_gap: u16 = 12;
+        let grid_x = LARGE_MARGIN;
+        let track_x = grid_x + label_w + 10;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 20;
+        let track_w = cell_w.saturating_mul(TRACK_CELLS as u16);
+
+        let mut intro = BitmapDynLabel::<96>::new(
+            Region::new(grid_x, grid_y, FULL_CONTENT_W, meta_font.line_height),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            intro,
+            "Select token, OK rolls. Dice {}  Rolls {}",
+            self.ludo_game.last_die(),
+            self.ludo_game.rolls()
+        );
+        intro.draw(strip).unwrap();
+
+        let lanes_y = grid_y + meta_font.line_height + 14;
+        for (idx, label) in TOKEN_LABELS.iter().enumerate() {
+            let lane_y = lanes_y + (idx as u16).saturating_mul(cell_h + lane_gap);
+            let selected = self.ludo_game.selected() as usize == idx;
+            let position = self.ludo_game.token_position(idx);
+            let progress =
+                ((position as usize).saturating_mul(TRACK_CELLS - 1) / 56).min(TRACK_CELLS - 1);
+
+            let label_region = Region::new(grid_x, lane_y, label_w, cell_h);
+            self.draw_lua_grid_cell(strip, label_region, *label, selected, cell_font);
+
+            Region::new(track_x, lane_y, track_w, cell_h)
+                .to_rect()
+                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+                .draw(strip)
+                .unwrap();
+
+            for col in 0..TRACK_CELLS {
+                let cell = Region::new(
+                    track_x + (col as u16).saturating_mul(cell_w),
+                    lane_y,
+                    cell_w,
+                    cell_h,
+                );
+                let ch = if col == progress {
+                    *label
+                } else if col == 0 {
+                    'S'
+                } else if col == TRACK_CELLS - 1 {
+                    'F'
+                } else {
+                    '.'
+                };
+                self.draw_lua_grid_cell(strip, cell, ch, selected && col == progress, cell_font);
+            }
+
+            let mut pos_label = BitmapDynLabel::<24>::new(
+                Region::new(track_x + track_w + 8, lane_y + 6, 44, meta_font.line_height),
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft);
+            let _ = write!(pos_label, "{}", position);
+            pos_label.draw(strip).unwrap();
+        }
+
+        let info_y = lanes_y + 4u16.saturating_mul(cell_h + lane_gap) + 6;
+        let mut line = BitmapDynLabel::<112>::new(
+            Region::new(LARGE_MARGIN, info_y, FULL_CONTENT_W, meta_font.line_height),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            line,
+            "Token {} selected. All tokens reach F to finish.",
+            self.ludo_game.selected() + 1
+        );
+        line.draw(strip).unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            "Arrows choose token. OK rolls. Back exits.",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_snakes_game(&self, strip: &mut StripBuffer) {
+        let status = if self.snakes_game.won() {
+            "Won"
+        } else {
+            "SD Lua"
+        };
+        self.draw_screen_header(strip, "Snakes and Ladder", status);
+        let cell_font = fonts::chrome_font();
+        let meta_font = self.card_meta_font();
+        let cell_w: u16 = 31;
+        let cell_h: u16 = 26;
+        let grid_w = cell_w * 10;
+        let grid_h = cell_h * 10;
+        let grid_x = LARGE_MARGIN;
+        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 18;
+        Region::new(grid_x, grid_y, grid_w, grid_h)
+            .to_rect()
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(strip)
+            .unwrap();
+
+        for row in 0..10usize {
+            for col in 0..10usize {
+                let cell = Region::new(
+                    grid_x + (col as u16).saturating_mul(cell_w),
+                    grid_y + (row as u16).saturating_mul(cell_h),
+                    cell_w,
+                    cell_h,
+                );
+                self.draw_lua_grid_cell(
+                    strip,
+                    cell,
+                    self.snakes_game.cell_char(row, col),
+                    self.snakes_game.is_highlighted(row, col),
+                    cell_font,
+                );
+            }
+        }
+
+        let mut line = BitmapDynLabel::<112>::new(
+            Region::new(
+                LARGE_MARGIN,
+                grid_y + grid_h + 12,
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            line,
+            "Pos {}  Dice {}  Rolls {}",
+            self.snakes_game.position() + 1,
+            self.snakes_game.last_die(),
+            self.snakes_game.rolls()
+        );
+        line.draw(strip).unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                FULL_CONTENT_W,
+                meta_font.line_height,
+            ),
+            "Select rolls. L ladder, S snake, P player. Back exits.",
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+    fn draw_dictionary_tool(&self, strip: &mut StripBuffer) {
+        let source = if self.dictionary.loaded_from_sd() {
+            "SD Lua"
+        } else {
+            "Fallback"
+        };
+        self.draw_screen_header(strip, "Dictionary", source);
+
+        let text_font = self.ui_fonts.body;
+        let heading_font = self.ui_fonts.heading;
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + heading_font.line_height + 8;
+        let gap = text_font.line_height + 4;
+        let entry = self.dictionary.entry();
+
+        let mut title =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            title,
+            "Word {}/{}: {}",
+            self.dictionary.selected_index().saturating_add(1),
+            self.dictionary.entry_count(),
+            entry.word()
+        );
+        title.draw(strip).unwrap();
+        y += gap;
+
+        let mut search =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(search, "{}", self.dictionary.search_label());
+        search.draw(strip).unwrap();
+        y += gap;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            entry.definition_line1(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            entry.definition_line2(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            entry.definition_line3(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            entry.synonyms(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            entry.antonyms(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap + 2;
+
+        for row in 0..5usize {
+            let row_label = self.dictionary.keyboard_row_label(row);
+            let row_y = y.saturating_add((row as u16).saturating_mul(gap));
+            BitmapLabel::new(
+                Region::new(x, row_y, w, text_font.line_height),
+                row_label.as_str(),
+                text_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+        }
+
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + text_font.line_height * 3 + 12);
+        BitmapLabel::new(
+            Region::new(x, footer_y, w, text_font.line_height),
+            "Arrows move keyboard. OK key. Back Tools.",
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                x,
+                footer_y + text_font.line_height + 4,
+                w,
+                text_font.line_height,
+            ),
+            self.dictionary.status(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                x,
+                footer_y + (text_font.line_height + 4) * 2,
+                w,
+                text_font.line_height,
+            ),
+            dictionary::LUA_DICTIONARY_SHARDED_MARKER,
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_unit_converter_tool(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Unit Converter", "SD Lua");
+
+        let text_font = self.ui_fonts.body;
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let selected = self.unit_converter.selected_index();
+        let conversion = self.unit_converter.conversion();
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 18;
+        let gap = text_font.line_height + 8;
+
+        let mut title =
+            BitmapDynLabel::<128>::new(Region::new(x, y, w, text_font.line_height), text_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(
+            title,
+            "{}: {} -> {}",
+            conversion.name, conversion.input_label, conversion.output_label
+        );
+        title.draw(strip).unwrap();
+        y += gap;
+
+        let mut input =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(input, "Input:  {}", self.unit_converter.input_value());
+        input.draw(strip).unwrap();
+        y += gap;
+
+        let mut result =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(result, "Result: {}", self.unit_converter.output_value());
+        result.draw(strip).unwrap();
+        y += gap + 6;
+
+        for idx in 0..UnitConverterState::conversion_count() {
+            let row_step = text_font.line_height.saturating_add(4);
+            let row_y = y.saturating_add((idx as u16).saturating_mul(row_step));
+            let mut row = BitmapDynLabel::<96>::new(
+                Region::new(x, row_y, w, text_font.line_height),
+                text_font,
+            )
+            .alignment(Alignment::CenterLeft);
+            let marker = if idx == selected { ">" } else { " " };
+            let _ = write!(
+                row,
+                "{} {}",
+                marker,
+                unit_converter::UNIT_CONVERSIONS[idx].name
+            );
+            row.draw(strip).unwrap();
+        }
+
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + text_font.line_height * 2 + 10);
+        BitmapLabel::new(
+            Region::new(x, footer_y, w, text_font.line_height),
+            "Up/Down conversion. Left/Right/OK amount.",
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                x,
+                footer_y + text_font.line_height + 4,
+                w,
+                text_font.line_height,
+            ),
+            unit_converter::LUA_UNIT_CONVERTER_PLAYABLE_APP_MARKER,
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_lua_tool_stub(&self, strip: &mut StripBuffer) {
+        if self.lua_tool_index == 0 {
+            self.draw_dictionary_tool(strip);
+            return;
+        }
+
+        if self.lua_tool_index == 1 {
+            self.draw_unit_converter_tool(strip);
+            return;
+        }
+
+        self.draw_screen_header(
+            strip,
+            self.lua_tool_screen.title(),
+            self.lua_tool_screen.source.label(),
+        );
+        let text_font = self.ui_fonts.body;
+        let meta_font = self.ui_fonts.body;
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 24;
+        let gap = text_font.line_height + 10;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            self.lua_tool_screen.line1(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            self.lua_tool_screen.line2(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, text_font.line_height),
+            self.lua_tool_screen.line3(),
+            text_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += gap;
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_tool_screen.footer(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        let marker_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 10);
+        BitmapLabel::new(
+            Region::new(x, marker_y, w, meta_font.line_height),
+            tool_stub_script::LUA_TOOLS_DICTIONARY_UNIT_CONVERTER_STUB_PACK_MARKER,
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+    }
+
+    fn draw_lua_game_stub(&self, strip: &mut StripBuffer) {
+        match self.lua_game_index {
+            0 => {
+                self.draw_sudoku_game(strip);
+                return;
+            }
+            1 => {
+                self.draw_mines_game(strip);
+                return;
+            }
+            2 => {
+                self.draw_freecell_game(strip);
+                return;
+            }
+            3 => {
+                self.draw_memory_game(strip);
+                return;
+            }
+            4 => {
+                self.draw_solitaire_game(strip);
+                return;
+            }
+            5 => {
+                self.draw_ludo_game(strip);
+                return;
+            }
+            6 => {
+                self.draw_snakes_game(strip);
+                return;
+            }
+
+            _ => {}
+        }
+
+        self.draw_screen_header(
+            strip,
+            self.lua_game_screen.title(),
+            self.lua_game_screen.source.label(),
+        );
+
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, title_font.line_height),
+            self.lua_game_screen.line1(),
+            title_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += title_font.line_height + 12;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_game_screen.line2(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += meta_font.line_height + 10;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_game_screen.line3(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y += meta_font.line_height + 16;
+
+        BitmapLabel::new(
+            Region::new(x, y, w, meta_font.line_height),
+            self.lua_game_screen.footer(),
+            meta_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                x,
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + 20),
+                w,
+                meta_font.line_height,
+            ),
+            game_stub_script::LUA_GAMES_CATALOG_STUB_PACK_MARKER,
             meta_font,
         )
         .alignment(Alignment::CenterLeft)

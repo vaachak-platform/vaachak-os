@@ -1,28 +1,32 @@
 # Vaachak OS Hardware Runtime Production State
 
-Status: production cleanup baseline.
+Status: cleaned production baseline.
 
-The X4 hardware runtime should be described in terms of production modules and product behavior, not in terms of migration slices, acceptance markers, or temporary deliverable validators.
+The X4 runtime should now be described in terms of production modules and product behavior, not migration slices, temporary acceptance markers, or generated validator scripts.
 
 ## Production ownership
 
-Vaachak owns the X4 hardware-runtime architecture and keeps hardware behavior behind production module boundaries:
+Vaachak owns the active X4 target code under `target-xteink-x4/src/vaachak_x4/**`.
 
-- SPI bus policy and transport boundary
-- SSD1677 display policy and refresh lifecycle
-- SD/MMC storage physical lifecycle
-- FAT/path/storage policy
-- input physical sampling and semantic input pipeline
+Production areas:
 
-The source tree should not require marker-only acceptance modules, smoke-only contract modules, or transition-era validator scripts to compile.
+- boot/runtime entrypoint
+- Home/category dashboard and app manager
+- Files, Reader, Settings, and Network apps
+- X4 kernel/runtime helpers
+- display refresh lifecycle and drawing helpers
+- input handling and app navigation
+- SD/FAT/path behavior used by the active X4 target
+- reader state, title cache, prepared cache metadata, and settings
+- optional Lua app catalog/host path
 
 ## Pulp scope
 
-`vendor/pulp-os` may remain in the repository where it is still needed as imported runtime/reference material or compatibility surface, but Pulp hardware migration scaffolding must not be part of the production compile path.
+`vendor/pulp-os` may remain in the repository for scoped compatibility/reference use, but it should not receive new Vaachak OS functionality.
 
 ## Validation
 
-Use:
+Use production validation instead of slice validators:
 
 ```bash
 cargo fmt --all

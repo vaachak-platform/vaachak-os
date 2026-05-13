@@ -1,0 +1,6 @@
+Length|Meters|Feet|1 m=3.28 ft|5 m=16.40 ft|10 m=32.81 ft
+Weight|Kilograms|Pounds|1 kg=2.20 lb|5 kg=11.02 lb|10 kg=22.05 lb
+Temperature|Celsius|Fahrenheit|0 C=32 F|25 C=77 F|100 C=212 F
+Volume|Liters|Cups|1 L=4.23 cups|2 L=8.45 cups|5 L=21.13 cups
+Speed|Kilometers/hour|Miles/hour|10 km/h=6.21 mph|50 km/h=31.07 mph|100 km/h=62.14 mph
+Data|Megabytes|Kilobytes|1 MB=1024 KB|16 MB=16384 KB|128 MB=131072 KB

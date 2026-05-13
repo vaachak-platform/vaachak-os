@@ -2,6 +2,7 @@ use core::convert::Infallible;
 
 use embedded_graphics::{pixelcolor::BinaryColor, prelude::*, primitives::PrimitiveStyle};
 
+use crate::vaachak_x4::text::static_font_assets;
 use crate::vaachak_x4::x4_apps::fonts::bitmap::BitmapFont;
 use crate::vaachak_x4::x4_apps::ui::{Alignment, Region};
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
@@ -125,6 +126,9 @@ fn draw_bitmap_text(
     inverted: bool,
 ) -> Result<(), Infallible> {
     if !region.intersects(strip.logical_window()) {
+        return Ok(());
+    }
+    if static_font_assets::draw_ui_text(strip, region, text, font, alignment, inverted) {
         return Ok(());
     }
 

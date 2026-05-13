@@ -27,7 +27,7 @@ const TITLE_DEFAULT: &str = "Panchang";
 const SUBTITLE_DEFAULT: &str = "Date: Today";
 const LINE1_DEFAULT: &str = "Tithi: Not loaded";
 const LINE2_DEFAULT: &str = "Nakshatra: Not loaded";
-const LINE3_DEFAULT: &str = "Back exits safely to Tools";
+const LINE3_DEFAULT: &str = "Back returns to Productivity";
 const FOOTER_DEFAULT: &str = "Loaded from /VAACHAK/APPS/PANCHANG";
 
 pub const LUA_PANCHANG_WRAP_CHARS: usize = 52;
@@ -225,7 +225,7 @@ fn diagnostic_screen(
     screen.subtitle.set("Lua app SD files are incomplete");
     screen.line1.set(primary);
     screen.line2.set(remediation);
-    screen.line3.set("Back exits safely to Tools");
+    screen.line3.set("Back returns to Productivity");
     screen.footer.set("Canonical root: /VAACHAK/APPS");
     screen
 }
@@ -403,7 +403,7 @@ fn set_panchang_lines(screen: &mut LuaPanchangScreen, tithi: &str, nakshatra: &s
     screen.line2.set("Nakshatra: ");
     screen.line2.push_str(nakshatra);
     if note.trim().is_empty() {
-        screen.line3.set("Back exits safely to Tools");
+        screen.line3.set("Back returns to Productivity");
     } else {
         let mut combined = LuaPanchangText::<220>::empty();
         combined.push_str("Note: ");
