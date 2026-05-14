@@ -129,13 +129,10 @@ def validate_cfg(path: Path, expected_path: str) -> None:
 
 
 def iter_regression_scan_files() -> list[Path]:
-    """Return source files that can actually affect flashing/partition layout.
+    """Return source files that can affect flashing/partition layout.
 
-    The first validator scanned the whole repo. That was too broad because users
-    normally leave extracted overlay folders in the repo root after applying a
-    patch, and those overlay scripts/docs intentionally contain words like
-    app-factory while explaining what must not be used.  Only source/config
-    files that can influence build/flash behavior are scanned here.
+    Only source/config files that can influence build or flash behavior are
+    scanned here. Root documentation is intentionally consolidated elsewhere.
     """
     candidates: list[Path] = []
 
@@ -152,7 +149,6 @@ def iter_regression_scan_files() -> list[Path]:
     allowed_suffixes = {".csv", ".toml", ".sh", ".py", ".rs"}
     ignored_names = {
         "validate_x4_standard_partition_table_compatibility.py",
-        "validate_x4_standard_partition_validator_repair.py",
     }
     ignored_dirs = {"target", ".git", "__MACOSX"}
 
@@ -185,15 +181,8 @@ def validate_no_known_regression_files() -> None:
         "data,phy",
         "data,  phy",
     )
-    allowed_explanatory_files = {
-        "docs/deploy/x4-standard-partition-table-compatibility.md",
-        "docs/deploy/x4-standard-partition-validator-repair.md",
-    }
-
     for path in iter_regression_scan_files():
         rel = path.relative_to(ROOT).as_posix()
-        if rel in allowed_explanatory_files:
-            continue
         text = path.read_text(errors="ignore")
         if any(pattern in text for pattern in patterns):
             offenders.append(rel)

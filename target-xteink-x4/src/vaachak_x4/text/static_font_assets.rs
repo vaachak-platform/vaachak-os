@@ -5,9 +5,6 @@
 
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use embedded_graphics::{pixelcolor::BinaryColor, prelude::*, primitives::PrimitiveStyle};
-
-use crate::vaachak_x4::text::sd_vfn_runtime;
 use crate::vaachak_x4::x4_apps::fonts::bitmap::BitmapFont;
 use crate::vaachak_x4::x4_apps::ui::{Alignment, Region};
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
@@ -23,9 +20,6 @@ const BITTER18_VFN: &[u8] =
     include_bytes!("../../../../examples/sd-card/VAACHAK/FONTS/BITTER18.VFN");
 const LEXEND18_VFN: &[u8] =
     include_bytes!("../../../../examples/sd-card/VAACHAK/FONTS/LEXEND18.VFN");
-const INTER14_VFN: &[u8] = include_bytes!("../../../../examples/sd-card/VAACHAK/FONTS/INTER14.VFN");
-const LEXUI14_VFN: &[u8] = include_bytes!("../../../../examples/sd-card/VAACHAK/FONTS/LEXUI14.VFN");
-
 pub fn set_ui_font_source(source: u8) {
     UI_FONT_SOURCE.store(source.min(2), Ordering::Relaxed);
 }
@@ -43,46 +37,17 @@ pub fn reader_font_for_source(source: u8) -> Option<&'static [u8]> {
     }
 }
 
-pub fn ui_font_for_source(source: u8) -> Option<&'static [u8]> {
-    match source {
-        1 => Some(INTER14_VFN), // Inter
-        2 => Some(LEXUI14_VFN), // Lexend Deca UI
-        _ => None,
-    }
-}
-
 pub fn draw_ui_text(
-    strip: &mut StripBuffer,
-    region: Region,
-    text: &str,
+    _strip: &mut StripBuffer,
+    _region: Region,
+    _text: &str,
     _fallback: &'static BitmapFont,
-    alignment: Alignment,
-    inverted: bool,
+    _alignment: Alignment,
+    _inverted: bool,
 ) -> bool {
-    if inverted || !text.is_ascii() || !region.intersects(strip.logical_window()) {
-        return false;
-    }
-
-    let Some(data) = ui_font_for_source(ui_font_source()) else {
-        return false;
-    };
-    let Some(metrics) = sd_vfn_runtime::metrics(data) else {
-        return false;
-    };
-
-    region
-        .to_rect()
-        .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
-        .draw(strip)
-        .ok();
-
-    let width = sd_vfn_runtime::measure_str(data, text) as u32;
-    let height = u32::from(metrics.line_height.max(1));
-    let pos = alignment.position(
-        region,
-        embedded_graphics::geometry::Size::new(width, height),
-    );
-    let baseline = pos.y + i32::from(metrics.ascent.max(1));
-    sd_vfn_runtime::draw_str(strip, data, text, pos.x, baseline);
-    true
+    // Design option 1: UI chrome uses the compiled Inter bitmap family in
+    // x4_apps::fonts. Keep this older static-VFN UI bridge dormant so stale
+    // persisted UI font-source values cannot mix VFN metrics into Home,
+    // Settings, or future tabbed internal pages.
+    false
 }

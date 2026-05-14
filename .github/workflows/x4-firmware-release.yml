@@ -1,0 +1,46 @@
+name: Build X4 firmware.bin
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    name: Build release firmware.bin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32imc-unknown-none-elf
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install espflash
+        run: cargo install espflash --locked
+
+      - name: Build firmware.bin
+        run: ./scripts/build_x4_release_firmware.sh
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vaachak-os-x4-firmware
+          path: |
+            dist/x4/firmware.bin
+            dist/x4/vaachak-os-x4.elf
+            dist/x4/firmware.meta
+            dist/x4/README-FIRMWARE.txt
+            dist/x4/SHA256SUMS
+          if-no-files-found: error

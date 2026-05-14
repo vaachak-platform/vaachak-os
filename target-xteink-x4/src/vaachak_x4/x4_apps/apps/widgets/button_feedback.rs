@@ -1,105 +1,55 @@
-// button label overlay at screen edges
+// CrossInk-style footer labels for the X4 physical button row.
 //
-// renders action labels ("Back", "OK", "<<", ">>") near the
-// physical button positions so users know what each button does.
-// uses the shared ButtonMapper so labels update when buttons are
-// swapped via settings.
+// Renders the bottom soft-key bar as four equal tab-like boxes using the
+// same fixed Inter UI typography path as Home, Settings, and internal pages.
+// The labels still flow through ButtonMapper so Settings button swaps and
+// per-app label modes remain honored.
 
 use embedded_graphics::{pixelcolor::BinaryColor, prelude::*, primitives::PrimitiveStyle};
 
+use crate::vaachak_x4::ui::page_shell::DEFAULT_SETTINGS_TABS;
+use crate::vaachak_x4::x4_apps::apps::widgets::bitmap_label::{BitmapLabel, BitmapTextWeight};
+use crate::vaachak_x4::x4_apps::fonts;
 use crate::vaachak_x4::x4_apps::fonts::bitmap::BitmapFont;
-use crate::vaachak_x4::x4_apps::fonts::font_data;
 use crate::vaachak_x4::x4_apps::ui::{Alignment, Region};
+use crate::vaachak_x4::x4_kernel::board::SCREEN_H;
 use crate::vaachak_x4::x4_kernel::board::action::{Action, ButtonMapper};
 use crate::vaachak_x4::x4_kernel::board::button::Button;
-use crate::vaachak_x4::x4_kernel::board::layout::{
-    CX_BACK, CX_CONFIRM, CX_LEFT, CX_RIGHT, CY_VOL_DOWN, CY_VOL_UP,
-};
-use crate::vaachak_x4::x4_kernel::board::{SCREEN_H, SCREEN_W};
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 
-const TAB_W: u16 = 60;
-const TAB_H: u16 = 22;
+const FOOTER_TAB_COUNT: usize = 4;
+const FOOTER_BUTTON_W: u16 = 106;
+const TAB_H: u16 = 34;
+const BOTTOM_INSET: u16 = 10;
+const FOOTER_X4_POSITIONS: [u16; FOOTER_TAB_COUNT] = [25, 130, 245, 350];
 
 pub const BUTTON_BAR_H: u16 = TAB_H + BOTTOM_INSET;
 
-const RIDGE_W: u16 = 22;
-const RIDGE_H: u16 = 36;
+const FOOTER_BUTTONS: [Button; FOOTER_TAB_COUNT] =
+    [Button::Back, Button::Confirm, Button::Left, Button::Right];
 
-const NUM_BUMPS: usize = 6;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Edge {
-    Bottom,
-    Right,
-}
-
-#[derive(Clone, Copy)]
-struct BumpDef {
-    button: Button,
-    edge: Edge,
-    center: u16, // x for bottom edge; y for right edge
-}
-
-const BUMPS: [BumpDef; NUM_BUMPS] = [
-    BumpDef {
-        button: Button::Back,
-        edge: Edge::Bottom,
-        center: CX_BACK,
-    },
-    BumpDef {
-        button: Button::Confirm,
-        edge: Edge::Bottom,
-        center: CX_CONFIRM,
-    },
-    BumpDef {
-        button: Button::Left,
-        edge: Edge::Bottom,
-        center: CX_LEFT,
-    },
-    BumpDef {
-        button: Button::Right,
-        edge: Edge::Bottom,
-        center: CX_RIGHT,
-    },
-    BumpDef {
-        button: Button::VolUp,
-        edge: Edge::Right,
-        center: CY_VOL_UP,
-    },
-    BumpDef {
-        button: Button::VolDown,
-        edge: Edge::Right,
-        center: CY_VOL_DOWN,
-    },
-];
-
-const BOTTOM_INSET: u16 = 4;
-
-fn bump_region(def: &BumpDef) -> Region {
-    match def.edge {
-        Edge::Bottom => Region::new(
-            def.center.saturating_sub(TAB_W / 2),
-            SCREEN_H - TAB_H - BOTTOM_INSET,
-            TAB_W,
-            TAB_H,
-        ),
-        Edge::Right => Region::new(
-            SCREEN_W - RIDGE_W,
-            def.center.saturating_sub(RIDGE_H / 2),
-            RIDGE_W,
-            RIDGE_H,
-        ),
-    }
+fn footer_tab_region(index: usize) -> Region {
+    let x = FOOTER_X4_POSITIONS
+        .get(index)
+        .copied()
+        .unwrap_or(FOOTER_X4_POSITIONS[0]);
+    Region::new(
+        x,
+        SCREEN_H.saturating_sub(TAB_H).saturating_sub(BOTTOM_INSET),
+        FOOTER_BUTTON_W,
+        TAB_H,
+    )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum LabelMode {
     Default,
     Reader,
+    Settings,
+    Games,
 }
 
-fn action_label(mode: LabelMode, action: Action) -> &'static str {
+fn default_action_label(mode: LabelMode, action: Action) -> &'static str {
     match mode {
         LabelMode::Default => match action {
             Action::Next => "Next",
@@ -115,7 +65,25 @@ fn action_label(mode: LabelMode, action: Action) -> &'static str {
             Action::Prev => "Prev",
             Action::NextJump => "Ch+",
             Action::PrevJump => "Ch-",
-            Action::Select => "",
+            Action::Select => "Menu",
+            Action::Back => "Back",
+            Action::Menu => "",
+        },
+        LabelMode::Games => match action {
+            Action::Next => "Down",
+            Action::Prev => "Up",
+            Action::NextJump => "Right",
+            Action::PrevJump => "Left",
+            Action::Select => "OK",
+            Action::Back => "Back",
+            Action::Menu => "",
+        },
+        LabelMode::Settings => match action {
+            Action::Next => "Down",
+            Action::Prev => "Up",
+            Action::NextJump => "Tab+",
+            Action::PrevJump => "Tab-",
+            Action::Select => "Toggle",
             Action::Back => "Back",
             Action::Menu => "",
         },
@@ -125,6 +93,8 @@ fn action_label(mode: LabelMode, action: Action) -> &'static str {
 pub struct ButtonFeedback {
     swap: bool,
     mode: LabelMode,
+    settings_tab: u8,
+    settings_focus_tabs: bool,
     font: Option<&'static BitmapFont>,
 }
 
@@ -139,6 +109,8 @@ impl ButtonFeedback {
         Self {
             swap: false,
             mode: LabelMode::Default,
+            settings_tab: 0,
+            settings_focus_tabs: false,
             font: None,
         }
     }
@@ -165,8 +137,30 @@ impl ButtonFeedback {
         }
     }
 
+    pub fn set_settings_state(&mut self, selected_tab: u8, focus_tabs: bool) -> bool {
+        let selected_tab = selected_tab.min((DEFAULT_SETTINGS_TABS.len() - 1) as u8);
+        if self.settings_tab != selected_tab || self.settings_focus_tabs != focus_tabs {
+            self.settings_tab = selected_tab;
+            self.settings_focus_tabs = focus_tabs;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn label_for_action(&self, action: Action) -> &'static str {
+        if self.mode == LabelMode::Settings
+            && matches!(action, Action::Select)
+            && self.settings_focus_tabs
+        {
+            let next = (self.settings_tab as usize + 1) % DEFAULT_SETTINGS_TABS.len();
+            return DEFAULT_SETTINGS_TABS[next];
+        }
+        default_action_label(self.mode, action)
+    }
+
     pub fn draw(&self, strip: &mut StripBuffer) {
-        let font = self.font.unwrap_or(&font_data::REGULAR_BODY_SMALL);
+        let font = fonts::ui_body_font_fixed();
         let mapper = if self.swap {
             let mut m = ButtonMapper::new();
             m.set_swap(true);
@@ -175,12 +169,8 @@ impl ButtonFeedback {
             ButtonMapper::new()
         };
 
-        for def in BUMPS.iter() {
-            if def.edge != Edge::Bottom {
-                continue;
-            }
-
-            let r = bump_region(def);
+        for (idx, button) in FOOTER_BUTTONS.iter().enumerate() {
+            let r = footer_tab_region(idx);
 
             if !r.intersects(strip.logical_window()) {
                 continue;
@@ -190,14 +180,22 @@ impl ButtonFeedback {
                 .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
                 .draw(strip)
                 .unwrap();
+            r.to_rect()
+                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+                .draw(strip)
+                .unwrap();
 
-            let action = mapper.map_button(def.button);
-            let label = action_label(self.mode, action);
+            let action = mapper.map_button(*button);
+            let label = self.label_for_action(action);
             if label.is_empty() {
                 continue;
             }
 
-            font.draw_aligned(strip, r, label, Alignment::Center, BinaryColor::On);
+            BitmapLabel::new(r, label, font)
+                .alignment(Alignment::Center)
+                .weight(BitmapTextWeight::SemiBold)
+                .draw(strip)
+                .unwrap();
         }
     }
 }

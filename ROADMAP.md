@@ -1,105 +1,76 @@
 # Vaachak OS Roadmap
 
-## Current baseline
-
-The current baseline is an X4-first reader firmware with Vaachak-owned runtime code, a cleaned repository root, production helper scripts, and current-state documentation.
-
-Accepted baseline:
-
-```text
-vaachak_hardware_runtime_final_acceptance=ok
-hardware_physical_full_migration_consolidation=ok
-vendor_pulp_os_scope_reduction=ok
-reader-bionic=x4-reader-bionic-reading-ok
-reader-guide-dots=x4-reader-guide-dots-ok
-reader-sunlight=x4-reader-sunlight-fading-fix-ok
-```
-
-## Roadmap principles
+## Principles
 
 1. Protect the reading path.
-2. Keep the accepted X4/CrossPoint partition table unchanged.
-3. Do not add broad platform features before Reader Home, resume, and library are stable.
-4. Keep optional Lua apps bounded to `/VAACHAK/APPS`; do not move native features into Lua unless that is explicitly chosen.
-5. Freeze reader data models before XTC or `.vchk` write behavior.
-6. Treat XTC as compatibility/import support.
-7. Treat `.vchk` as the Vaachak-native package format.
-8. Align sync semantics only after local state is stable.
+2. Keep the Xteink X4 / CrossPoint partition table stable.
+3. Keep Home simple and keep internal pages visually consistent.
+4. Keep reader/book fonts separate from fixed OS UI typography.
+5. Keep optional Lua apps bounded to SD-loaded app data.
+6. Freeze local reader state before adding sync behavior.
+7. Treat XTC as compatibility/import support.
+8. Treat `.vchk` as the Vaachak-native package format.
 
-## Milestones
+## Near-term work
 
-### M1 — Reader Home + Resume
+### Reader Home and Library polish
 
-- Continue Reading surface at top of Reader Home.
-- Last-opened book model.
-- Saved progress display in the library list.
-- Return from reader to Reader Home.
+- Improve Continue Reading.
+- Stabilize recent-book ordering.
+- Improve title/metadata display.
+- Improve broken-file and missing-cache handling.
 
-### M2 — Reader Data Model Freeze
+### Reader data model freeze
 
-Freeze these models:
+Freeze and document:
 
-- `BookIdentity`
-- `ReadingProgress`
-- `Bookmark`
-- `Highlight`
-- `PerBookSettings`
-- `LibraryEntry`
-- `ContentFormat`
-- `ContentLocationAnchor`
+- book identity
+- reading progress
+- bookmarks
+- highlights
+- per-book settings
+- library entries
+- content format and content location anchors
 
-Use a hybrid anchor model: fast local page index for reopen, plus logical anchors where available for sync-safe state.
+### XTC compatibility
 
-### M3 — Library Index Polish
-
-- Local SD scan.
-- Recent/last-opened ordering.
-- Broken package/file handling.
-- Title and long filename stability.
-
-### M4 — XTC Compatibility
-
-- Detect XTC.
+- Detect XTC files.
 - Open XTC packages.
-- Page reliably.
-- Save progress against XTC entries.
+- Render through the existing reader path.
+- Persist progress and bookmarks against stable package identity.
 
-### M5 — `.vchk` Spec Freeze
+### Vaachak `.vchk` package
 
-- Header.
-- Manifest.
-- Content payload rules.
-- Navigation metadata.
-- Reader-state section.
-- Sync metadata section.
+- Finalize package header and manifest.
+- Define content payload rules.
+- Define navigation metadata.
+- Define embedded reader-state section.
+- Define sync metadata section.
 
-### M6 — `.vchk` Read/Open
+### `.vchk` read/open support
 
 - Validate package.
-- Parse manifest.
+- Load manifest.
 - Load content and navigation metadata.
-- Load existing reader state.
-- Render through the reader path.
+- Render through the existing reader path.
 
-### M7 — `.vchk` Mutable State
+### Mutable `.vchk` state
 
 - Update progress.
-- Add/remove bookmarks.
-- Add/remove highlights.
+- Add and remove bookmarks.
+- Add and remove highlights.
 - Persist revisions safely.
 
-### M8 — Vaachak Sync Alignment
+### Sync alignment
 
-- Sync object IDs.
-- Revision semantics.
-- Offline-first local mutation queue.
-- Progress/bookmark/highlight serialization.
+- Define sync object IDs.
+- Define revision semantics.
+- Define offline-first local mutation queue.
+- Serialize progress, bookmark, and highlight state.
 
-## Deferred until after the reader path is stable
+## Later work
 
-- OPDS.
-- OTA hardening beyond the current app0/partition helpers.
-- Broad app ecosystem.
-- Palm/Tern compatibility host.
-- Plugin/runtime expansion beyond the bounded Lua app path.
-- Waveshare/S3 implementation.
+- Stronger OTA and release-channel workflow.
+- Additional app data packs.
+- Expanded font packs.
+- Additional hardware targets after X4 remains stable.

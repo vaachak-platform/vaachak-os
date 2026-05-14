@@ -187,7 +187,7 @@ impl LuaGameStubScreen {
             title: LuaGameText::from_str(app.display_name),
             line1: LuaGameText::from_str(app.detail),
             line2: LuaGameText::from_str("Upload APP.TOM + MAIN.LUA over Wi-Fi Transfer."),
-            line3: LuaGameText::from_str("Back exits safely to Games."),
+            line3: LuaGameText::from_str("Use Back to return to Games."),
             footer,
         }
     }
@@ -204,7 +204,7 @@ impl LuaGameStubScreen {
         screen.title.set(app.display_name);
         screen.line1.set(primary);
         screen.line2.set(remediation);
-        screen.line3.set("Back exits safely to Games.");
+        screen.line3.set("Use Back to return to Games.");
         screen.footer.set("Canonical root: /VAACHAK/APPS");
         screen
     }

@@ -3,14 +3,14 @@
 
 // Library title layout polish is intentionally limited to
 // display/layout treatment. Title source/cache behavior remains unchanged.
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write as _;
 
-use embedded_graphics::pixelcolor::BinaryColor;
-use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::PrimitiveStyle;
-
-use crate::vaachak_x4::x4_apps::apps::{App, AppContext, AppId, Transition};
+use crate::vaachak_x4::ui::crossink_internal;
+use crate::vaachak_x4::x4_apps::apps::{
+    App, AppContext, AppId, RECENT_FILE, Transition, reader_state,
+};
 use crate::vaachak_x4::x4_kernel::app::BrowserEntry;
 use crate::vaachak_x4::x4_kernel::board::action::{Action, ActionEvent};
 use crate::vaachak_x4::x4_kernel::board::{SCREEN_H, SCREEN_W};
@@ -18,11 +18,11 @@ use crate::vaachak_x4::x4_kernel::drivers::storage::DirEntry;
 use crate::vaachak_x4::x4_kernel::drivers::strip::StripBuffer;
 
 pub const UI_SELECTION_FLASH_REDUCTION_MARKER: &str = "ui-selection-flash-reduction-files-ok";
+pub const FILES_LIBRARY_VISUAL_PARITY_MARKER: &str =
+    "crossink-files-library-visual-parity-files-ok";
+pub const READER_UNIFIED_TABS_MARKER: &str = "crossink-reader-unified-tabs-files-ok";
 use crate::vaachak_x4::x4_apps::fonts;
-use crate::vaachak_x4::x4_apps::ui::{
-    Alignment, BitmapDynLabel, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W, LARGE_MARGIN,
-    Region, SECTION_GAP, TITLE_Y_OFFSET,
-};
+use crate::vaachak_x4::x4_apps::ui::{Alignment, BitmapDynLabel, CONTENT_TOP, Region};
 use crate::vaachak_x4::x4_kernel::error::{Error, ErrorKind};
 use crate::vaachak_x4::x4_kernel::kernel::KernelHandle;
 use crate::vaachak_x4::x4_kernel::kernel::QuickAction;
@@ -30,7 +30,7 @@ use smol_epub::cache;
 use smol_epub::epub::{self, EpubMeta, EpubSpine};
 use smol_epub::zip::ZipIndex;
 
-const MAX_PAGE_SIZE: usize = 14;
+const MAX_PAGE_SIZE: usize = 15;
 const TITLE_KIND_TEXT: u8 = 2;
 const TEXT_TITLE_SCAN_BYTES: usize = 768;
 const TEXT_TITLE_MAX_BYTES: usize = 96;
@@ -39,27 +39,8 @@ const QA_DELETE_FILE: u8 = 1;
 const QA_DELETE_CACHE: u8 = 2;
 const QA_MAX: usize = 2;
 
-const LIST_X: u16 = LARGE_MARGIN;
-const LIST_W: u16 = FULL_CONTENT_W;
-
-const TITLE_Y: u16 = CONTENT_TOP + TITLE_Y_OFFSET;
-
-const STATUS_W: u16 = 144;
-const STATUS_X: u16 = SCREEN_W - LARGE_MARGIN - STATUS_W;
-const FILES_STATUS_Y: u16 = TITLE_Y;
-const FILES_STATUS_H: u16 = 28;
-const STATUS_REGION: Region = Region::new(STATUS_X, FILES_STATUS_Y, STATUS_W, FILES_STATUS_H);
-
-const ROW_H: u16 = 52;
-const ROW_GAP: u16 = 4;
-const ROW_STRIDE: u16 = ROW_H + ROW_GAP;
-
-const HEADER_LIST_GAP: u16 = SECTION_GAP;
-
-fn compute_page_size(list_y: u16) -> usize {
-    let available = SCREEN_H.saturating_sub(list_y);
-    let rows = (available / ROW_STRIDE) as usize;
-    rows.min(MAX_PAGE_SIZE)
+fn compute_page_size(_list_y: u16) -> usize {
+    crossink_internal::reader_visible_rows().min(MAX_PAGE_SIZE)
 }
 
 impl Default for FilesApp {
@@ -82,6 +63,13 @@ pub struct FilesApp {
     ui_font_size_idx: u8,
     ui_font_source: u8,
     list_y: u16,
+    reader_tab: usize,
+    focus_tabs: bool,
+    recent_record: Option<reader_state::RecentBookRecord>,
+    bookmark_entries: Vec<reader_state::BookmarkIndexRecord>,
+    bookmark_selected: usize,
+    bookmark_scroll: usize,
+    needs_load_reader_state: bool,
 
     title_scan_idx: usize,
     title_scanning: bool,
@@ -96,7 +84,7 @@ pub struct FilesApp {
 impl FilesApp {
     pub fn new() -> Self {
         let uf = fonts::UiFonts::for_size(0);
-        let list_y = TITLE_Y + uf.heading.line_height + HEADER_LIST_GAP;
+        let list_y = crossink_internal::READER_LIST_TOP_WITH_TABS;
         Self {
             entries: [DirEntry::EMPTY; MAX_PAGE_SIZE],
             page_size: compute_page_size(list_y),
@@ -111,6 +99,13 @@ impl FilesApp {
             ui_font_size_idx: 0,
             ui_font_source: 0,
             list_y,
+            reader_tab: 2,
+            focus_tabs: true,
+            recent_record: None,
+            bookmark_entries: Vec::new(),
+            bookmark_selected: 0,
+            bookmark_scroll: 0,
+            needs_load_reader_state: true,
             title_scan_idx: 0,
             title_scanning: false,
             title_reload: false,
@@ -188,6 +183,183 @@ impl FilesApp {
         }
     }
 
+    fn reader_tab_from_message(ctx: &AppContext) -> Option<usize> {
+        match ctx.message_str().trim() {
+            "reader-tab:0" => Some(0),
+            "reader-tab:1" => Some(1),
+            "reader-tab:2" => Some(2),
+            "reader-tab:3" => Some(3),
+            _ => None,
+        }
+    }
+
+    fn file_rows_active(&self) -> bool {
+        matches!(self.reader_tab, 1 | 2)
+    }
+
+    fn current_tab_has_rows(&self) -> bool {
+        match self.reader_tab {
+            0 => self.recent_record.is_some(),
+            1 | 2 => self.count > 0,
+            3 => !self.bookmark_entries.is_empty(),
+            _ => false,
+        }
+    }
+
+    fn bookmark_visible_rows(&self) -> usize {
+        self.page_size
+            .min(crossink_internal::reader_visible_rows())
+            .max(1)
+    }
+
+    fn bookmark_row_region(&self, index: usize) -> Region {
+        crossink_internal::reader_list_row_region(index)
+    }
+
+    fn bookmark_list_region(&self) -> Region {
+        crossink_internal::reader_list_region(self.bookmark_visible_rows())
+    }
+
+    fn move_bookmark_up(&mut self, ctx: &mut AppContext) {
+        let total = self.bookmark_entries.len();
+        if total == 0 {
+            return;
+        }
+        let visible = self.bookmark_visible_rows();
+        let old = self.bookmark_selected;
+        if self.bookmark_selected > 0 {
+            self.bookmark_selected -= 1;
+            if self.bookmark_selected < self.bookmark_scroll {
+                self.bookmark_scroll = self.bookmark_selected;
+                ctx.mark_dirty(self.bookmark_list_region());
+            } else {
+                ctx.mark_dirty(self.bookmark_row_region(old.saturating_sub(self.bookmark_scroll)));
+                ctx.mark_dirty(self.bookmark_row_region(
+                    self.bookmark_selected.saturating_sub(self.bookmark_scroll),
+                ));
+            }
+        } else {
+            self.bookmark_selected = total - 1;
+            if self.bookmark_selected >= visible {
+                self.bookmark_scroll = self.bookmark_selected + 1 - visible;
+            }
+            ctx.mark_dirty(self.bookmark_list_region());
+        }
+        ctx.mark_dirty(crossink_internal::header_status_region());
+    }
+
+    fn move_bookmark_down(&mut self, ctx: &mut AppContext) {
+        let total = self.bookmark_entries.len();
+        if total == 0 {
+            return;
+        }
+        let visible = self.bookmark_visible_rows();
+        let old = self.bookmark_selected;
+        if self.bookmark_selected + 1 < total {
+            self.bookmark_selected += 1;
+            if self.bookmark_selected >= self.bookmark_scroll + visible {
+                self.bookmark_scroll = self.bookmark_selected + 1 - visible;
+                ctx.mark_dirty(self.bookmark_list_region());
+            } else {
+                ctx.mark_dirty(self.bookmark_row_region(old.saturating_sub(self.bookmark_scroll)));
+                ctx.mark_dirty(self.bookmark_row_region(
+                    self.bookmark_selected.saturating_sub(self.bookmark_scroll),
+                ));
+            }
+        } else {
+            self.bookmark_selected = 0;
+            self.bookmark_scroll = 0;
+            ctx.mark_dirty(self.bookmark_list_region());
+        }
+        ctx.mark_dirty(crossink_internal::header_status_region());
+    }
+
+    fn load_reader_tab_state(&mut self, k: &mut KernelHandle<'_>) {
+        self.recent_record = Self::load_recent_record(k);
+        self.bookmark_entries.clear();
+
+        let mut buf = [0u8; 4096];
+        if let Ok(n) = k.read_app_subdir_chunk(
+            reader_state::STATE_DIR,
+            reader_state::BOOKMARKS_INDEX_FILE,
+            0,
+            &mut buf,
+        ) {
+            if n > 0 {
+                if let Ok(payload) = core::str::from_utf8(&buf[..n]) {
+                    self.bookmark_entries = reader_state::decode_bookmarks_index(payload);
+                }
+            }
+        }
+
+        let total = self.bookmark_entries.len();
+        if total == 0 {
+            self.bookmark_selected = 0;
+            self.bookmark_scroll = 0;
+        } else if self.bookmark_selected >= total {
+            self.bookmark_selected = total - 1;
+            let visible = self.bookmark_visible_rows();
+            if self.bookmark_scroll + visible <= self.bookmark_selected {
+                self.bookmark_scroll = self
+                    .bookmark_selected
+                    .saturating_sub(visible.saturating_sub(1));
+            }
+        }
+    }
+
+    fn load_recent_record(k: &mut KernelHandle<'_>) -> Option<reader_state::RecentBookRecord> {
+        let mut typed = [0u8; 192];
+        if let Ok(n) = k.read_app_subdir_chunk(
+            reader_state::STATE_DIR,
+            reader_state::RECENT_RECORD_FILE,
+            0,
+            &mut typed,
+        ) {
+            if n > 0 {
+                if let Ok(text) = core::str::from_utf8(&typed[..n]) {
+                    if let Some(record) = reader_state::RecentBookRecord::decode_line(text.trim()) {
+                        if !record.source_path.trim().is_empty() {
+                            return Some(record);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut legacy = [0u8; 160];
+        if let Ok((_, n)) = k.read_app_data_start(RECENT_FILE, &mut legacy) {
+            if n > 0 {
+                if let Ok(path) = core::str::from_utf8(&legacy[..n.min(legacy.len())]) {
+                    let path = path.trim();
+                    if !path.is_empty() && !path.contains('|') {
+                        return Some(reader_state::RecentBookRecord::from_path(path));
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn bookmark_row_label(entry: &reader_state::BookmarkIndexRecord) -> String {
+        let mut out = String::new();
+        let title = entry.display_title.trim();
+        if title.is_empty() {
+            out.push_str(entry.source_path.trim());
+        } else {
+            out.push_str(title);
+        }
+
+        let detail = entry.label.trim();
+        if !detail.is_empty() {
+            out.push_str(" · ");
+            out.push_str(detail);
+        } else {
+            let _ = write!(out, " · Ch {}", u32::from(entry.chapter) + 1);
+        }
+        out
+    }
+
     fn load_page(&mut self, entries: &[DirEntry], total: usize) {
         let n = entries.len().min(self.page_size);
         self.entries[..n].clone_from_slice(&entries[..n]);
@@ -208,33 +380,11 @@ impl FilesApp {
     }
 
     fn row_region(&self, index: usize) -> Region {
-        Region::new(
-            LIST_X,
-            self.list_y + index as u16 * (ROW_H + ROW_GAP),
-            LIST_W,
-            ROW_H,
-        )
+        crossink_internal::reader_list_row_region(index)
     }
 
     fn list_region(&self) -> Region {
-        Region::new(
-            LIST_X,
-            self.list_y,
-            LIST_W,
-            ROW_STRIDE * self.page_size as u16,
-        )
-    }
-
-    fn draw_selection_rail(strip: &mut StripBuffer, region: Region, selected: bool) {
-        if !selected {
-            return;
-        }
-
-        let rail = Region::new(region.x, region.y, 4, region.h);
-        rail.to_rect()
-            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-            .draw(strip)
-            .unwrap();
+        crossink_internal::reader_list_region(self.page_size)
     }
 
     fn move_up(&mut self, ctx: &mut AppContext) {
@@ -311,6 +461,17 @@ impl FilesApp {
             self.selected = self.count - 1;
         }
     }
+
+    fn switch_reader_tab(&mut self, delta: isize, ctx: &mut AppContext) {
+        let len = crossink_internal::READER_TABS.len() as isize;
+        if len == 0 {
+            return;
+        }
+        self.reader_tab = (self.reader_tab as isize + delta).rem_euclid(len) as usize;
+        self.focus_tabs = true;
+        self.rebuild_quick_actions();
+        ctx.request_full_redraw();
+    }
 }
 
 impl App<AppId> for FilesApp {
@@ -318,10 +479,17 @@ impl App<AppId> for FilesApp {
         self.scroll = 0;
         self.selected = 0;
         self.needs_load = true;
+        self.reader_tab = Self::reader_tab_from_message(ctx).unwrap_or(2);
+        if Self::reader_tab_from_message(ctx).is_some() {
+            ctx.clear_message();
+        }
+        self.focus_tabs = true;
+        self.page_size = compute_page_size(self.list_y);
         self.stale_cache = true;
         self.error = None;
         self.title_scan_idx = 0;
         self.title_scanning = true;
+        self.needs_load_reader_state = true;
         ctx.mark_dirty(Region::new(
             0,
             CONTENT_TOP,
@@ -347,6 +515,13 @@ impl App<AppId> for FilesApp {
     }
 
     async fn background(&mut self, ctx: &mut AppContext, k: &mut KernelHandle<'_>) {
+        if self.needs_load_reader_state {
+            self.load_reader_tab_state(k);
+            self.needs_load_reader_state = false;
+            ctx.mark_dirty(self.list_region());
+            ctx.mark_dirty(crossink_internal::header_status_region());
+        }
+
         if self.pending_delete_file {
             self.pending_delete_file = false;
             if let Some(entry) = self.selected_entry() {
@@ -368,6 +543,7 @@ impl App<AppId> for FilesApp {
                             self.stale_cache = true;
                             self.title_scan_idx = 0;
                             self.title_scanning = true;
+                            self.needs_load_reader_state = true;
                         }
                         Err(e) => {
                             log::warn!("files: delete failed: {}", e);
@@ -376,7 +552,7 @@ impl App<AppId> for FilesApp {
                 }
             }
             ctx.mark_dirty(self.list_region());
-            ctx.mark_dirty(STATUS_REGION);
+            ctx.mark_dirty(crossink_internal::header_status_region());
             return;
         }
 
@@ -421,10 +597,10 @@ impl App<AppId> for FilesApp {
             if self.title_reload {
                 self.title_reload = false;
                 ctx.mark_dirty_coalesced(self.list_region());
-                ctx.mark_dirty_coalesced(STATUS_REGION);
+                ctx.mark_dirty_coalesced(crossink_internal::header_status_region());
             } else {
                 ctx.mark_dirty(self.list_region());
-                ctx.mark_dirty(STATUS_REGION);
+                ctx.mark_dirty(crossink_internal::header_status_region());
             }
             return;
         }
@@ -445,47 +621,92 @@ impl App<AppId> for FilesApp {
 
     fn on_event(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
-            ActionEvent::Press(Action::Back) => Transition::Pop,
+            ActionEvent::Press(Action::Back) => {
+                if self.focus_tabs {
+                    Transition::Pop
+                } else {
+                    self.focus_tabs = true;
+                    ctx.request_full_redraw();
+                    Transition::None
+                }
+            }
             ActionEvent::LongPress(Action::Back) => Transition::Home,
 
             ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
-                self.move_up(ctx);
+                if self.focus_tabs {
+                    if self.current_tab_has_rows() {
+                        self.focus_tabs = false;
+                    }
+                    ctx.request_full_redraw();
+                } else if self.file_rows_active() {
+                    self.move_up(ctx);
+                } else if self.reader_tab == 3 {
+                    self.move_bookmark_up(ctx);
+                }
                 Transition::None
             }
 
             ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
-                self.move_down(ctx);
-                Transition::None
-            }
-
-            ActionEvent::Press(Action::PrevJump) => {
-                self.jump_up();
-                if !self.needs_load {
-                    ctx.mark_dirty(self.list_region());
-                    ctx.mark_dirty(STATUS_REGION);
+                if self.focus_tabs {
+                    if self.current_tab_has_rows() {
+                        self.focus_tabs = false;
+                    }
+                    ctx.request_full_redraw();
+                } else if self.file_rows_active() {
+                    self.move_down(ctx);
+                } else if self.reader_tab == 3 {
+                    self.move_bookmark_down(ctx);
                 }
                 Transition::None
             }
 
-            ActionEvent::Press(Action::NextJump) => {
-                self.jump_down();
-                if !self.needs_load {
-                    ctx.mark_dirty(self.list_region());
-                    ctx.mark_dirty(STATUS_REGION);
-                }
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump) => {
+                self.switch_reader_tab(-1, ctx);
+                Transition::None
+            }
+
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump) => {
+                self.switch_reader_tab(1, ctx);
                 Transition::None
             }
 
             ActionEvent::Press(Action::Select) => {
-                if let Some(entry) = self.selected_entry() {
-                    if entry.is_dir {
-                        Transition::None
-                    } else {
-                        ctx.set_message(entry.name_str().as_bytes());
-                        Transition::Push(AppId::Reader)
+                if self.focus_tabs {
+                    self.switch_reader_tab(1, ctx);
+                    return Transition::None;
+                }
+
+                match self.reader_tab {
+                    0 => {
+                        if let Some(record) = &self.recent_record {
+                            ctx.set_message(record.open_path().as_bytes());
+                            Transition::Push(AppId::Reader)
+                        } else {
+                            Transition::None
+                        }
                     }
-                } else {
-                    Transition::None
+                    1 | 2 => {
+                        if let Some(entry) = self.selected_entry() {
+                            if entry.is_dir {
+                                Transition::None
+                            } else {
+                                ctx.set_message(entry.name_str().as_bytes());
+                                Transition::Push(AppId::Reader)
+                            }
+                        } else {
+                            Transition::None
+                        }
+                    }
+                    3 => {
+                        if let Some(entry) = self.bookmark_entries.get(self.bookmark_selected) {
+                            let jump = entry.jump_message();
+                            ctx.set_message(jump.as_bytes());
+                            Transition::Push(AppId::Reader)
+                        } else {
+                            Transition::None
+                        }
+                    }
+                    _ => Transition::None,
                 }
             }
 
@@ -494,86 +715,142 @@ impl App<AppId> for FilesApp {
     }
 
     fn draw(&self, strip: &mut StripBuffer) {
-        let header_region =
-            Region::new(LIST_X, TITLE_Y, HEADER_W, self.ui_fonts.heading.line_height);
-        BitmapLabel::new(header_region, "Books", self.ui_fonts.heading)
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
+        crossink_internal::draw_header(strip, "Reader", "");
+        crossink_internal::draw_reader_tabs_focused(strip, self.reader_tab, self.focus_tabs);
 
-        if self.total > 0 {
-            let mut status = BitmapDynLabel::<24>::new(STATUS_REGION, self.ui_fonts.body)
-                .alignment(Alignment::CenterRight);
-            let _ = write!(status, "{}/{}", self.scroll + self.selected + 1, self.total);
-            if self.title_scanning {
-                let _ = write!(status, " scan");
-            }
-            status.draw(strip).unwrap();
-        }
-
-        if let Some(e) = self.error {
-            let mut label = BitmapDynLabel::<32>::new(self.row_region(0), self.ui_fonts.body)
-                .alignment(Alignment::CenterLeft);
-            let _ = core::fmt::Write::write_fmt(&mut label, format_args!("{}", e));
-            label.draw(strip).unwrap();
-            return;
-        }
-
-        if self.count == 0 && self.needs_load {
-            BitmapLabel::new(self.row_region(0), "Loading...", self.ui_fonts.body)
-                .alignment(Alignment::CenterLeft)
-                .draw(strip)
-                .unwrap();
-            return;
-        }
-
-        if self.count == 0 && !self.needs_load {
-            BitmapLabel::new(
-                self.row_region(0),
-                "No files on SD card",
-                self.ui_fonts.body,
-            )
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
-            return;
-        }
-
-        for i in 0..self.page_size {
-            let region = self.row_region(i);
-
-            if i < self.count {
-                let entry = &self.entries[i];
-                let name = entry.display_name();
-
-                region
-                    .to_rect()
-                    .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
-                    .draw(strip)
-                    .unwrap();
-                Self::draw_selection_rail(strip, region, i == self.selected);
-                let text_region =
-                    Region::new(region.x + 8, region.y, region.w.saturating_sub(8), region.h);
-                let mut label = BitmapDynLabel::<128>::new(text_region, self.ui_fonts.body)
-                    .alignment(Alignment::CenterLeft);
-                if entry.is_dir {
-                    let _ = write!(label, "[D] {}", name);
-                } else {
-                    let _ = write!(label, "{}", name);
+        let mut status = BitmapDynLabel::<32>::new(
+            crossink_internal::header_status_region(),
+            fonts::chrome_font(),
+        )
+        .alignment(Alignment::CenterRight);
+        match self.reader_tab {
+            0 => {
+                if self.recent_record.is_some() {
+                    let _ = write!(status, "1/1");
                 }
-                label.draw(strip).unwrap();
-            } else {
-                region
-                    .to_rect()
-                    .into_styled(PrimitiveStyle::with_fill(BinaryColor::Off))
-                    .draw(strip)
-                    .unwrap();
             }
+            1 | 2 => {
+                if self.total > 0 {
+                    let _ = write!(status, "{}/{}", self.scroll + self.selected + 1, self.total);
+                    if self.title_scanning {
+                        let _ = write!(status, " scan");
+                    }
+                }
+            }
+            3 => {
+                let total = self.bookmark_entries.len();
+                if total > 0 {
+                    let _ = write!(status, "{}/{}", self.bookmark_selected + 1, total);
+                }
+            }
+            _ => {}
+        }
+        status.draw(strip).unwrap();
+
+        match self.reader_tab {
+            0 => {
+                if let Some(record) = &self.recent_record {
+                    crossink_internal::draw_reader_compact_item(
+                        strip,
+                        self.row_region(0),
+                        record.ui_title(),
+                        record.format.as_str(),
+                        !self.focus_tabs,
+                    );
+                    for i in 1..self.page_size {
+                        crossink_internal::clear_row(strip, self.row_region(i));
+                    }
+                } else {
+                    crossink_internal::draw_reader_status_message(
+                        strip,
+                        "No recent book",
+                        "Open a book to populate Recent",
+                    );
+                }
+            }
+            1 | 2 => {
+                if let Some(e) = self.error {
+                    let mut label =
+                        BitmapDynLabel::<48>::new(self.row_region(0), fonts::ui_body_font_fixed())
+                            .alignment(Alignment::CenterLeft);
+                    let _ = core::fmt::Write::write_fmt(&mut label, format_args!("{}", e));
+                    label.draw(strip).unwrap();
+                    return;
+                }
+
+                if self.count == 0 && self.needs_load {
+                    crossink_internal::draw_reader_status_message(strip, "Loading files...", "");
+                    return;
+                }
+
+                if self.count == 0 && !self.needs_load {
+                    crossink_internal::draw_reader_status_message(strip, "No files on SD card", "");
+                    return;
+                }
+
+                for i in 0..self.page_size {
+                    let region = self.row_region(i);
+                    if i < self.count {
+                        let entry = &self.entries[i];
+                        let name = entry.display_name();
+                        let value = if self.reader_tab == 1 {
+                            book_or_file_label(entry)
+                        } else {
+                            entry_kind_label(entry)
+                        };
+                        crossink_internal::draw_reader_compact_item(
+                            strip,
+                            region,
+                            name,
+                            value,
+                            i == self.selected && !self.focus_tabs,
+                        );
+                    } else {
+                        crossink_internal::clear_row(strip, region);
+                    }
+                }
+            }
+            3 => {
+                let total = self.bookmark_entries.len();
+                if total == 0 {
+                    crossink_internal::draw_reader_status_message(
+                        strip,
+                        "No bookmarks yet",
+                        "Add bookmarks from the reader",
+                    );
+                    return;
+                }
+
+                let visible = self
+                    .bookmark_visible_rows()
+                    .min(total.saturating_sub(self.bookmark_scroll));
+                for i in 0..self.page_size {
+                    let region = self.bookmark_row_region(i);
+                    if i < visible {
+                        let idx = self.bookmark_scroll + i;
+                        let label = Self::bookmark_row_label(&self.bookmark_entries[idx]);
+                        crossink_internal::draw_reader_compact_item(
+                            strip,
+                            region,
+                            &label,
+                            "Mark",
+                            idx == self.bookmark_selected && !self.focus_tabs,
+                        );
+                    } else {
+                        crossink_internal::clear_row(strip, region);
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
     fn quick_actions(&self) -> &[QuickAction] {
-        &self.qa_buf[..self.qa_count]
+        if self.file_rows_active() {
+            &self.qa_buf[..self.qa_count]
+        } else {
+            &[]
+        }
     }
 
     fn on_quick_trigger(&mut self, id: u8, _ctx: &mut AppContext) {
@@ -773,6 +1050,40 @@ fn scan_one_text_title(
         next_idx,
         resolved: result.is_ok(),
     })
+}
+
+fn is_text_name(name: &[u8]) -> bool {
+    name.len() >= 4
+        && name[name.len() - 4] == b'.'
+        && name[name.len() - 3..].eq_ignore_ascii_case(b"TXT")
+}
+
+fn entry_kind_label(entry: &DirEntry) -> &'static str {
+    if entry.is_dir {
+        return "Folder";
+    }
+
+    let name = &entry.name[..entry.name_len as usize];
+    if is_epub_or_epu_name(name) {
+        "Book"
+    } else if is_text_name(name) {
+        "Text"
+    } else {
+        "File"
+    }
+}
+
+fn book_or_file_label(entry: &DirEntry) -> &'static str {
+    if entry.is_dir {
+        return "Folder";
+    }
+
+    let name = &entry.name[..entry.name_len as usize];
+    if is_epub_or_epu_name(name) || is_text_name(name) {
+        "Book"
+    } else {
+        "File"
+    }
 }
 
 fn is_epub_or_epu_name(name: &[u8]) -> bool {

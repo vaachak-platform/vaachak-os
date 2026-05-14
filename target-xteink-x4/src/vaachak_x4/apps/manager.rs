@@ -267,7 +267,9 @@ impl AppManager {
 
     fn active_button_label_mode(&self) -> LabelMode {
         match self.launcher.active() {
+            AppId::Home if self.home.is_game_screen() => LabelMode::Games,
             AppId::Reader => LabelMode::Reader,
+            AppId::Settings => LabelMode::Settings,
             _ => LabelMode::Default,
         }
     }
@@ -279,8 +281,11 @@ impl AppManager {
 
         let swap_changed = self.bumps.set_swap(swap);
         let mode_changed = self.bumps.set_label_mode(self.active_button_label_mode());
+        let settings_state_changed = self
+            .bumps
+            .set_settings_state(self.settings.selected_tab(), self.settings.focus_tabs());
 
-        if swap_changed || mode_changed {
+        if swap_changed || mode_changed || settings_state_changed {
             // labels changed, need to redraw the button bar
             self.launcher
                 .ctx
@@ -509,6 +514,7 @@ impl AppManager {
             if active == AppId::Settings {
                 self.sync_active_pending_setting();
                 self.propagate_fonts();
+                self.sync_button_config();
             }
 
             transition
@@ -733,7 +739,6 @@ impl AppManager {
         let ss = self.settings.system_settings();
         let _ui_idx = ss.ui_font_size_idx;
         let _ui_source = ss.ui_font_source;
-        let ui_font_source = ss.ui_font_source;
         let book_idx = ss.book_font_size_idx;
         let theme_idx = ss.reading_theme;
         let show_progress = ss.reader_show_progress;
@@ -749,7 +754,10 @@ impl AppManager {
         let _reader_sd_font_id_len = ss
             .reader_sd_font_id_len
             .min(config::READER_SD_FONT_ID_CAP as u8) as usize;
-        static_font_assets::set_ui_font_source(ui_font_source);
+        // Design option 1: OS chrome uses compiled Inter bitmap fonts.
+        // Keep the older VFN UI bridge disabled so stale SETTINGS.TXT values
+        // cannot mix Inter/Lexend VFN metrics into Settings/Home chrome.
+        static_font_assets::set_ui_font_source(0);
         self.reader.set_book_font_size(book_idx);
         self.reader.set_reading_theme(theme_idx);
         self.reader.set_reader_orientation(reader_orientation);

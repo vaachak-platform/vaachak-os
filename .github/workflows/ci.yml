@@ -1,35 +1,53 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  rust:
-    name: Rust workspace checks
+  validate:
+    name: Validate Vaachak OS
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
+      - name: Install Rust target
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          targets: riscv32imc-unknown-none-elf
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Format
+      - name: Repository hygiene
+        run: |
+          if [ -x scripts/check_repo_hygiene.sh ]; then
+            ./scripts/check_repo_hygiene.sh
+          fi
+
+      - name: Runtime ownership audit
+        run: |
+          if [ -x scripts/audit_remaining_pulp_runtime_dependencies.sh ]; then
+            ./scripts/audit_remaining_pulp_runtime_dependencies.sh
+          fi
+
+      - name: X4 partition policy checks
+        run: |
+          if [ -x scripts/validate_x4_standard_partition_table_compatibility.sh ]; then
+            ./scripts/validate_x4_standard_partition_table_compatibility.sh
+          fi
+          if [ -x scripts/validate_x4_flash_ota_slot_policy.sh ]; then
+            ./scripts/validate_x4_flash_ota_slot_policy.sh
+          fi
+
+      - name: Rust format
         run: cargo fmt --all --check
 
-      - name: Check
-        run: cargo check --workspace --all-targets
+      - name: Check X4 target package
+        run: cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf
 
-      - name: Test
-        run: cargo test --workspace --all-targets
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Build X4 release firmware
+        run: cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf

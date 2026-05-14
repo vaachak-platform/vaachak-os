@@ -63,11 +63,26 @@ pub fn build_daily_mantra_vm_sd_runtime(
     script: &str,
     mantras: &str,
 ) -> LuaDailyMantraScreen {
+    build_daily_mantra_vm_sd_runtime_for_day(manifest, script, mantras, None)
+}
+
+pub fn build_daily_mantra_vm_sd_runtime_for_day(
+    manifest: &str,
+    script: &str,
+    mantras: &str,
+    runtime_day: Option<&str>,
+) -> LuaDailyMantraScreen {
     let mut vm = LuaVm::new();
+    let runtime_selected_day = runtime_day.and_then(normalize_weekday);
     let smoke_result = match vm.eval_i32(LUA_DAILY_MANTRA_VM_SMOKE_SCRIPT) {
         Ok(value) if value == 3 => value,
         _ => {
-            let mut screen = build_daily_mantra_sd_runtime_for_day(manifest, script, mantras, None);
+            let mut screen = build_daily_mantra_sd_runtime_for_day(
+                manifest,
+                script,
+                mantras,
+                runtime_selected_day,
+            );
             screen
                 .footer
                 .set("VM execution failed; fallback parser used");
@@ -75,9 +90,11 @@ pub fn build_daily_mantra_vm_sd_runtime(
         }
     };
 
-    let selected_day = extract_daily_mantra_vm_day(script)
-        .and_then(|expr| vm.eval_str(expr).ok())
-        .and_then(normalize_weekday);
+    let selected_day = runtime_selected_day.or_else(|| {
+        extract_daily_mantra_vm_day(script)
+            .and_then(|expr| vm.eval_str(expr).ok())
+            .and_then(normalize_weekday)
+    });
 
     let mut screen = build_daily_mantra_sd_runtime_for_day(manifest, script, mantras, selected_day);
     if !screen.source.is_sd_loaded() {
@@ -220,6 +237,18 @@ capabilities = ["display", "input", "storage", "time"]
         assert_eq!(screen.subtitle(), "Day: Monday");
         assert!(screen.line1().starts_with("Mantra: Om Namah Shivaya"));
         assert_eq!(screen.footer(), "VM result: 108");
+    }
+
+    #[test]
+    fn runtime_day_overrides_vm_day_to_use_clock() {
+        let screen = build_daily_mantra_vm_sd_runtime_for_day(
+            MANIFEST,
+            "vm_expression = \"return 108 + 0\"\nvm_day_expression = \"return 'Monday'\"\n",
+            "Monday|Om Monday|Monday text.\nWednesday|Om Wednesday|Wednesday text.\n",
+            Some("Wednesday"),
+        );
+        assert_eq!(screen.subtitle(), "Day: Wednesday");
+        assert!(screen.line1().starts_with("Mantra: Om Wednesday"));
     }
 
     #[test]

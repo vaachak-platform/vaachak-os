@@ -5,8 +5,8 @@
 // five size tiers: 0=XSmall  1=Small  2=Medium  3=Large  4=XLarge
 //
 // Reader font-family selection is CrossInk-style: fonts are firmware-static assets
-// generated at build time. UI font family/source is metadata-only for now, so
-// category/list chrome remains on the stable built-in bitmap font path.
+// generated at build time. OS chrome uses a fixed Inter bitmap family so
+// Settings/Home/internal shell layout stays metric-stable across screens.
 
 pub mod bitmap;
 
@@ -26,7 +26,7 @@ pub const READER_FONT_SOURCE_COUNT: u8 = 4;
 pub const READER_FONT_SOURCE_NAMES: &[&str] = &["Bookerly", "Charis", "Bitter", "Lexend"];
 
 pub const UI_FONT_SOURCE_COUNT: u8 = 3;
-pub const UI_FONT_SOURCE_NAMES: &[&str] = &["Built-in", "Inter", "Lexend"];
+pub const UI_FONT_SOURCE_NAMES: &[&str] = &["Inter", "Inter", "Inter"];
 
 #[inline]
 pub fn reader_font_source_name(idx: u8) -> &'static str {
@@ -41,7 +41,7 @@ pub fn ui_font_source_name(idx: u8) -> &'static str {
     UI_FONT_SOURCE_NAMES
         .get(idx as usize)
         .copied()
-        .unwrap_or("Built-in")
+        .unwrap_or("Inter")
 }
 
 #[derive(Clone, Copy)]
@@ -51,16 +51,14 @@ pub struct UiFonts {
 }
 
 impl UiFonts {
-    pub fn for_size(idx: u8) -> Self {
+    pub fn for_size(_idx: u8) -> Self {
         Self {
-            body: body_font(idx),
-            heading: heading_font(idx),
+            body: ui_body_font_fixed(),
+            heading: ui_heading_font_fixed(),
         }
     }
 
     pub fn for_source_size(_source: u8, idx: u8) -> Self {
-        // UI font family/source is metadata-only until a stack-safe UI compiled-font
-        // renderer is added. Keep all list/category chrome on built-in bitmap fonts.
         Self::for_size(idx)
     }
 }
@@ -174,6 +172,90 @@ fn lexend_heading_font(idx: u8) -> &'static BitmapFont {
     )
 }
 
+fn inter_body_font(idx: u8) -> &'static BitmapFont {
+    size_match!(
+        idx,
+        font_data::INTER_REGULAR_BODY_XSMALL,
+        font_data::INTER_REGULAR_BODY_SMALL,
+        font_data::INTER_REGULAR_BODY_MEDIUM,
+        font_data::INTER_REGULAR_BODY_LARGE,
+        font_data::INTER_REGULAR_BODY_XLARGE
+    )
+}
+fn inter_heading_font(idx: u8) -> &'static BitmapFont {
+    size_match!(
+        idx,
+        font_data::INTER_REGULAR_HEADING_XSMALL,
+        font_data::INTER_REGULAR_HEADING_SMALL,
+        font_data::INTER_REGULAR_HEADING_MEDIUM,
+        font_data::INTER_REGULAR_HEADING_LARGE,
+        font_data::INTER_REGULAR_HEADING_XLARGE
+    )
+}
+fn inter_bold_body_font(idx: u8) -> &'static BitmapFont {
+    size_match!(
+        idx,
+        font_data::INTER_BOLD_BODY_XSMALL,
+        font_data::INTER_BOLD_BODY_SMALL,
+        font_data::INTER_BOLD_BODY_MEDIUM,
+        font_data::INTER_BOLD_BODY_LARGE,
+        font_data::INTER_BOLD_BODY_XLARGE
+    )
+}
+
+pub const UI_BODY_SIZE_IDX: u8 = 1;
+pub const UI_HEADING_SIZE_IDX: u8 = 0;
+pub const UI_CHROME_SIZE_IDX: u8 = 0;
+
+// CrossInk internal list pages use a slightly larger Inter tier than
+// compact chrome.  Settings, Tools, Games, and general internal list
+// surfaces use MEDIUM. Reader tab lists also use MEDIUM now; their
+// row stride is slightly taller so text remains footer-safe.
+pub const UI_LIST_SIZE_IDX: u8 = 2;
+pub const UI_READER_LIST_SIZE_IDX: u8 = 2;
+
+#[inline]
+pub fn ui_body_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(
+        inter_body_font(UI_BODY_SIZE_IDX),
+        body_font(UI_BODY_SIZE_IDX),
+    )
+}
+
+#[inline]
+pub fn ui_heading_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(
+        inter_heading_font(UI_HEADING_SIZE_IDX),
+        heading_font(UI_HEADING_SIZE_IDX),
+    )
+}
+
+#[inline]
+pub fn ui_section_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(inter_bold_body_font(UI_BODY_SIZE_IDX), ui_body_font_fixed())
+}
+
+#[inline]
+pub fn ui_list_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(
+        inter_body_font(UI_LIST_SIZE_IDX),
+        body_font(UI_LIST_SIZE_IDX),
+    )
+}
+
+#[inline]
+pub fn ui_list_section_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(inter_bold_body_font(UI_LIST_SIZE_IDX), ui_list_font_fixed())
+}
+
+#[inline]
+pub fn ui_reader_list_font_fixed() -> &'static BitmapFont {
+    usable_or_fallback(
+        inter_body_font(UI_READER_LIST_SIZE_IDX),
+        body_font(UI_READER_LIST_SIZE_IDX),
+    )
+}
+
 #[inline]
 fn usable_or_fallback(
     candidate: &'static BitmapFont,
@@ -212,16 +294,19 @@ pub fn reader_heading_font(source: u8, idx: u8) -> &'static BitmapFont {
     )
 }
 
-pub fn ui_body_font(_source: u8, idx: u8) -> &'static BitmapFont {
-    body_font(idx)
+pub fn ui_body_font(_source: u8, _idx: u8) -> &'static BitmapFont {
+    ui_body_font_fixed()
 }
 
-pub fn ui_heading_font(_source: u8, idx: u8) -> &'static BitmapFont {
-    heading_font(idx)
+pub fn ui_heading_font(_source: u8, _idx: u8) -> &'static BitmapFont {
+    ui_heading_font_fixed()
 }
 
 pub fn chrome_font() -> &'static BitmapFont {
-    body_font(0)
+    usable_or_fallback(
+        inter_body_font(UI_CHROME_SIZE_IDX),
+        body_font(UI_CHROME_SIZE_IDX),
+    )
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

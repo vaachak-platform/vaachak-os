@@ -2,26 +2,37 @@
 
 ## Current priority
 
-Keep the active X4 runtime stable while cleaning the repository and documenting the true ownership map.
+Keep the Xteink X4 reader path stable. Prefer small, device-testable changes that preserve reader pagination, SD-card behavior, Wi-Fi Transfer, Date & Time, and the accepted partition table.
 
 ## Active runtime
 
-Use `vendor/pulp-os` as the device firmware source of truth. Do not rewrite working display, SD, input, scheduler, Reader, Home, Wi-Fi Transfer, Date & Time, Settings, or sleep-image behavior unless the requested change is explicitly scoped and device-testable.
+The active firmware target is `target-xteink-x4`. New functionality should be added under Vaachak-owned source paths, especially `target-xteink-x4/src/vaachak_x4/**`, `core/**`, `hal-xteink-x4/**`, `support/**`, `tools/**`, and `examples/sd-card/**`.
 
-## Vaachak-owned crates
+`vendor/pulp-os` is reference/compatibility material only. Do not add new product behavior there.
 
-Use the root workspace for target-neutral models, contracts, and adapters:
+## UI direction
 
-- `core/`
-- `hal-xteink-x4/`
-- `target-xteink-x4/`
+Home remains a Biscuit-style category launcher. Internal pages use CrossInk-style chrome with fixed Inter UI typography. Reader/book fonts remain separate from OS chrome.
 
-Keep these crates clean, semantic, and free of generated delivery labels.
+## Naming and artifacts
 
-## Naming discipline
-
-Use semantic names based on domain behavior, not development chronology. Do not add generated archives, temporary patch directories, local backup folders, or historical delivery labels to source control.
+Use semantic names. Do not commit generated archives, temporary helper folders, root build output, OS metadata, or one-time script artifacts.
 
 ## Validation
 
-For repo cleanup work, run the cleanup guard from the repository root. For device firmware work, build and flash from `vendor/pulp-os` and validate on the X4.
+For repository checks, run:
+
+```bash
+scripts/check_repo_hygiene.sh
+scripts/audit_remaining_pulp_runtime_dependencies.sh
+scripts/validate_x4_standard_partition_table_compatibility.sh
+scripts/deploy/check_deploy_ready.sh
+```
+
+For firmware checks, run:
+
+```bash
+cargo fmt --all
+cargo check -p target-xteink-x4 --target riscv32imc-unknown-none-elf
+cargo build -p target-xteink-x4 --release --target riscv32imc-unknown-none-elf
+```

@@ -64,6 +64,17 @@ pub fn draw_char(
     cx: i32,
     baseline: i32,
 ) -> Option<u8> {
+    draw_char_color(strip, data, ch, cx, baseline, true)
+}
+
+pub fn draw_char_color(
+    strip: &mut StripBuffer,
+    data: &[u8],
+    ch: char,
+    cx: i32,
+    baseline: i32,
+    black: bool,
+) -> Option<u8> {
     let font = VfntFont::parse(data).ok()?;
     let glyph = font.glyph(ch as u32).ok()?;
     let width = glyph.metrics.width as usize;
@@ -72,7 +83,7 @@ pub fn draw_char(
     if width > 0 && height > 0 && stride > 0 {
         let gx = cx + i32::from(glyph.metrics.bearing_x);
         let gy = baseline - i32::from(glyph.metrics.bearing_y);
-        strip.blit_1bpp(glyph.bitmap_data, 0, width, height, stride, gx, gy, true);
+        strip.blit_1bpp(glyph.bitmap_data, 0, width, height, stride, gx, gy, black);
     }
     Some(glyph.metrics.advance_x.max(1).min(255) as u8)
 }
@@ -90,10 +101,21 @@ pub fn measure_str(data: &[u8], text: &str) -> u16 {
 }
 
 pub fn draw_str(strip: &mut StripBuffer, data: &[u8], text: &str, cx: i32, baseline: i32) -> i32 {
+    draw_str_color(strip, data, text, cx, baseline, true)
+}
+
+pub fn draw_str_color(
+    strip: &mut StripBuffer,
+    data: &[u8],
+    text: &str,
+    cx: i32,
+    baseline: i32,
+    black: bool,
+) -> i32 {
     let mut x = cx;
     for ch in text.chars() {
         if ch.is_ascii() {
-            x += i32::from(draw_char(strip, data, ch, x, baseline).unwrap_or(8));
+            x += i32::from(draw_char_color(strip, data, ch, x, baseline, black).unwrap_or(8));
         } else {
             x += 8;
         }

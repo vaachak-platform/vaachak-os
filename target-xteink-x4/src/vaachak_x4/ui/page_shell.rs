@@ -2,8 +2,8 @@
 //!
 //! The shell is a pure layout/contract layer. It is intended for Settings,
 //! Files, Library, Fonts, Network, Tools, and other internal pages that need
-//! CrossInk-style tabs, larger rows, section headers, right-aligned values,
-//! value pills, scrollbars, and soft-key hints.
+//! CrossInk-style tabs, Inter UI typography, larger rows, section headers,
+//! right-aligned values, value pills, scrollbars, and soft-key hints.
 //!
 //! This module does not draw pixels, change the Biscuit-inspired Home
 //! dashboard, change reader pagination, change input mapping, change storage,
@@ -15,7 +15,8 @@ use super::biscuit_layout::{BiscuitRect, BiscuitScreenLayout, DEFAULT_SCREEN_LAY
 use super::biscuit_tokens::{BISCUIT_SPACING, BISCUIT_TYPOGRAPHY};
 
 pub const UI_SHELL_FOUNDATION_MARKER: &str = "ui-shell-foundation-vaachak-ok";
-pub const UI_SHELL_CONTRACT_VERSION: u8 = 1;
+pub const SETTINGS_TABBED_UI_MIGRATION_MARKER: &str = "settings-tabbed-ui-migration-vaachak-ok";
+pub const UI_SHELL_CONTRACT_VERSION: u8 = 4;
 
 pub const CHANGES_HOME_DASHBOARD_RENDERING: bool = false;
 pub const CHANGES_READER_PAGE_RENDERING: bool = false;
@@ -86,23 +87,25 @@ pub struct UiShellTokens {
     pub row_height: u16,
     pub section_height: u16,
     pub row_gap: u16,
+    pub content_top_gap: u16,
     pub value_column_width: u16,
     pub value_pill_min_width: u16,
     pub scrollbar_width: u16,
 }
 
 pub const UI_SHELL_TOKENS: UiShellTokens = UiShellTokens {
-    outer_margin: 16,
+    outer_margin: 0,
     hairline: 1,
-    header_height: 42,
-    tab_bar_height: 28,
-    footer_height: 34,
-    row_height: 38,
-    section_height: 26,
-    row_gap: 2,
-    value_column_width: 148,
-    value_pill_min_width: 56,
-    scrollbar_width: 4,
+    header_height: 88,
+    tab_bar_height: 34,
+    footer_height: 48,
+    row_height: 42,
+    section_height: 30,
+    row_gap: 0,
+    content_top_gap: 16,
+    value_column_width: 142,
+    value_pill_min_width: 76,
+    scrollbar_width: 3,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -165,8 +168,8 @@ impl UiShellPageContract {
         Self {
             kind: UiShellPageKind::Settings,
             tab_count: 4,
-            row_count_hint: 12,
-            uses_section_headers: true,
+            row_count_hint: 8,
+            uses_section_headers: false,
             uses_right_aligned_values: true,
             uses_value_pills: true,
             uses_scrollbar: true,
@@ -221,7 +224,7 @@ impl UiShellLayout {
             status_w,
             BISCUIT_TYPOGRAPHY.body_line_height,
         );
-        let tab_y = header.bottom().saturating_add(BISCUIT_SPACING.xs);
+        let tab_y = header.bottom();
         let tab_bar = BiscuitRect::new(outer.x, tab_y, outer.w, UI_SHELL_TOKENS.tab_bar_height);
         let footer = BiscuitRect::new(
             outer.x,
@@ -229,8 +232,10 @@ impl UiShellLayout {
             outer.w,
             UI_SHELL_TOKENS.footer_height,
         );
-        let content_y = tab_bar.bottom().saturating_add(BISCUIT_SPACING.sm);
-        let content_bottom = footer.y.saturating_sub(BISCUIT_SPACING.sm);
+        let content_y = tab_bar
+            .bottom()
+            .saturating_add(UI_SHELL_TOKENS.content_top_gap);
+        let content_bottom = footer.y.saturating_sub(BISCUIT_SPACING.md);
         let content = BiscuitRect::new(
             outer.x,
             content_y,
@@ -391,4 +396,8 @@ pub const fn ui_shell_foundation_marker() -> &'static str {
 
 pub const fn default_ui_shell_layout() -> UiShellLayout {
     DEFAULT_UI_SHELL_LAYOUT
+}
+
+pub const fn settings_tabbed_ui_migration_marker() -> &'static str {
+    SETTINGS_TABBED_UI_MIGRATION_MARKER
 }

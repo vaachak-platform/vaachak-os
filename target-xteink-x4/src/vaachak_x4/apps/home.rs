@@ -24,13 +24,14 @@ use crate::vaachak_x4::lua::grid_games::{
 use crate::vaachak_x4::lua::tool_stub_script::{self, LuaToolStubScreen};
 use crate::vaachak_x4::lua::unit_converter::{self, UnitConverterState};
 use crate::vaachak_x4::network::{time_status, wifi_scan};
+use crate::vaachak_x4::ui::crossink_internal;
 use crate::vaachak_x4::x4_apps::apps::reader_state;
 use crate::vaachak_x4::x4_apps::apps::widgets::text_keyboard::{self, TextKeyboardAction};
 use crate::vaachak_x4::x4_apps::apps::{App, AppContext, AppId, RECENT_FILE, Transition};
 use crate::vaachak_x4::x4_apps::fonts;
 use crate::vaachak_x4::x4_apps::fonts::bitmap::BitmapFont;
 use crate::vaachak_x4::x4_apps::ui::{
-    Alignment, BUTTON_BAR_H, BitmapDynLabel, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W, HEADER_W,
+    Alignment, BUTTON_BAR_H, BitmapDynLabel, BitmapLabel, CONTENT_TOP, FULL_CONTENT_W,
     LARGE_MARGIN, Region, SECTION_GAP, TITLE_Y_OFFSET,
 };
 use crate::vaachak_x4::x4_kernel::app::HomeMenuItem;
@@ -43,9 +44,10 @@ use crate::vaachak_x4::x4_kernel::kernel::config::{
 };
 
 use crate::vaachak_x4::lua::calendar_script::{
-    LUA_CALENDAR_APP_FOLDER, LUA_CALENDAR_APP_MARKER, LUA_CALENDAR_ENTRY_FILE,
-    LUA_CALENDAR_EVENTS_FILE, LUA_CALENDAR_MANIFEST_FILE, LUA_CALENDAR_SD_RUNTIME_MARKER,
-    LuaCalendarScreen, build_calendar_sd_runtime,
+    LUA_CALENDAR_AMERICAN_EVENTS_FILE, LUA_CALENDAR_APP_FOLDER, LUA_CALENDAR_APP_MARKER,
+    LUA_CALENDAR_ENTRY_FILE, LUA_CALENDAR_EVENTS_FILE, LUA_CALENDAR_HINDU_EVENTS_FILE,
+    LUA_CALENDAR_MANIFEST_FILE, LUA_CALENDAR_SD_RUNTIME_MARKER, LuaCalendarScreen,
+    build_combined_calendar_sd_runtime,
 };
 use crate::vaachak_x4::lua::daily_mantra_script::{
     LUA_DAILY_MANTRA_APP_FOLDER, LUA_DAILY_MANTRA_APP_MARKER, LUA_DAILY_MANTRA_ENTRY_FILE,
@@ -61,6 +63,20 @@ use crate::vaachak_x4::lua::panchang_script::{
 pub const HOME_DASHBOARD_MARKER: &str = "x4-biscuit-home-dashboard-active-ok";
 pub const HOME_NAV_POLISH_MARKER: &str = "x4-biscuit-home-nav-polish-placeholder-routing-ok";
 pub const WIFI_SETTINGS_UI_EDITOR_MARKER: &str = "wifi-settings-shared-keyboard-ok";
+
+pub const SYSTEM_ABOUT_DIAGNOSTICS_CROSSINK_POLISH_MARKER: &str =
+    "system-about-diagnostics-crossink-polish-vaachak-ok";
+
+pub const DICTIONARY_FULLSCREEN_KEYBOARD_MARKER: &str = "vaachak-dictionary-fullscreen-keyboard-ok";
+pub const CROSSINK_FILES_LIBRARY_VISUAL_PARITY_HOME_MARKER: &str =
+    "crossink-files-library-visual-parity-home-ok";
+pub const CROSSINK_DICTIONARY_APP_POLISH_MARKER: &str = "crossink-dictionary-app-polish-vaachak-ok";
+
+const DICTIONARY_KEYBOARD_KEY_COUNT: usize = 30;
+const DICTIONARY_KEYBOARD_COLS: usize = 6;
+const DICTIONARY_KEYBOARD_ROWS: usize = 5;
+const DICTIONARY_KEYBOARD_GAP: u16 = 6;
+const DICTIONARY_KEYBOARD_STATUS_GAP: u16 = 8;
 
 const HOME_CARD_COUNT: usize = 6;
 const HOME_GRID_COLS: usize = 2;
@@ -161,6 +177,7 @@ const BM_MAX_MIXED_TITLE_CHARS: usize = 16;
 const BM_MAX_ROW_CHARS: usize = 42;
 const BM_STATUS_W: u16 = 144;
 const BM_STATUS_X: u16 = SCREEN_W - LARGE_MARGIN - BM_STATUS_W;
+const READER_HOME_TABS_UNIFIED_MARKER: &str = "crossink-reader-unified-tabs-home-ok";
 
 const CONTENT_REGION: Region = Region::new(0, CONTENT_TOP, SCREEN_W, SCREEN_H - CONTENT_TOP);
 
@@ -223,6 +240,8 @@ enum HomeState {
     ShowNetworkStatus,
     ShowWifiConnect,
     ShowDateTime,
+    ShowSleepImageInfo,
+    ShowDeviceInfo,
     ShowPlaceholder,
     ShowLuaGameStub,
     ShowLuaToolStub,
@@ -333,6 +352,8 @@ pub struct HomeApp {
     bm_selected: usize,
     bm_scroll: usize,
     needs_load_bookmarks: bool,
+    reader_tab: usize,
+    reader_focus_tabs: bool,
 }
 
 impl Default for HomeApp {
@@ -426,7 +447,13 @@ impl HomeApp {
             bm_selected: 0,
             bm_scroll: 0,
             needs_load_bookmarks: false,
+            reader_tab: 3,
+            reader_focus_tabs: true,
         }
+    }
+
+    pub fn is_game_screen(&self) -> bool {
+        matches!(self.state, HomeState::ShowLuaGameStub)
     }
 
     pub fn set_ui_font_style(&mut self, _source: u8, _idx: u8) {
@@ -456,6 +483,8 @@ impl HomeApp {
             HomeState::ShowNetworkStatus => 6,
             HomeState::ShowWifiConnect => 7,
             HomeState::ShowDateTime => 8,
+            HomeState::ShowSleepImageInfo => 13,
+            HomeState::ShowDeviceInfo => 14,
             HomeState::ShowCalendar => 9,
             HomeState::ShowPanchangLite => 10,
             HomeState::ShowLuaGameStub => 32,
@@ -499,6 +528,8 @@ impl HomeApp {
             6 => HomeState::ShowNetworkStatus,
             7 => HomeState::ShowWifiConnect,
             8 => HomeState::ShowDateTime,
+            13 => HomeState::ShowSleepImageInfo,
+            14 => HomeState::ShowDeviceInfo,
             9 => HomeState::ShowCalendar,
             10 => HomeState::ShowLuaPanchang,
             _ => HomeState::Menu,
@@ -510,6 +541,8 @@ impl HomeApp {
         self.bm_selected = bm_selected;
         self.bm_scroll = bm_scroll;
         if self.state == HomeState::ShowBookmarks {
+            self.reader_tab = 3;
+            self.reader_focus_tabs = true;
             self.needs_load_bookmarks = true;
         }
         if self.state == HomeState::ShowNetworkStatus || self.state == HomeState::ShowWifiConnect {
@@ -1398,7 +1431,32 @@ impl HomeApp {
             .filter(|s| !s.trim().is_empty())
     }
 
+    fn lua_daily_mantra_day_from_time(&self) -> Option<&'static str> {
+        match self
+            .time_cache
+            .display_weekday_index(self.time_uptime_secs)?
+        {
+            0 => Some("Sunday"),
+            1 => Some("Monday"),
+            2 => Some("Tuesday"),
+            3 => Some("Wednesday"),
+            4 => Some("Thursday"),
+            5 => Some("Friday"),
+            6 => Some("Saturday"),
+            _ => None,
+        }
+    }
+
+    fn lua_daily_mantra_status_label(&self) -> &'static str {
+        if self.lua_daily_mantra_screen.source.is_sd_loaded() {
+            self.time_cache.freshness(self.time_uptime_secs).as_str()
+        } else {
+            self.lua_daily_mantra_screen.source.label()
+        }
+    }
+
     fn load_lua_daily_mantra(&mut self, k: &mut KernelHandle<'_>) {
+        let selected_day = self.lua_daily_mantra_day_from_time();
         let mut manifest_buf = [0u8; 1024];
         let mut script_buf = [0u8; 4096];
         let mut mantras_buf = [0u8; 2048];
@@ -1455,14 +1513,14 @@ impl HomeApp {
                                     Ok(mantras) => {
                                         #[cfg(feature = "lua-vm")]
                                         {
-                                            crate::vaachak_x4::lua::daily_mantra_vm_bridge::build_daily_mantra_vm_sd_runtime(
-                                                    manifest, script, mantras,
+                                            crate::vaachak_x4::lua::daily_mantra_vm_bridge::build_daily_mantra_vm_sd_runtime_for_day(
+                                                    manifest, script, mantras, selected_day,
                                                 )
                                         }
                                         #[cfg(not(feature = "lua-vm"))]
                                         {
-                                            crate::vaachak_x4::lua::daily_mantra_script::build_daily_mantra_sd_runtime(
-                                                    manifest, script, mantras,
+                                            crate::vaachak_x4::lua::daily_mantra_script::build_daily_mantra_sd_runtime_for_day(
+                                                    manifest, script, mantras, selected_day,
                                                 )
                                         }
                                     }
@@ -1639,7 +1697,8 @@ impl HomeApp {
     fn load_lua_calendar(&mut self, k: &mut KernelHandle<'_>) {
         let mut manifest_buf = [0u8; 1024];
         let mut script_buf = [0u8; 4096];
-        let mut events_buf = [0u8; 2048];
+        let mut data_buf = [0u8; 4096];
+        let mut combined_events = String::new();
 
         self.lua_calendar_screen = match k.read_lua_app_file_start(
             LUA_CALENDAR_APP_FOLDER,
@@ -1681,20 +1740,57 @@ impl HomeApp {
                             }
                         };
 
-                        match k.read_lua_app_file_start(
-                            LUA_CALENDAR_APP_FOLDER,
+                        for name in [
                             LUA_CALENDAR_EVENTS_FILE,
-                            &mut events_buf,
-                        ) {
-                            Ok((_size, events_n)) if events_n > 0 => {
-                                match core::str::from_utf8(&events_buf[..events_n]) {
-                                    Ok(events) => {
-                                        build_calendar_sd_runtime(manifest, script, events)
+                            LUA_CALENDAR_AMERICAN_EVENTS_FILE,
+                            LUA_CALENDAR_HINDU_EVENTS_FILE,
+                        ] {
+                            match k.read_lua_app_file_start(
+                                LUA_CALENDAR_APP_FOLDER,
+                                name,
+                                &mut data_buf,
+                            ) {
+                                Ok((_size, data_n)) if data_n > 0 => {
+                                    match core::str::from_utf8(&data_buf[..data_n]) {
+                                        Ok(text) => {
+                                            if !combined_events.is_empty() {
+                                                combined_events.push('\n');
+                                            }
+                                            combined_events.push_str(text);
+                                        }
+                                        Err(_) => {
+                                            self.needs_load_lua_calendar = false;
+                                            self.lua_calendar_screen =
+                                                LuaCalendarScreen::invalid_events_utf8();
+                                            log::info!(
+                                                "lua-app marker={} app=calendar source={}",
+                                                LUA_CALENDAR_APP_MARKER,
+                                                self.lua_calendar_screen.source.label()
+                                            );
+                                            return;
+                                        }
                                     }
-                                    Err(_) => LuaCalendarScreen::invalid_events_utf8(),
                                 }
+                                _ => {}
                             }
-                            _ => LuaCalendarScreen::missing_events(),
+                        }
+
+                        if combined_events.is_empty() {
+                            LuaCalendarScreen::missing_events()
+                        } else {
+                            let today = if self.time_status_loaded {
+                                self.time_cache
+                                    .display_date(self.time_uptime_secs)
+                                    .map(|date| (date.year, date.month, date.day))
+                            } else {
+                                None
+                            };
+                            build_combined_calendar_sd_runtime(
+                                manifest,
+                                script,
+                                combined_events.as_str(),
+                                today,
+                            )
                         }
                     }
                     _ => LuaCalendarScreen::missing_entry(),
@@ -1900,60 +1996,58 @@ impl HomeApp {
     }
 
     fn bm_subtitle_region(&self) -> Region {
-        Region::new(
-            LARGE_MARGIN,
-            BM_TITLE_Y + self.ui_fonts.heading.line_height + BM_BOOK_TITLE_GAP,
-            FULL_CONTENT_W,
-            self.ui_fonts.body.line_height,
+        crossink_internal::reader_list_row_region_from(
+            crossink_internal::READER_LIST_TOP_WITH_TABS,
+            0,
         )
     }
 
     fn bm_list_y(&self) -> u16 {
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + BM_HEADER_LIST_GAP;
         if self.bm_group_title().is_some() {
-            y += self.ui_fonts.body.line_height + BM_BOOK_TITLE_GAP;
+            crossink_internal::READER_LIST_TOP_WITH_TABS + crossink_internal::READER_ROW_STRIDE
+        } else {
+            crossink_internal::READER_LIST_TOP_WITH_TABS
         }
-        y
     }
 
     fn bm_visible_lines(&self) -> usize {
-        let available = SCREEN_H.saturating_sub(self.bm_list_y());
-        let rows = (available / BM_ROW_STRIDE) as usize;
-        rows.max(1).min(64)
+        crossink_internal::reader_visible_rows_from(self.bm_list_y())
+            .max(1)
+            .min(64)
     }
 
     fn bm_row_region(&self, i: usize) -> Region {
-        Region::new(
-            LARGE_MARGIN,
-            self.bm_list_y() + i as u16 * BM_ROW_STRIDE,
-            FULL_CONTENT_W,
-            BM_ROW_H,
-        )
+        crossink_internal::reader_list_row_region_from(self.bm_list_y(), i)
     }
 
     fn bm_list_region(&self) -> Region {
         let vis = self.bm_visible_lines();
-        let subtitle_extra = if self.bm_group_title().is_some() {
-            self.ui_fonts.body.line_height + BM_BOOK_TITLE_GAP
-        } else {
-            0
-        };
-
-        Region::new(
-            LARGE_MARGIN,
-            BM_TITLE_Y + self.ui_fonts.heading.line_height + BM_BOOK_TITLE_GAP,
-            FULL_CONTENT_W,
-            subtitle_extra + BM_ROW_STRIDE * vis as u16,
+        crossink_internal::reader_list_region_from(
+            crossink_internal::READER_LIST_TOP_WITH_TABS,
+            vis + 1,
         )
     }
 
     fn bm_status_region(&self) -> Region {
-        Region::new(
-            BM_STATUS_X,
-            BM_TITLE_Y,
-            BM_STATUS_W,
-            self.ui_fonts.heading.line_height,
-        )
+        crossink_internal::header_status_region()
+    }
+
+    fn reader_tab_has_home_rows(&self) -> bool {
+        match self.reader_tab {
+            0 => self.recent_record.is_some(),
+            3 => self.bm_count > 0,
+            _ => false,
+        }
+    }
+
+    fn push_files_reader_tab(tab: usize, ctx: &mut AppContext) -> Transition {
+        let msg = match tab {
+            1 => "reader-tab:1",
+            2 => "reader-tab:2",
+            _ => "reader-tab:2",
+        };
+        ctx.set_message(msg.as_bytes());
+        Transition::Push(AppId::Files)
     }
 }
 
@@ -2066,7 +2160,9 @@ impl App<AppId> for HomeApp {
                 HomeState::Menu
                     | HomeState::ShowApps
                     | HomeState::ShowDailyMantra
+                    | HomeState::ShowLuaDailyMantra
                     | HomeState::ShowCalendar
+                    | HomeState::ShowLuaCalendar
                     | HomeState::ShowPanchangLite
                     | HomeState::ShowLuaPanchang
                     | HomeState::ShowNetworkStatus
@@ -2167,6 +2263,9 @@ impl App<AppId> for HomeApp {
             HomeState::ShowNetworkStatus => self.on_event_network_status(event, ctx),
             HomeState::ShowWifiConnect => self.on_event_wifi_connect(event, ctx),
             HomeState::ShowDateTime => self.on_event_date_time(event, ctx),
+            HomeState::ShowSleepImageInfo | HomeState::ShowDeviceInfo => {
+                self.on_event_system_info(event, ctx)
+            }
             HomeState::ShowPlaceholder => self.on_event_placeholder(event, ctx),
             HomeState::ShowLuaGameStub => self.on_event_lua_game_stub(event, ctx),
             HomeState::ShowLuaToolStub => self.on_event_lua_tool_stub(event, ctx),
@@ -2189,6 +2288,8 @@ impl App<AppId> for HomeApp {
             HomeState::ShowNetworkStatus => self.draw_network_status(strip),
             HomeState::ShowWifiConnect => self.draw_wifi_connect(strip),
             HomeState::ShowDateTime => self.draw_date_time(strip),
+            HomeState::ShowSleepImageInfo => self.draw_sleep_image_info(strip),
+            HomeState::ShowDeviceInfo => self.draw_device_info(strip),
             HomeState::ShowPlaceholder => self.draw_placeholder(strip),
             HomeState::ShowLuaGameStub => self.draw_lua_game_stub(strip),
             HomeState::ShowLuaToolStub => self.draw_lua_tool_stub(strip),
@@ -2270,6 +2371,8 @@ impl HomeApp {
 
     fn open_lua_daily_mantra(&mut self, ctx: &mut AppContext) {
         self.return_target = ReturnTarget::CategoryItems;
+        self.time_status_loaded = false;
+        self.needs_load_time_status = true;
         self.needs_load_lua_daily_mantra = true;
         self.state = HomeState::ShowLuaDailyMantra;
         ctx.request_full_redraw();
@@ -2277,6 +2380,9 @@ impl HomeApp {
 
     fn open_lua_calendar(&mut self, ctx: &mut AppContext) {
         self.return_target = ReturnTarget::CategoryItems;
+        self.calendar_month_offset = 0;
+        self.time_status_loaded = false;
+        self.needs_load_time_status = true;
         self.needs_load_lua_calendar = true;
         self.state = HomeState::ShowLuaCalendar;
         ctx.request_full_redraw();
@@ -2293,18 +2399,15 @@ impl HomeApp {
     }
 
     fn open_calendar(&mut self, ctx: &mut AppContext) {
-        self.return_target = ReturnTarget::CategoryItems;
-        self.calendar_month_offset = 0;
-        self.time_status_loaded = false;
-        self.needs_load_time_status = true;
-        self.state = HomeState::ShowCalendar;
-        ctx.request_full_redraw();
+        self.open_lua_calendar(ctx);
     }
 
     fn open_bookmarks(&mut self, return_target: ReturnTarget, ctx: &mut AppContext) {
         self.return_target = return_target;
         self.bm_selected = 0;
         self.bm_scroll = 0;
+        self.reader_tab = 3;
+        self.reader_focus_tabs = true;
         self.needs_load_bookmarks = true;
         self.state = HomeState::ShowBookmarks;
         ctx.request_full_redraw();
@@ -2339,6 +2442,22 @@ impl HomeApp {
         self.time_status_loaded = false;
         self.needs_load_time_status = true;
         self.state = HomeState::ShowDateTime;
+        ctx.request_full_redraw();
+    }
+
+    fn open_sleep_image_info(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.state = HomeState::ShowSleepImageInfo;
+        ctx.request_full_redraw();
+    }
+
+    fn open_device_info(&mut self, ctx: &mut AppContext) {
+        self.return_target = ReturnTarget::CategoryItems;
+        self.network_status_loaded = false;
+        self.needs_load_network_status = true;
+        self.time_status_loaded = false;
+        self.needs_load_time_status = true;
+        self.state = HomeState::ShowDeviceInfo;
         ctx.request_full_redraw();
     }
     fn open_lua_tool_stub(&mut self, idx: usize, ctx: &mut AppContext) {
@@ -2387,6 +2506,107 @@ impl HomeApp {
             }
         }
     }
+
+    fn load_lua_dictionary_shard_from_index(&mut self, k: &mut KernelHandle<'_>) {
+        let mut index_chunk = [0u8; dictionary::DICTIONARY_INDEX_SCAN_BUF_BYTES];
+        let mut resolver = dictionary::DictionaryIndexResolver::new(
+            self.dictionary.query_text(),
+            self.dictionary.search_prefix(),
+        );
+
+        let (index_size, first_len) = match k.read_lua_dictionary_index_start(&mut index_chunk) {
+            Ok((size, len)) => (size, len),
+            Err(_) => {
+                self.load_dictionary_fallback_json(k);
+                return;
+            }
+        };
+
+        if index_size as usize > dictionary::MAX_DICTIONARY_INDEX_BYTES {
+            self.dictionary
+                .mark_parse_failed("INDEX.TXT too large; rebuild dictionary pack");
+            self.lua_tool_screen
+                .line2
+                .set("INDEX.TXT too large; rebuild dictionary pack");
+            return;
+        }
+
+        resolver.push_bytes(&index_chunk[..first_len]);
+        let mut offset = first_len as u32;
+        while offset < index_size {
+            match k.read_lua_dictionary_index_chunk(offset, &mut index_chunk) {
+                Ok(0) => break,
+                Ok(len) => {
+                    resolver.push_bytes(&index_chunk[..len]);
+                    offset = offset.saturating_add(len as u32);
+                }
+                Err(_) => {
+                    self.dictionary.mark_parse_failed("INDEX.TXT read failed");
+                    self.lua_tool_screen.line2.set("INDEX.TXT read failed");
+                    return;
+                }
+            }
+        }
+
+        let (saw_valid_index_line, resolved_shard_path) = resolver.finish_with_status();
+        if !saw_valid_index_line {
+            self.dictionary
+                .mark_parse_failed("INDEX.TXT has no valid shard rows");
+            self.lua_tool_screen
+                .line2
+                .set("INDEX.TXT has no valid shard rows");
+            return;
+        }
+
+        let Some(shard_path) = resolved_shard_path else {
+            let search_label = self.dictionary.search_label();
+            self.dictionary.mark_missing_shard(search_label.as_str());
+            self.lua_tool_screen
+                .line2
+                .set("INDEX.TXT missing matching prefix shard");
+            return;
+        };
+
+        let mut data_buf = alloc::vec::Vec::new();
+        data_buf.resize(dictionary::MAX_DICTIONARY_SHARD_BYTES, 0);
+        match k.read_lua_dictionary_shard_start(shard_path.as_str(), &mut data_buf) {
+            Ok((size, data_len)) => {
+                if size as usize > dictionary::MAX_DICTIONARY_SHARD_BYTES {
+                    self.dictionary
+                        .mark_shard_too_large(shard_path.as_str(), size);
+                    self.lua_tool_screen
+                        .line2
+                        .set("Dictionary shard too large; split smaller");
+                    return;
+                }
+                match core::str::from_utf8(&data_buf[..data_len]) {
+                    Ok(data) => {
+                        let _ = self.dictionary.load_shard_json_with_label(
+                            self.dictionary.desired_shard_letter(),
+                            data,
+                            shard_path.as_str(),
+                        );
+                        self.lua_tool_screen
+                            .footer
+                            .set("Loaded dictionary prefix shard from DATA");
+                    }
+                    Err(_) => {
+                        self.dictionary.mark_parse_failed("shard invalid UTF-8");
+                        self.lua_tool_screen
+                            .line2
+                            .set("Dictionary shard invalid UTF-8");
+                    }
+                }
+            }
+            Err(_) => {
+                self.dictionary.mark_missing_shard(shard_path.as_str());
+                self.lua_tool_screen
+                    .line2
+                    .set("Dictionary shard missing in DATA");
+            }
+        }
+    }
+
     fn load_lua_tool_stub(&mut self, k: &mut KernelHandle<'_>) {
         let app = tool_stub_script::lua_tool_app(self.lua_tool_index);
         let mut manifest_buf = [0u8; 768];
@@ -2447,68 +2667,7 @@ impl HomeApp {
             tool_stub_script::build_tool_stub_runtime(self.lua_tool_index, manifest, script);
 
         if self.lua_tool_index == 0 {
-            let mut index_buf = [0u8; 2048];
-            match k.read_lua_dictionary_index_start(&mut index_buf) {
-                Ok((_size, len)) => match core::str::from_utf8(&index_buf[..len]) {
-                    Ok(index) => {
-                        if self.dictionary.load_index(index).is_err() {
-                            self.load_dictionary_fallback_json(k);
-                            return;
-                        }
-                        let shard_file = self.dictionary.desired_shard_file();
-                        if !self.dictionary.current_shard_declared() {
-                            self.dictionary.mark_missing_shard(shard_file.as_str());
-                            self.lua_tool_screen
-                                .line2
-                                .set("INDEX.TXT missing requested shard");
-                            return;
-                        }
-                        let mut data_buf = alloc::vec::Vec::new();
-                        data_buf.resize(dictionary::MAX_DICTIONARY_SHARD_BYTES, 0);
-                        match k.read_lua_dictionary_shard_start(shard_file.as_str(), &mut data_buf)
-                        {
-                            Ok((size, data_len)) => {
-                                if size as usize > dictionary::MAX_DICTIONARY_SHARD_BYTES {
-                                    self.dictionary
-                                        .mark_shard_too_large(shard_file.as_str(), size);
-                                    self.lua_tool_screen
-                                        .line2
-                                        .set("Dictionary shard too large; split smaller");
-                                    return;
-                                }
-                                match core::str::from_utf8(&data_buf[..data_len]) {
-                                    Ok(data) => {
-                                        let _ = self.dictionary.load_shard_json(
-                                            self.dictionary.desired_shard_letter(),
-                                            data,
-                                        );
-                                        self.lua_tool_screen
-                                            .footer
-                                            .set("Loaded dictionary shard from DATA");
-                                    }
-                                    Err(_) => {
-                                        self.dictionary.mark_parse_failed("shard invalid UTF-8");
-                                        self.lua_tool_screen
-                                            .line2
-                                            .set("Dictionary shard invalid UTF-8");
-                                    }
-                                }
-                            }
-                            Err(_) => {
-                                self.dictionary.mark_missing_shard(shard_file.as_str());
-                                self.lua_tool_screen
-                                    .line2
-                                    .set("Dictionary shard missing in DATA");
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        self.dictionary.mark_parse_failed("INDEX.TXT invalid UTF-8");
-                        self.load_dictionary_fallback_json(k);
-                    }
-                },
-                Err(_) => self.load_dictionary_fallback_json(k),
-            }
+            self.load_lua_dictionary_shard_from_index(k);
         } else if self.lua_tool_index == 1 {
             let mut data_buf = [0u8; 2048];
             match k.read_lua_game_app_file_start(app.folder, app.data_file, &mut data_buf) {
@@ -2557,10 +2716,16 @@ impl HomeApp {
                 let selected_key = self
                     .dictionary
                     .keyboard_key(self.dictionary.keyboard_cursor());
-                let before = self.dictionary.desired_shard_letter();
+                let before_query = String::from(self.dictionary.query_text());
+                let before_letter = self.dictionary.desired_shard_letter();
                 self.dictionary.select_keyboard_key();
-                let after = self.dictionary.desired_shard_letter();
-                if selected_key == "GO" || after != before {
+                let after_query = self.dictionary.query_text();
+                let after_letter = self.dictionary.desired_shard_letter();
+                if selected_key == "GO"
+                    || selected_key == "*"
+                    || after_query != before_query.as_str()
+                    || after_letter != before_letter
+                {
                     self.needs_load_lua_tool_stub = true;
                 }
                 ctx.request_full_redraw();
@@ -2914,21 +3079,11 @@ impl HomeApp {
                 Transition::None
             }
             (4, 2) => {
-                self.open_placeholder(
-                    "Sleep Image",
-                    "Placeholder",
-                    ReturnTarget::CategoryItems,
-                    ctx,
-                );
+                self.open_sleep_image_info(ctx);
                 Transition::None
             }
             (4, _) => {
-                self.open_placeholder(
-                    "Device Info",
-                    "Placeholder",
-                    ReturnTarget::CategoryItems,
-                    ctx,
-                );
+                self.open_device_info(ctx);
                 Transition::None
             }
 
@@ -3001,9 +3156,30 @@ impl HomeApp {
 
     fn on_event_lua_calendar(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
-            ActionEvent::Press(Action::Back)
-            | ActionEvent::LongPress(Action::Back)
-            | ActionEvent::Press(Action::Select) => self.return_to_target(ctx),
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                self.return_to_target(ctx)
+            }
+            ActionEvent::Press(Action::Prev)
+            | ActionEvent::Repeat(Action::Prev)
+            | ActionEvent::Press(Action::PrevJump)
+            | ActionEvent::Repeat(Action::PrevJump) => {
+                self.move_calendar_month(-1, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Next)
+            | ActionEvent::Repeat(Action::Next)
+            | ActionEvent::Press(Action::NextJump)
+            | ActionEvent::Repeat(Action::NextJump) => {
+                self.move_calendar_month(1, ctx);
+                Transition::None
+            }
+            ActionEvent::Press(Action::Select) => {
+                if self.calendar_month_offset != 0 {
+                    self.calendar_month_offset = 0;
+                    ctx.request_full_redraw();
+                }
+                Transition::None
+            }
             _ => Transition::None,
         }
     }
@@ -3046,6 +3222,24 @@ impl HomeApp {
         ctx.request_full_redraw();
     }
 
+    fn on_event_system_info(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
+        match event {
+            ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
+                self.return_to_target(ctx)
+            }
+            ActionEvent::Press(Action::Select) => {
+                if self.state == HomeState::ShowDeviceInfo {
+                    self.network_status_loaded = false;
+                    self.needs_load_network_status = true;
+                    self.time_status_loaded = false;
+                    self.needs_load_time_status = true;
+                }
+                ctx.request_full_redraw();
+                Transition::None
+            }
+            _ => Transition::None,
+        }
+    }
     fn on_event_placeholder(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
             ActionEvent::Press(Action::Back)
@@ -3224,14 +3418,46 @@ impl HomeApp {
         }
     }
 
+    fn switch_reader_tab_from_bookmarks(
+        &mut self,
+        delta: isize,
+        ctx: &mut AppContext,
+    ) -> Transition {
+        let len = crossink_internal::READER_TABS.len() as isize;
+        if len == 0 {
+            return Transition::None;
+        }
+        self.reader_tab = (self.reader_tab as isize + delta).rem_euclid(len) as usize;
+        self.reader_focus_tabs = true;
+        ctx.request_full_redraw();
+
+        match self.reader_tab {
+            1 | 2 => Self::push_files_reader_tab(self.reader_tab, ctx),
+            _ => Transition::None,
+        }
+    }
+
     fn on_event_bookmarks(&mut self, event: ActionEvent, ctx: &mut AppContext) -> Transition {
         match event {
             ActionEvent::Press(Action::Back) | ActionEvent::LongPress(Action::Back) => {
-                self.return_to_target(ctx)
+                if self.reader_focus_tabs {
+                    self.return_to_target(ctx)
+                } else {
+                    self.reader_focus_tabs = true;
+                    ctx.request_full_redraw();
+                    Transition::None
+                }
             }
 
             ActionEvent::Press(Action::Next) | ActionEvent::Repeat(Action::Next) => {
-                if self.bm_count > 0 {
+                if self.reader_focus_tabs {
+                    if self.reader_tab_has_home_rows() {
+                        self.reader_focus_tabs = false;
+                    }
+                    ctx.request_full_redraw();
+                    return Transition::None;
+                }
+                if self.reader_tab == 3 && self.bm_count > 0 {
                     let old = self.bm_selected;
                     let vis = self.bm_visible_lines();
                     if self.bm_selected + 1 < self.bm_count {
@@ -3254,7 +3480,14 @@ impl HomeApp {
             }
 
             ActionEvent::Press(Action::Prev) | ActionEvent::Repeat(Action::Prev) => {
-                if self.bm_count > 0 {
+                if self.reader_focus_tabs {
+                    if self.reader_tab_has_home_rows() {
+                        self.reader_focus_tabs = false;
+                    }
+                    ctx.request_full_redraw();
+                    return Transition::None;
+                }
+                if self.reader_tab == 3 && self.bm_count > 0 {
                     let old = self.bm_selected;
                     let vis = self.bm_visible_lines();
                     if self.bm_selected > 0 {
@@ -3278,31 +3511,31 @@ impl HomeApp {
                 Transition::None
             }
 
-            ActionEvent::Press(Action::NextJump) => {
-                if self.bm_count > 0 {
-                    let vis = self.bm_visible_lines();
-                    self.bm_selected = (self.bm_selected + vis).min(self.bm_count - 1);
-                    if self.bm_selected >= self.bm_scroll + vis {
-                        self.bm_scroll = self.bm_selected + 1 - vis;
-                    }
-                    ctx.mark_dirty(self.bm_list_region());
-                    ctx.mark_dirty(self.bm_status_region());
-                }
-                Transition::None
+            ActionEvent::Press(Action::NextJump) | ActionEvent::Repeat(Action::NextJump) => {
+                self.switch_reader_tab_from_bookmarks(1, ctx)
             }
 
-            ActionEvent::Press(Action::PrevJump) => {
-                let vis = self.bm_visible_lines();
-                self.bm_selected = self.bm_selected.saturating_sub(vis);
-                if self.bm_selected < self.bm_scroll {
-                    self.bm_scroll = self.bm_selected;
-                }
-                ctx.mark_dirty(self.bm_list_region());
-                ctx.mark_dirty(self.bm_status_region());
-                Transition::None
+            ActionEvent::Press(Action::PrevJump) | ActionEvent::Repeat(Action::PrevJump) => {
+                self.switch_reader_tab_from_bookmarks(-1, ctx)
             }
 
             ActionEvent::Press(Action::Select) => {
+                if self.reader_focus_tabs {
+                    return self.switch_reader_tab_from_bookmarks(1, ctx);
+                }
+                if self.reader_tab == 0 {
+                    if let Some(record) = &self.recent_record {
+                        ctx.set_message(record.open_path().as_bytes());
+                        return Transition::Push(AppId::Reader);
+                    }
+                    return Transition::None;
+                }
+                if matches!(self.reader_tab, 1 | 2) {
+                    return Self::push_files_reader_tab(self.reader_tab, ctx);
+                }
+                if self.reader_tab != 3 {
+                    return Transition::None;
+                }
                 if self.bm_count > 0 && self.bm_selected < self.bm_count {
                     let slot = &self.bm_entries[self.bm_selected];
                     log::info!(
@@ -3580,20 +3813,20 @@ impl HomeApp {
             (1, 1) => "Offline monthly view",
             (1, 2) => "Lua + cached Panchang",
             (1, 3) => "Run SD Lua calendar",
-            (2, 0) => "Playable SD Lua grid",
-            (2, 1) => "Playable SD Lua mine grid",
-            (2, 2) => "SD Lua card puzzle stub",
-            (2, 3) => "Playable SD Lua memory grid",
-            (2, 4) => "SD Lua solitaire stub",
-            (2, 5) => "SD Lua board game stub",
-            (2, 6) => "SD Lua snakes board stub",
+            (2, 0) => "Grid puzzle",
+            (2, 1) => "Mine puzzle",
+            (2, 2) => "Card puzzle",
+            (2, 3) => "Memory puzzle",
+            (2, 4) => "Card solitaire",
+            (2, 5) => "Board race",
+            (2, 6) => "Board ladder",
             (3, 0) => "Resume last book",
             (3, 1) => "Open file library",
             (3, 2) => "Open bookmark list",
-            (4, 0) => "Existing settings",
+            (4, 0) => "Preferences",
             (4, 1) => "Clock and sync",
-            (4, 2) => "Placeholder",
-            (4, 3) => "Placeholder",
+            (4, 2) => "Sleep image options",
+            (4, 3) => "Device and runtime",
             (5, 0) => "Open file library",
             (5, 1) => "Run SD Lua proof app",
             (5, 2) => "Offline QR helper",
@@ -3604,38 +3837,11 @@ impl HomeApp {
     }
 
     fn draw_screen_header(&self, strip: &mut StripBuffer, title: &str, status: &str) {
-        let header_region = Region::new(
-            LARGE_MARGIN,
-            BM_TITLE_Y,
-            HEADER_W,
-            self.ui_fonts.heading.line_height,
-        );
-        BitmapLabel::new(header_region, title, self.ui_fonts.heading)
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
-
-        let status_region = Region::new(
-            SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(104),
-            BM_TITLE_Y,
-            104,
-            self.card_meta_font().line_height,
-        );
-        BitmapLabel::new(status_region, status, self.card_meta_font())
-            .alignment(Alignment::CenterRight)
-            .draw(strip)
-            .unwrap();
+        crossink_internal::draw_header(strip, title, status);
     }
 
     fn app_row_region(&self, idx: usize) -> Region {
-        let count = Self::category_item_count(self.active_category).max(1) as u16;
-        let row_top = BM_TITLE_Y + self.ui_fonts.heading.line_height + 16;
-        let row_bottom = SCREEN_H.saturating_sub(BUTTON_BAR_H + 8);
-        let available_h = row_bottom.saturating_sub(row_top);
-        let stride = (available_h / count).clamp(42, 56);
-        let row_h = stride.saturating_sub(4).max(38);
-        let row_y = row_top + (idx as u16).saturating_mul(stride);
-        Region::new(LARGE_MARGIN, row_y, FULL_CONTENT_W, row_h)
+        crossink_internal::list_row_region_from(crossink_internal::LIST_TOP_NO_TABS, idx)
     }
 
     fn merged_redraw_region(first: Region, second: Region) -> Region {
@@ -3733,31 +3939,12 @@ impl HomeApp {
     fn draw_category_items(&self, strip: &mut StripBuffer) {
         let count = Self::category_item_count(self.active_category);
         let mut status = BitmapDynLabel::<20>::new(
-            Region::new(
-                SCREEN_W.saturating_sub(LARGE_MARGIN).saturating_sub(104),
-                BM_TITLE_Y,
-                104,
-                self.card_meta_font().line_height,
-            ),
-            self.card_meta_font(),
+            crossink_internal::header_status_region(),
+            fonts::chrome_font(),
         )
         .alignment(Alignment::CenterRight);
         let _ = time_status::battery_label(self.home_battery_mv, &mut status);
-
-        let header_region = Region::new(
-            LARGE_MARGIN,
-            BM_TITLE_Y,
-            HEADER_W,
-            self.ui_fonts.heading.line_height,
-        );
-        BitmapLabel::new(
-            header_region,
-            Self::category_title(self.active_category),
-            self.ui_fonts.heading,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        self.draw_screen_header(strip, Self::category_title(self.active_category), "");
         status.draw(strip).unwrap();
 
         for idx in 0..count {
@@ -3766,61 +3953,18 @@ impl HomeApp {
     }
 
     fn draw_category_item_row(&self, strip: &mut StripBuffer, idx: usize) {
-        // Use the same compact two-line list treatment that already worked for Games.
-        // Row geometry stays dynamic/clamped so the selected bar fully covers both
-        // title and subtitle instead of cutting through adjacent rows.
-        let compact = true;
-        let title_font = if compact {
-            self.ui_fonts.body
-        } else {
-            self.card_title_font()
-        };
-        let meta_font = if compact {
-            fonts::chrome_font()
-        } else {
-            self.card_meta_font()
-        };
-        let row = self.app_row_region(idx);
         let selected = idx
             == self
                 .selected
                 .min(Self::category_item_count(self.active_category).saturating_sub(1));
-
-        if selected {
-            row.to_rect()
-                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-                .draw(strip)
-                .unwrap();
-        }
-
-        let text_x = row.x + HOME_CARD_PAD_X;
-        let text_w = row.w.saturating_sub(HOME_CARD_PAD_X * 2);
-        let title_y = row.y + if compact { 4 } else { 7 };
-        let detail_y =
-            title_y + title_font.line_height + if compact { 1 } else { HOME_CARD_TEXT_GAP };
-
-        BitmapLabel::new(
-            Region::new(text_x, title_y, text_w, title_font.line_height),
+        let row = self.app_row_region(idx);
+        crossink_internal::draw_list_item(
+            strip,
+            row,
             Self::category_item_title(self.active_category, idx),
-            title_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .inverted(selected)
-        .draw(strip)
-        .unwrap();
-
-        let detail = Self::category_item_detail(self.active_category, idx);
-        if !detail.is_empty() {
-            BitmapLabel::new(
-                Region::new(text_x, detail_y, text_w, meta_font.line_height),
-                detail,
-                meta_font,
-            )
-            .alignment(Alignment::CenterLeft)
-            .inverted(selected)
-            .draw(strip)
-            .unwrap();
-        }
+            Self::category_item_detail(self.active_category, idx),
+            selected,
+        );
     }
 
     fn draw_panchang_lite(&self, strip: &mut StripBuffer) {
@@ -3829,13 +3973,14 @@ impl HomeApp {
         } else {
             self.time_cache.freshness(self.time_uptime_secs).as_str()
         };
-        self.draw_screen_header(strip, "Panchang Lite", status);
+        self.draw_screen_header(strip, "Panchang", status);
 
         let title_font = self.card_title_font();
         let meta_font = self.card_meta_font();
         let x = LARGE_MARGIN;
         let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 24;
+        let mut y = CONTENT_TOP + 52;
+        let bottom_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + 14);
 
         if !self.time_status_loaded {
             BitmapLabel::new(
@@ -3870,10 +4015,6 @@ impl HomeApp {
             return;
         };
 
-        self.draw_panchang_line(strip, y, "Location", panchang.location, meta_font);
-        y += meta_font.line_height + PANCHANG_LINE_GAP;
-        self.draw_panchang_line(strip, y, "Timezone", panchang.timezone, meta_font);
-        y += meta_font.line_height + PANCHANG_LINE_GAP;
         self.draw_panchang_line(strip, y, "Weekday", panchang.weekday, meta_font);
         y += meta_font.line_height + PANCHANG_LINE_GAP;
         self.draw_panchang_line(strip, y, "Tithi", panchang.tithi, meta_font);
@@ -3883,43 +4024,27 @@ impl HomeApp {
         self.draw_panchang_line(strip, y, "Month", panchang.month, meta_font);
         y += meta_font.line_height + PANCHANG_MANTRA_BLOCK_GAP;
 
-        y = self.draw_panchang_mantra_block(
-            strip,
-            y,
-            self.panchang_mantra_status(),
-            title_font,
-            meta_font,
-        );
-        y += PANCHANG_MANTRA_BLOCK_GAP;
+        if y + title_font.line_height + meta_font.line_height <= bottom_y {
+            y = self.draw_panchang_mantra_block(
+                strip,
+                y,
+                self.panchang_mantra_status(),
+                title_font,
+                meta_font,
+            );
+            y += PANCHANG_MANTRA_BLOCK_GAP;
+        }
 
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            panchang.note,
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += meta_font.line_height + PANCHANG_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "No network API used; festival notes later",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += meta_font.line_height + PANCHANG_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to Productivity",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        if y + meta_font.line_height <= bottom_y && !panchang.note.is_empty() {
+            BitmapLabel::new(
+                Region::new(x, y, w, meta_font.line_height),
+                panchang.note,
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+        }
     }
 
     fn draw_panchang_mantra_block(
@@ -4101,9 +4226,9 @@ impl HomeApp {
 
         let footer_y = y + (CALENDAR_ROWS as u16).saturating_mul(cell_h + CALENDAR_CELL_GAP) + 8;
         let footer = if self.calendar_month_offset == 0 {
-            "Prev/Next month   Back returns"
+            "Prev/Next month"
         } else {
-            "Select today   Prev/Next month"
+            "Select today / Prev / Next"
         };
         BitmapLabel::new(
             Region::new(x, footer_y, w, meta_font.line_height),
@@ -4177,7 +4302,7 @@ impl HomeApp {
         let meta_font = self.card_meta_font();
         let x = LARGE_MARGIN;
         let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+        let mut y = CONTENT_TOP + 52;
 
         if !self.time_status_loaded {
             BitmapLabel::new(
@@ -4231,14 +4356,6 @@ impl HomeApp {
                 .time_cache
                 .write_date_value(self.time_uptime_secs, &mut date_line);
             date_line.draw(strip).unwrap();
-            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-            let mut image_line =
-                BitmapDynLabel::<80>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
-                    .alignment(Alignment::CenterLeft);
-            let _ = write!(image_line, "Image: {}", DAILY_MANTRA_WEEKDAY_IMAGES[idx]);
-            image_line.draw(strip).unwrap();
-            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
         } else {
             BitmapLabel::new(
                 Region::new(x, y, w, title_font.line_height),
@@ -4258,50 +4375,43 @@ impl HomeApp {
             .alignment(Alignment::CenterLeft)
             .draw(strip)
             .unwrap();
-            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-            let mut image_line =
-                BitmapDynLabel::<80>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
-                    .alignment(Alignment::CenterLeft);
-            let _ = write!(image_line, "Image: {}", DAILY_MANTRA_DEFAULT_IMAGE);
-            image_line.draw(strip).unwrap();
-            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
         }
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to category",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
     }
 
     fn draw_lua_daily_mantra(&self, strip: &mut StripBuffer) {
-        self.draw_screen_header(strip, self.lua_daily_mantra_screen.title(), "Lua");
+        self.draw_screen_header(
+            strip,
+            self.lua_daily_mantra_screen.title(),
+            self.lua_daily_mantra_status_label(),
+        );
 
         let title_font = self.card_title_font();
         let meta_font = self.card_meta_font();
         let x = LARGE_MARGIN;
         let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+        let mut y = CONTENT_TOP + 52;
+        let bottom_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + 14);
 
-        BitmapLabel::new(
-            Region::new(x, y, w, title_font.line_height),
-            self.lua_daily_mantra_screen.subtitle(),
-            title_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+        if !self.lua_daily_mantra_screen.subtitle().is_empty() {
+            BitmapLabel::new(
+                Region::new(x, y, w, title_font.line_height),
+                self.lua_daily_mantra_screen.subtitle(),
+                title_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+        }
 
         for line in [
             self.lua_daily_mantra_screen.line1(),
             self.lua_daily_mantra_screen.line2(),
             self.lua_daily_mantra_screen.line3(),
         ] {
+            if line.is_empty() || y + meta_font.line_height > bottom_y {
+                continue;
+            }
             BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
                 .alignment(Alignment::CenterLeft)
                 .draw(strip)
@@ -4309,152 +4419,227 @@ impl HomeApp {
             y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
         }
 
-        let mut source_line =
-            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
-                .alignment(Alignment::CenterLeft);
-        let _ = write!(
-            source_line,
-            "Source: {}  Marker: {}",
-            self.lua_daily_mantra_screen.source.label(),
-            if self.lua_daily_mantra_screen.source.is_sd_loaded() {
-                LUA_DAILY_MANTRA_SD_RUNTIME_MARKER
-            } else {
-                LUA_DAILY_MANTRA_APP_MARKER
-            }
-        );
-        source_line.draw(strip).unwrap();
-        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            self.lua_daily_mantra_screen.footer(),
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to Tools",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        let footer = self.lua_daily_mantra_screen.footer();
+        if !footer.is_empty() && y + meta_font.line_height <= bottom_y {
+            BitmapLabel::new(
+                Region::new(x, y, w, meta_font.line_height),
+                footer,
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+        }
     }
 
     fn draw_lua_panchang(&self, strip: &mut StripBuffer) {
-        let status = if !self.time_status_loaded {
-            "Loading"
-        } else {
+        let status = if self.lua_panchang_screen.source.is_sd_loaded() {
             self.time_cache.freshness(self.time_uptime_secs).as_str()
+        } else {
+            self.lua_panchang_screen.source.label()
         };
         self.draw_screen_header(strip, self.lua_panchang_screen.title(), status);
-
-        let meta_font = self.card_meta_font();
-        let x = LARGE_MARGIN;
-        let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
-
-        for line in [
-            self.lua_panchang_screen.subtitle(),
-            self.lua_panchang_screen.line1(),
-            self.lua_panchang_screen.line2(),
-            self.lua_panchang_screen.line3(),
-        ] {
-            if !line.is_empty() {
-                BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
-                    .alignment(Alignment::CenterLeft)
-                    .draw(strip)
-                    .unwrap();
-                y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-            }
-        }
-
-        let mut source_line =
-            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
-                .alignment(Alignment::CenterLeft);
-        let _ = write!(source_line, "{}", self.lua_panchang_screen.footer(),);
-        source_line.draw(strip).unwrap();
-        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to Productivity",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-    }
-
-    fn draw_lua_calendar(&self, strip: &mut StripBuffer) {
-        self.draw_screen_header(strip, self.lua_calendar_screen.title(), "Lua");
 
         let title_font = self.card_title_font();
         let meta_font = self.card_meta_font();
         let x = LARGE_MARGIN;
         let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 28;
+        let mut y = CONTENT_TOP + 52;
+        let bottom_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + 14);
 
-        BitmapLabel::new(
-            Region::new(x, y, w, title_font.line_height),
-            self.lua_calendar_screen.subtitle(),
-            title_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+        if !self.lua_panchang_screen.subtitle().is_empty() {
+            BitmapLabel::new(
+                Region::new(x, y, w, title_font.line_height),
+                self.lua_panchang_screen.subtitle(),
+                title_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+        }
+
+        for line in [
+            self.lua_panchang_screen.line1(),
+            self.lua_panchang_screen.line2(),
+            self.lua_panchang_screen.line3(),
+        ] {
+            if line.is_empty() || y + meta_font.line_height > bottom_y {
+                continue;
+            }
+            BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
+                .alignment(Alignment::CenterLeft)
+                .draw(strip)
+                .unwrap();
+            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+        }
+
+        let footer = self.lua_panchang_screen.footer();
+        if !footer.is_empty() && y + meta_font.line_height <= bottom_y {
+            BitmapLabel::new(
+                Region::new(x, y, w, meta_font.line_height),
+                footer,
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+        }
+    }
+
+    fn draw_lua_calendar(&self, strip: &mut StripBuffer) {
+        let status = if !self.time_status_loaded {
+            "Loading"
+        } else {
+            self.time_cache.freshness(self.time_uptime_secs).as_str()
+        };
+        self.draw_screen_header(strip, "Calendar", status);
+
+        let title_font = self.card_title_font();
+        let meta_font = self.card_meta_font();
+        let x = LARGE_MARGIN;
+        let w = FULL_CONTENT_W;
+        let mut y = CONTENT_TOP + 44;
+        let bottom_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + 14);
+
+        if !self.time_status_loaded {
+            BitmapLabel::new(
+                Region::new(x, y, w, title_font.line_height),
+                "Reading cached Date & Time...",
+                title_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            return;
+        }
+
+        let Some(today) = self.time_cache.display_date(self.time_uptime_secs) else {
+            BitmapLabel::new(
+                Region::new(x, y, w, title_font.line_height),
+                "Sync Date & Time first",
+                title_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            y += title_font.line_height + NETWORK_STATUS_LINE_GAP;
+            BitmapLabel::new(
+                Region::new(x, y, w, meta_font.line_height),
+                "Calendar works offline after one successful sync",
+                meta_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            return;
+        };
+
+        let (year, month) = Self::calendar_month_from_offset(today, self.calendar_month_offset);
+        let mut month_title =
+            BitmapDynLabel::<40>::new(Region::new(x, y, w, title_font.line_height), title_font)
+                .alignment(Alignment::Center);
+        let _ = write!(
+            month_title,
+            "{} {}",
+            time_status::calendar_month_name(month),
+            year
+        );
+        month_title.draw(strip).unwrap();
+        y += title_font.line_height + 7;
+
+        let cell_w = (w.saturating_sub(CALENDAR_CELL_GAP * (CALENDAR_COLS as u16 - 1)))
+            / CALENDAR_COLS as u16;
+        let weekday_h = meta_font.line_height + 2;
+
+        for (idx, label) in CALENDAR_WEEKDAY_LABELS.iter().enumerate() {
+            let cell_x = x + (idx as u16).saturating_mul(cell_w + CALENDAR_CELL_GAP);
+            BitmapLabel::new(
+                Region::new(cell_x, y, cell_w, meta_font.line_height),
+                label,
+                meta_font,
+            )
+            .alignment(Alignment::Center)
+            .draw(strip)
+            .unwrap();
+        }
+        y += weekday_h;
+
+        let first_weekday = time_status::calendar_weekday_for_date(year, month, 1);
+        let days_in_month = time_status::calendar_days_in_month(year, month);
+        let cell_h = 24u16;
+
+        for row in 0..CALENDAR_ROWS {
+            for col in 0..CALENDAR_COLS {
+                let cell_x = x + (col as u16).saturating_mul(cell_w + CALENDAR_CELL_GAP);
+                let cell_y = y + (row as u16).saturating_mul(cell_h + CALENDAR_CELL_GAP);
+                let region = Region::new(cell_x, cell_y, cell_w, cell_h);
+                let day = (row * CALENDAR_COLS + col) as i16 + 1 - i16::from(first_weekday);
+
+                if day < 1 || day > i16::from(days_in_month) {
+                    continue;
+                }
+
+                let day = day as u8;
+                let is_today = year == today.year && month == today.month && day == today.day;
+                let fill = if is_today {
+                    BinaryColor::On
+                } else {
+                    BinaryColor::Off
+                };
+                region
+                    .to_rect()
+                    .into_styled(PrimitiveStyle::with_fill(fill))
+                    .draw(strip)
+                    .unwrap();
+                region
+                    .to_rect()
+                    .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+                    .draw(strip)
+                    .unwrap();
+
+                let mut label = BitmapDynLabel::<4>::new(
+                    Region::new(region.x, region.y + 4, region.w, meta_font.line_height),
+                    meta_font,
+                )
+                .alignment(Alignment::Center)
+                .inverted(is_today);
+                let _ = write!(label, "{}", day);
+                label.draw(strip).unwrap();
+            }
+        }
+
+        y += (CALENDAR_ROWS as u16).saturating_mul(cell_h + CALENDAR_CELL_GAP) + 8;
+
+        if y + title_font.line_height <= bottom_y {
+            BitmapLabel::new(
+                Region::new(x, y, w, title_font.line_height),
+                "Events",
+                title_font,
+            )
+            .alignment(Alignment::CenterLeft)
+            .draw(strip)
+            .unwrap();
+            y += title_font.line_height + 6;
+        }
 
         for line in [
             self.lua_calendar_screen.line1(),
             self.lua_calendar_screen.line2(),
             self.lua_calendar_screen.line3(),
         ] {
+            if line.is_empty()
+                || line.starts_with("Back exits safely")
+                || y + meta_font.line_height > bottom_y
+            {
+                continue;
+            }
             BitmapLabel::new(Region::new(x, y, w, meta_font.line_height), line, meta_font)
                 .alignment(Alignment::CenterLeft)
                 .draw(strip)
                 .unwrap();
-            y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
+            y += meta_font.line_height + 6;
         }
-
-        let mut source_line =
-            BitmapDynLabel::<96>::new(Region::new(x, y, w, meta_font.line_height), meta_font)
-                .alignment(Alignment::CenterLeft);
-        let _ = write!(
-            source_line,
-            "Source: {}  Marker: {}",
-            self.lua_calendar_screen.source.label(),
-            if self.lua_calendar_screen.source.is_sd_loaded() {
-                LUA_CALENDAR_SD_RUNTIME_MARKER
-            } else {
-                LUA_CALENDAR_APP_MARKER
-            }
-        );
-        source_line.draw(strip).unwrap();
-        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            self.lua_calendar_screen.footer(),
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += meta_font.line_height + NETWORK_STATUS_LINE_GAP;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, meta_font.line_height),
-            "Back returns to Productivity",
-            meta_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
     }
 
     fn draw_wifi_connect(&self, strip: &mut StripBuffer) {
@@ -4986,12 +5171,12 @@ impl HomeApp {
         self.draw_screen_header(strip, "Sudoku", self.lua_game_screen.source.label());
         let cell_font = fonts::chrome_font();
         let meta_font = self.card_meta_font();
-        let cell_w: u16 = 36;
-        let cell_h: u16 = 31;
+        let cell_w: u16 = 46;
+        let cell_h: u16 = 46;
         let grid_w = cell_w * 9;
         let grid_h = cell_h * 9;
-        let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 16;
+        let grid_x = SCREEN_W.saturating_sub(grid_w) / 2;
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
         Region::new(grid_x, grid_y, grid_w, grid_h)
             .to_rect()
             .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
@@ -5037,11 +5222,11 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(
                 LARGE_MARGIN,
-                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 18),
                 FULL_CONTENT_W,
                 meta_font.line_height,
             ),
-            "Arrows move. Select changes cell. Back exits.",
+            "Arrows move. OK changes cell.",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)
@@ -5058,12 +5243,12 @@ impl HomeApp {
         self.draw_screen_header(strip, "Minesweeper", status);
         let cell_font = fonts::chrome_font();
         let meta_font = self.card_meta_font();
-        let cell_w: u16 = 38;
-        let cell_h: u16 = 34;
+        let cell_w: u16 = 50;
+        let cell_h: u16 = 50;
         let grid_w = cell_w * 8;
         let grid_h = cell_h * 8;
-        let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 18;
+        let grid_x = SCREEN_W.saturating_sub(grid_w) / 2;
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
         Region::new(grid_x, grid_y, grid_w, grid_h)
             .to_rect()
             .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
@@ -5090,14 +5275,14 @@ impl HomeApp {
         }
 
         let footer = if self.mines_game.lost() {
-            "Mine hit. Back exits; reopen to reset."
+            "Mine hit. Reopen from Games to reset."
         } else {
-            "Arrows move. Select reveals. Back exits."
+            "Arrows move. OK reveals."
         };
         BitmapLabel::new(
             Region::new(
                 LARGE_MARGIN,
-                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 18),
                 FULL_CONTENT_W,
                 meta_font.line_height,
             ),
@@ -5113,12 +5298,12 @@ impl HomeApp {
         self.draw_screen_header(strip, "Memory Cards", self.lua_game_screen.source.label());
         let cell_font = self.ui_fonts.body;
         let meta_font = self.card_meta_font();
-        let cell_w: u16 = 58;
-        let cell_h: u16 = 48;
+        let cell_w: u16 = 86;
+        let cell_h: u16 = 74;
         let grid_w = cell_w * 4;
         let grid_h = cell_h * 4;
-        let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 24;
+        let grid_x = SCREEN_W.saturating_sub(grid_w) / 2;
+        let grid_y = crossink_internal::HEADER_RULE_Y + 24;
         Region::new(grid_x, grid_y, grid_w, grid_h)
             .to_rect()
             .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
@@ -5160,11 +5345,11 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(
                 LARGE_MARGIN,
-                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 18),
                 FULL_CONTENT_W,
                 meta_font.line_height,
             ),
-            "Arrows move. Select flips. Back exits.",
+            "Arrows move. OK flips.",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)
@@ -5183,17 +5368,17 @@ impl HomeApp {
         let cell_font = fonts::chrome_font();
         let meta_font = self.card_meta_font();
         let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 14;
-        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8);
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 20);
         let grid_w = FULL_CONTENT_W.saturating_sub(2);
         let available_h = footer_y.saturating_sub(grid_y).saturating_sub(18);
         let cell_w = grid_w / 8;
         let mut cell_h = available_h / 7;
-        if cell_h > 48 {
-            cell_h = 48;
+        if cell_h > 62 {
+            cell_h = 62;
         }
-        if cell_h < 30 {
-            cell_h = 30;
+        if cell_h < 38 {
+            cell_h = 38;
         }
         let grid_h = cell_h * 7;
 
@@ -5233,7 +5418,7 @@ impl HomeApp {
         .alignment(Alignment::CenterLeft);
         let _ = write!(
             footer,
-            "FreeCell: arrows move. OK pick/drop. Moves: {}",
+            "FreeCell: OK pick/drop. Moves: {}",
             self.freecell_game.moves()
         );
         footer.draw(strip).unwrap();
@@ -5250,17 +5435,17 @@ impl HomeApp {
         let cell_font = fonts::chrome_font();
         let meta_font = self.card_meta_font();
         let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 14;
-        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8);
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
+        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 20);
         let grid_w = FULL_CONTENT_W.saturating_sub(2);
         let available_h = footer_y.saturating_sub(grid_y).saturating_sub(18);
         let cell_w = grid_w / 7;
         let mut cell_h = available_h / 7;
-        if cell_h > 48 {
-            cell_h = 48;
+        if cell_h > 62 {
+            cell_h = 62;
         }
-        if cell_h < 30 {
-            cell_h = 30;
+        if cell_h < 38 {
+            cell_h = 38;
         }
         let grid_h = cell_h * 7;
 
@@ -5300,7 +5485,7 @@ impl HomeApp {
         .alignment(Alignment::CenterLeft);
         let _ = write!(
             footer,
-            "Solitaire: arrows move. OK pick/drop. Moves: {}",
+            "Solitaire: OK pick/drop. Moves: {}",
             self.solitaire_game.moves()
         );
         footer.draw(strip).unwrap();
@@ -5325,7 +5510,7 @@ impl HomeApp {
         let lane_gap: u16 = 12;
         let grid_x = LARGE_MARGIN;
         let track_x = grid_x + label_w + 10;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 20;
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
         let track_w = cell_w.saturating_mul(TRACK_CELLS as u16);
 
         let mut intro = BitmapDynLabel::<96>::new(
@@ -5402,11 +5587,11 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(
                 LARGE_MARGIN,
-                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 18),
                 FULL_CONTENT_W,
                 meta_font.line_height,
             ),
-            "Arrows choose token. OK rolls. Back exits.",
+            "Arrows choose token. OK rolls.",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)
@@ -5423,12 +5608,12 @@ impl HomeApp {
         self.draw_screen_header(strip, "Snakes and Ladder", status);
         let cell_font = fonts::chrome_font();
         let meta_font = self.card_meta_font();
-        let cell_w: u16 = 31;
-        let cell_h: u16 = 26;
+        let cell_w: u16 = 40;
+        let cell_h: u16 = 40;
         let grid_w = cell_w * 10;
         let grid_h = cell_h * 10;
-        let grid_x = LARGE_MARGIN;
-        let grid_y = BM_TITLE_Y + self.ui_fonts.heading.line_height + 18;
+        let grid_x = SCREEN_W.saturating_sub(grid_w) / 2;
+        let grid_y = crossink_internal::HEADER_RULE_Y + 18;
         Region::new(grid_x, grid_y, grid_w, grid_h)
             .to_rect()
             .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
@@ -5475,17 +5660,69 @@ impl HomeApp {
         BitmapLabel::new(
             Region::new(
                 LARGE_MARGIN,
-                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 8),
+                SCREEN_H.saturating_sub(BUTTON_BAR_H + meta_font.line_height + 18),
                 FULL_CONTENT_W,
                 meta_font.line_height,
             ),
-            "Select rolls. L ladder, S snake, P player. Back exits.",
+            "OK rolls. L ladder, S snake, P player.",
             meta_font,
         )
         .alignment(Alignment::CenterLeft)
         .draw(strip)
         .unwrap();
     }
+    fn draw_dictionary_keyboard_grid(
+        &self,
+        strip: &mut StripBuffer,
+        area: Region,
+        key_font: &'static BitmapFont,
+        action_font: &'static BitmapFont,
+    ) {
+        let gap = DICTIONARY_KEYBOARD_GAP;
+        let key_w = area
+            .w
+            .saturating_sub(gap * (DICTIONARY_KEYBOARD_COLS as u16 - 1))
+            / DICTIONARY_KEYBOARD_COLS as u16;
+        let key_h = area
+            .h
+            .saturating_sub(gap * (DICTIONARY_KEYBOARD_ROWS as u16 - 1))
+            / DICTIONARY_KEYBOARD_ROWS as u16;
+
+        for index in 0..DICTIONARY_KEYBOARD_KEY_COUNT {
+            let row = index / DICTIONARY_KEYBOARD_COLS;
+            let col = index % DICTIONARY_KEYBOARD_COLS;
+            let key = self.dictionary.keyboard_key(index);
+            let selected = index == self.dictionary.keyboard_cursor();
+            let region = Region::new(
+                area.x + col as u16 * (key_w + gap),
+                area.y + row as u16 * (key_h + gap),
+                key_w,
+                key_h,
+            );
+
+            if selected {
+                region
+                    .to_rect()
+                    .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+                    .draw(strip)
+                    .unwrap();
+            } else {
+                region
+                    .to_rect()
+                    .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
+                    .draw(strip)
+                    .unwrap();
+            }
+
+            let label_font = if key.len() > 1 { action_font } else { key_font };
+            BitmapLabel::new(region, key, label_font)
+                .alignment(Alignment::Center)
+                .inverted(selected)
+                .draw(strip)
+                .unwrap();
+        }
+    }
+
     fn draw_dictionary_tool(&self, strip: &mut StripBuffer) {
         let source = if self.dictionary.loaded_from_sd() {
             "SD Lua"
@@ -5494,131 +5731,99 @@ impl HomeApp {
         };
         self.draw_screen_header(strip, "Dictionary", source);
 
-        let text_font = self.ui_fonts.body;
-        let heading_font = self.ui_fonts.heading;
-        let x = LARGE_MARGIN;
-        let w = FULL_CONTENT_W;
-        let mut y = BM_TITLE_Y + heading_font.line_height + 8;
-        let gap = text_font.line_height + 4;
+        let title_font = fonts::ui_heading_font_fixed();
+        let body_font = fonts::ui_body_font_fixed();
+        let small_font = fonts::chrome_font();
+        let x = crossink_internal::CONTENT_X;
+        let w = crossink_internal::CONTENT_W;
+        let mut y = crossink_internal::LIST_TOP_NO_TABS;
         let entry = self.dictionary.entry();
 
-        let mut title =
-            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
+        let mut word =
+            BitmapDynLabel::<96>::new(Region::new(x, y, w, title_font.line_height), title_font)
+                .alignment(Alignment::CenterLeft);
+        let _ = write!(word, "{}", entry.word());
+        word.draw(strip).unwrap();
+        y += title_font.line_height + 2;
+
+        let mut meta =
+            BitmapDynLabel::<128>::new(Region::new(x, y, w, small_font.line_height), small_font)
                 .alignment(Alignment::CenterLeft);
         let _ = write!(
-            title,
-            "Word {}/{}: {}",
+            meta,
+            "Word {}/{}   {}",
             self.dictionary.selected_index().saturating_add(1),
             self.dictionary.entry_count(),
-            entry.word()
+            self.dictionary.search_label()
         );
-        title.draw(strip).unwrap();
-        y += gap;
+        meta.draw(strip).unwrap();
+        y += small_font.line_height + 8;
 
-        let mut search =
-            BitmapDynLabel::<96>::new(Region::new(x, y, w, text_font.line_height), text_font)
-                .alignment(Alignment::CenterLeft);
-        let _ = write!(search, "{}", self.dictionary.search_label());
-        search.draw(strip).unwrap();
-        y += gap;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, text_font.line_height),
+        for line in [
             entry.definition_line1(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += gap;
-        BitmapLabel::new(
-            Region::new(x, y, w, text_font.line_height),
             entry.definition_line2(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += gap;
-        BitmapLabel::new(
-            Region::new(x, y, w, text_font.line_height),
             entry.definition_line3(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += gap;
-
-        BitmapLabel::new(
-            Region::new(x, y, w, text_font.line_height),
-            entry.synonyms(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += gap;
-        BitmapLabel::new(
-            Region::new(x, y, w, text_font.line_height),
-            entry.antonyms(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
-        y += gap + 2;
-
-        for row in 0..5usize {
-            let row_label = self.dictionary.keyboard_row_label(row);
-            let row_y = y.saturating_add((row as u16).saturating_mul(gap));
-            BitmapLabel::new(
-                Region::new(x, row_y, w, text_font.line_height),
-                row_label.as_str(),
-                text_font,
-            )
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
+        ] {
+            if !line.is_empty() {
+                BitmapLabel::new(Region::new(x, y, w, body_font.line_height), line, body_font)
+                    .alignment(Alignment::CenterLeft)
+                    .draw(strip)
+                    .unwrap();
+                y += body_font.line_height + 2;
+            }
         }
 
-        let footer_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + text_font.line_height * 3 + 12);
-        BitmapLabel::new(
-            Region::new(x, footer_y, w, text_font.line_height),
-            "Arrows move keyboard. OK key. Back Tools.",
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        for line in [entry.synonyms(), entry.antonyms()] {
+            if !line.is_empty() {
+                BitmapLabel::new(
+                    Region::new(x, y, w, small_font.line_height),
+                    line,
+                    small_font,
+                )
+                .alignment(Alignment::CenterLeft)
+                .draw(strip)
+                .unwrap();
+                y += small_font.line_height + 2;
+            }
+        }
 
-        BitmapLabel::new(
-            Region::new(
-                x,
-                footer_y + text_font.line_height + 4,
-                w,
-                text_font.line_height,
-            ),
-            self.dictionary.status(),
-            text_font,
-        )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        let raw_status = self.dictionary.status();
+        let friendly_status = if raw_status.contains("missing")
+            || raw_status.contains("parse")
+            || raw_status.contains("invalid")
+            || raw_status.contains("too large")
+        {
+            raw_status
+        } else if self.dictionary.loaded_from_sd() {
+            "Ready - SD dictionary pack"
+        } else {
+            "Ready - built-in fallback"
+        };
 
-        BitmapLabel::new(
-            Region::new(
-                x,
-                footer_y + (text_font.line_height + 4) * 2,
-                w,
-                text_font.line_height,
-            ),
-            dictionary::LUA_DICTIONARY_SHARDED_MARKER,
-            text_font,
+        let status_y = SCREEN_H.saturating_sub(BUTTON_BAR_H + small_font.line_height + 14);
+        let min_keyboard_top = crossink_internal::HEADER_RULE_Y + 150;
+        let max_keyboard_top = status_y.saturating_sub(118);
+        let keyboard_top = y
+            .saturating_add(12)
+            .max(min_keyboard_top)
+            .min(max_keyboard_top);
+        let keyboard_bottom = status_y.saturating_sub(DICTIONARY_KEYBOARD_STATUS_GAP);
+        let keyboard_h = keyboard_bottom.saturating_sub(keyboard_top);
+
+        self.draw_dictionary_keyboard_grid(
+            strip,
+            Region::new(x, keyboard_top, w, keyboard_h),
+            body_font,
+            small_font,
+        );
+
+        let mut status = BitmapDynLabel::<128>::new(
+            Region::new(x, status_y, w, small_font.line_height),
+            small_font,
         )
-        .alignment(Alignment::CenterLeft)
-        .draw(strip)
-        .unwrap();
+        .alignment(Alignment::CenterLeft);
+        let _ = write!(status, "{}", friendly_status);
+        status.draw(strip).unwrap();
     }
 
     fn draw_unit_converter_tool(&self, strip: &mut StripBuffer) {
@@ -5870,6 +6075,125 @@ impl HomeApp {
         .unwrap();
     }
 
+    fn draw_system_info_row(
+        &self,
+        strip: &mut StripBuffer,
+        y: u16,
+        label: &str,
+        value: &str,
+    ) -> u16 {
+        let label_font = self.card_title_font();
+        let value_font = self.card_meta_font();
+        let row_h = label_font
+            .line_height
+            .max(value_font.line_height)
+            .saturating_add(12);
+        let label_w = 158;
+        let value_x = LARGE_MARGIN.saturating_add(label_w).saturating_add(8);
+        let value_w = FULL_CONTENT_W.saturating_sub(label_w).saturating_sub(8);
+
+        BitmapLabel::new(
+            Region::new(
+                LARGE_MARGIN,
+                y.saturating_add(5),
+                label_w,
+                label_font.line_height,
+            ),
+            label,
+            label_font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+
+        BitmapLabel::new(
+            Region::new(
+                value_x,
+                y.saturating_add(5),
+                value_w,
+                value_font.line_height,
+            ),
+            value,
+            value_font,
+        )
+        .alignment(Alignment::CenterRight)
+        .draw(strip)
+        .unwrap();
+
+        y.saturating_add(row_h)
+    }
+
+    fn draw_system_info_note(&self, strip: &mut StripBuffer, y: u16, note: &str) -> u16 {
+        let font = self.card_meta_font();
+        BitmapLabel::new(
+            Region::new(LARGE_MARGIN, y, FULL_CONTENT_W, font.line_height),
+            note,
+            font,
+        )
+        .alignment(Alignment::CenterLeft)
+        .draw(strip)
+        .unwrap();
+        y.saturating_add(font.line_height).saturating_add(8)
+    }
+
+    fn draw_sleep_image_info(&self, strip: &mut StripBuffer) {
+        self.draw_screen_header(strip, "Sleep Image", "System");
+        let mut y = BM_TITLE_Y
+            .saturating_add(self.ui_fonts.heading.line_height)
+            .saturating_add(24);
+
+        y = self.draw_system_info_row(strip, y, "Mode", "Settings controlled");
+        y = self.draw_system_info_row(strip, y, "Daily path", "/sleep/daily/*.bmp");
+        y = self.draw_system_info_row(strip, y, "Cache", "Prefetch supported");
+        y = self.draw_system_info_row(strip, y, "Refresh", "Footer-safe chrome");
+        y = self.draw_system_info_row(strip, y, "Power", "Release guard active");
+        let _ = self.draw_system_info_note(
+            strip,
+            y.saturating_add(6),
+            "Use Settings > Display to change sleep image mode.",
+        );
+    }
+
+    fn draw_device_info(&self, strip: &mut StripBuffer) {
+        let status = if self.network_status_loaded {
+            "Ready"
+        } else {
+            "Refresh"
+        };
+        self.draw_screen_header(strip, "Device Info", status);
+        let mut y = BM_TITLE_Y
+            .saturating_add(self.ui_fonts.heading.line_height)
+            .saturating_add(24);
+
+        y = self.draw_system_info_row(strip, y, "Device", "Xteink X4");
+        y = self.draw_system_info_row(strip, y, "MCU", "ESP32-C3");
+        y = self.draw_system_info_row(strip, y, "Display", "800x480 SSD1677");
+        y = self.draw_system_info_row(strip, y, "UI Font", "Inter e-ink tuned");
+        y = self.draw_system_info_row(strip, y, "Home", "Biscuit launcher");
+        y = self.draw_system_info_row(strip, y, "Internal UI", "CrossInk style");
+        y = self.draw_system_info_row(strip, y, "Reader", "Footer-safe page");
+
+        let sd_status = if self.network_status_loaded {
+            if self.network_sd_ok { "OK" } else { "Missing" }
+        } else {
+            "Select refresh"
+        };
+        y = self.draw_system_info_row(strip, y, "SD Card", sd_status);
+
+        let mut power_value = alloc::string::String::new();
+        if self.network_status_loaded {
+            let _ = write!(power_value, "{} mV", self.network_battery_mv);
+        } else {
+            let _ = write!(power_value, "Select refresh");
+        }
+        y = self.draw_system_info_row(strip, y, "Battery", power_value.as_str());
+
+        let _ = self.draw_system_info_note(
+            strip,
+            y.saturating_add(6),
+            SYSTEM_ABOUT_DIAGNOSTICS_CROSSINK_POLISH_MARKER,
+        );
+    }
     fn draw_placeholder(&self, strip: &mut StripBuffer) {
         self.draw_screen_header(strip, self.placeholder_title, "Soon");
 
@@ -5899,33 +6223,57 @@ impl HomeApp {
     }
 
     fn draw_bookmarks(&self, strip: &mut StripBuffer) {
-        let header_region = Region::new(
-            LARGE_MARGIN,
-            BM_TITLE_Y,
-            HEADER_W,
-            self.ui_fonts.heading.line_height,
-        );
-        BitmapLabel::new(header_region, "Bookmarks", self.ui_fonts.heading)
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
+        self.draw_screen_header(strip, "Reader", "");
+        crossink_internal::draw_reader_tabs_focused(strip, self.reader_tab, self.reader_focus_tabs);
 
-        if self.bm_count > 0 {
-            let mut status = BitmapDynLabel::<20>::new(self.bm_status_region(), self.ui_fonts.body)
-                .alignment(Alignment::CenterRight);
-            let _ = write!(status, "{}/{}", self.bm_selected + 1, self.bm_count);
-            status.draw(strip).unwrap();
+        let mut status = BitmapDynLabel::<20>::new(self.bm_status_region(), fonts::chrome_font())
+            .alignment(Alignment::CenterRight);
+        match self.reader_tab {
+            0 => {
+                if self.recent_record.is_some() {
+                    let _ = write!(status, "1/1");
+                }
+            }
+            3 => {
+                if self.bm_count > 0 {
+                    let _ = write!(status, "{}/{}", self.bm_selected + 1, self.bm_count);
+                }
+            }
+            _ => {}
+        }
+        status.draw(strip).unwrap();
+
+        if self.reader_tab == 0 {
+            if let Some(record) = &self.recent_record {
+                crossink_internal::draw_reader_compact_item(
+                    strip,
+                    crossink_internal::reader_list_row_region(0),
+                    record.ui_title(),
+                    record.format.as_str(),
+                    !self.reader_focus_tabs,
+                );
+            } else {
+                crossink_internal::draw_reader_status_message(
+                    strip,
+                    "No recent book",
+                    "Open a book to populate Recent",
+                );
+            }
+            return;
+        }
+
+        if matches!(self.reader_tab, 1 | 2) {
+            crossink_internal::draw_reader_status_message(strip, "Opening file browser...", "");
+            return;
+        }
+
+        if self.reader_tab != 3 {
+            crossink_internal::draw_reader_status_message(strip, "Reader tab", "");
+            return;
         }
 
         if self.bm_count == 0 {
-            BitmapLabel::new(
-                self.bm_row_region(0),
-                "No bookmarks yet",
-                self.ui_fonts.body,
-            )
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
+            crossink_internal::draw_reader_status_message(strip, "No bookmarks yet", "");
             return;
         }
 
@@ -5933,14 +6281,13 @@ impl HomeApp {
 
         if let Some(title) = grouped_title {
             let subtitle_text = Self::ellipsize_ascii(title, BM_MAX_TITLE_CHARS);
-            BitmapLabel::new(
+            crossink_internal::draw_row(
+                strip,
                 self.bm_subtitle_region(),
                 &subtitle_text,
-                self.ui_fonts.body,
-            )
-            .alignment(Alignment::CenterLeft)
-            .draw(strip)
-            .unwrap();
+                "",
+                crossink_internal::CrossInkRowTone::Section,
+            );
         }
 
         let vis = self.bm_visible_lines();
@@ -5957,11 +6304,13 @@ impl HomeApp {
                     Self::bm_mixed_book_label(entry)
                 };
 
-                BitmapLabel::new(region, &label, self.ui_fonts.body)
-                    .alignment(Alignment::CenterLeft)
-                    .inverted(idx == self.bm_selected)
-                    .draw(strip)
-                    .unwrap();
+                crossink_internal::draw_reader_compact_item(
+                    strip,
+                    region,
+                    &label,
+                    "Mark",
+                    idx == self.bm_selected && !self.reader_focus_tabs,
+                );
             }
         }
     }

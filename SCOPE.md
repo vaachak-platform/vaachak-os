@@ -1,46 +1,50 @@
 # Vaachak OS Scope
 
-## Current accepted scope
+## In scope
 
-Vaachak OS is currently scoped as an Xteink X4 reader-first firmware with Vaachak-owned runtime code as the active development path.
+Vaachak OS is scoped as an Xteink X4 reader-first firmware.
 
-In scope now:
+Current in-scope areas:
 
-- X4 boot, display, input, storage, reader, settings, transfer, network, and sleep-state validation.
-- Accepted X4/CrossPoint-compatible partition table preservation.
-- Reader support for TXT/EPUB, progress, bookmarks, title cache, prepared cache metadata, reader settings, Bionic Reading, Guide Dots, sunlight-fading mitigation, and font work.
-- Category dashboard: Network, Productivity, Games, Reader, System, and Tools.
-- Wi-Fi setup/scan, Wi-Fi Transfer, and network time integration.
-- Optional Lua apps from `/VAACHAK/APPS` using uppercase 8.3-safe physical folders.
-- Reader Home / Continue Reading and local library polish.
-- Reader state model freeze for progress, bookmarks, highlights, per-book settings, and library entries.
-- XTC compatibility as an import/open path.
-- `.vchk` as the long-term Vaachak-native book package contract.
-- Sync alignment after local reader state is stable.
+- X4 boot, display, input, SD storage, reader, settings, network, and sleep-image behavior.
+- X4/CrossPoint-compatible partition table preservation.
+- TXT and EPUB reading with progress, bookmarks, title cache, prepared cache metadata, reader settings, and footer-safe pagination.
+- Bionic Reading, Guide Dots, sunlight-fading mitigation, and reader font support.
+- Biscuit-style Home dashboard with CrossInk-style internal pages.
+- Wi-Fi setup, Wi-Fi Transfer, network time, and cached/live Date & Time behavior.
+- Optional Lua apps under `/VAACHAK/APPS`.
+- Dictionary prefix-shard SD data model.
+- Combined Calendar with native grid and SD-loaded events.
+- Panchang and Daily Mantra SD data integration.
+- Games catalog and game shells with consistent footer-safe UI.
+- Firmware artifact creation for GitHub Actions and new-device installation.
 
-## Repository hygiene scope
+## Repository scope
 
-Previous patch deliverables must not be committed:
+Keep source control focused on the product/runtime baseline:
 
-- root zip files
-- extracted patch/deliverable folders
-- temporary apply/patch scripts
-- one-off repair/cleanup/feature-slice validator scripts
-- generated `__pycache__`, `.pyc`, `.DS_Store`, and `__MACOSX` files
+- root Rust workspace
+- active X4 target
+- SD-card examples
+- host data-generation tools
+- install and validation scripts
+- consolidated root documentation
+- GitHub workflows for checks and firmware artifacts
 
-Keep only production helper scripts and current documentation.
+Do not commit generated archives, extracted temporary folders, local build output, OS metadata, or one-time helper scripts.
 
-## Retained vendor scope
+## Vendor scope
 
-`vendor/pulp-os` remains in the repository for scoped compatibility/reference use. It is not the place for new Vaachak OS functionality.
+`vendor/pulp-os` may remain for reference and compatibility comparison. New Vaachak OS functionality belongs under Vaachak-owned paths.
 
 `vendor/smol-epub` remains as the EPUB dependency source.
 
-## Deferred scope
+## Deferred
 
-- Palm/Tern compatibility as a product milestone.
-- Broad app ecosystem beyond the optional Lua sample/app path.
-- Plugin/runtime expansion beyond the bounded Lua app model.
-- OPDS, analytics, achievements, and cloud-only flows.
-- Waveshare/S3 profile implementation until the X4 reader path is stable.
-- Sync transport features that require reader-state redesign.
+- Broad app store or plugin ecosystem.
+- OPDS and cloud-only flows.
+- OTA hardening beyond the current app0/new-device artifact path.
+- Waveshare/S3 implementation.
+- Palm/Tern compatibility host.
+- Sync transport until local reader state is stable.
+- Mutable `.vchk` state until package read/open semantics are stable.

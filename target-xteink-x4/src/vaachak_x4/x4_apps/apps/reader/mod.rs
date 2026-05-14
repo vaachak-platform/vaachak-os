@@ -40,7 +40,7 @@ use crate::vaachak_x4::x4_kernel::kernel::KernelHandle;
 
 mod typed_state_wiring;
 use crate::vaachak_x4::x4_apps::ui::{
-    Alignment, CONTENT_TOP, HEADER_W, Region, StackFmt, TITLE_Y_OFFSET,
+    Alignment, BUTTON_BAR_H, CONTENT_TOP, HEADER_W, Region, StackFmt, TITLE_Y_OFFSET,
 };
 use crate::vaachak_x4::x4_kernel::kernel::QuickAction;
 use crate::vaachak_x4::x4_kernel::kernel::bookmarks;
@@ -69,6 +69,13 @@ pub(super) const CHARS_PER_LINE: usize = 51;
 
 pub(super) const LINES_PER_PAGE: usize = 37;
 
+// Reserve the shared CrossInk-style button footer so reader pagination never
+// lays body text under the global button-hint overlay. Keep this local to the
+// reader because page wrapping, image budgets, bookmark/Toc visible counts, and
+// prepared-cache page counts all depend on text_area_h.
+pub(super) const READER_FOOTER_GAP: u16 = 6;
+pub(super) const READER_FOOTER_RESERVED_H: u16 = BUTTON_BAR_H + READER_FOOTER_GAP;
+
 pub(super) const PAGE_BUF: usize = 8192;
 
 pub(super) const MAX_PAGES: usize = 512;
@@ -94,7 +101,7 @@ pub(super) const NO_PREFETCH: usize = usize::MAX;
 pub(super) const TEXT_W: u32 = (SCREEN_W - 2 * MARGIN) as u32;
 
 #[allow(dead_code)]
-pub(super) const TEXT_AREA_H: u16 = SCREEN_H - TEXT_Y - 4;
+pub(super) const TEXT_AREA_H: u16 = SCREEN_H - TEXT_Y - READER_FOOTER_RESERVED_H;
 
 pub(super) const EOCD_TAIL: usize = 512;
 
@@ -646,7 +653,9 @@ impl ReaderApp {
         self.text_w = viewport
             .logical_width
             .saturating_sub(self.text_margin.saturating_mul(2)) as u32;
-        self.text_area_h = viewport.logical_height.saturating_sub(self.text_y + 4);
+        self.text_area_h = viewport
+            .logical_height
+            .saturating_sub(self.text_y + READER_FOOTER_RESERVED_H);
     }
 
     pub fn set_chrome_font(&mut self, font: &'static BitmapFont) {

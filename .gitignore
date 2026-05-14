@@ -22,3 +22,42 @@ tools/usb_transfer/__pycache__/
 tools/usb_transfer/*.pyc
 *.tar
 *.tar.gz
+
+# Vaachak generated patch deliverables
+/*.zip
+/*_repair/
+/*_restore/
+/*_cleanup/
+/*_migration/
+/*_reset/
+/*_fix/
+/*_rollout/
+/*_parity/
+/*_parity_*/
+/*_unification/
+/*_calibration/
+__MACOSX/
+.DS_Store
+
+# Vaachak generated patch artifacts
+/*.zip
+/README-APPLY.md
+/MANIFEST.txt
+/*_fix/
+/*_cleanup/
+/*_migration/
+/*_polish/
+/*_overlay/
+/scripts/apply_*.sh
+/scripts/patch_*.py
+__pycache__/
+*.pyc
+.DS_Store
+__MACOSX/
+# Vaachak generated deliverables and local release output
+build.txt
+.codex/
+*_deliverable/
+*_takeover/
+*_stabilization/
+dist/

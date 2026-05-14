@@ -78,7 +78,7 @@ pub const PREPARED_FONT_PROFILE_LABELS: [&str; PREPARED_FONT_PROFILE_COUNT as us
 pub const PREPARED_FALLBACK_POLICY_COUNT: u8 = 3;
 pub const READER_FONT_SOURCE_COUNT: u8 = 4;
 pub const READER_SD_FONT_ID_CAP: usize = 8;
-pub const UI_FONT_SOURCE_COUNT: u8 = 3;
+pub const UI_FONT_SOURCE_COUNT: u8 = 3; // legacy persisted field; OS chrome is fixed to Inter
 pub const DEFAULT_PREPARED_FALLBACK_POLICY: u8 = 0;
 pub const PREPARED_FALLBACK_POLICY_LABELS: [&str; PREPARED_FALLBACK_POLICY_COUNT as usize] =
     ["Visible", "Latin", "Reject"];
@@ -136,7 +136,7 @@ pub struct SystemSettings {
     // font settings
     pub book_font_size_idx: u8, // 0 = XSmall, 1 = Small, 2 = Medium, 3 = Large, 4 = XLarge
     pub ui_font_size_idx: u8,
-    pub ui_font_source: u8, // 0 = Built-in, 1 = Inter, 2 = Lexend
+    pub ui_font_source: u8, // legacy persisted field; fixed UI chrome uses Inter
 
     // reading settings
     pub reading_theme: u8, // index into READING_THEMES
@@ -200,7 +200,7 @@ impl SystemSettings {
             prepared_font_profile: DEFAULT_PREPARED_FONT_PROFILE,
             prepared_fallback_policy: DEFAULT_PREPARED_FALLBACK_POLICY,
             reader_font_source: 0,
-            ui_font_source: 0,
+            ui_font_source: 1,
             reader_sd_font_slot: 0,
             reader_sd_font_id: [0; READER_SD_FONT_ID_CAP],
             reader_sd_font_id_len: 0,

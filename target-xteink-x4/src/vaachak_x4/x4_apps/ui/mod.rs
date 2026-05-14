@@ -9,7 +9,9 @@ pub use crate::vaachak_x4::x4_kernel::ui::stack_fmt;
 pub use crate::vaachak_x4::x4_kernel::ui::*;
 
 // app-side font-dependent widgets
-pub use crate::vaachak_x4::x4_apps::apps::widgets::bitmap_label::{BitmapDynLabel, BitmapLabel};
+pub use crate::vaachak_x4::x4_apps::apps::widgets::bitmap_label::{
+    BitmapDynLabel, BitmapLabel, BitmapTextWeight,
+};
 pub use crate::vaachak_x4::x4_apps::apps::widgets::button_feedback::{
     BUTTON_BAR_H, ButtonFeedback,
 };
